@@ -9,3 +9,6 @@ PyJWT==2.14.0
 python-dotenv==1.2.3
 sqlparse==0.6.0
 tzdata==2026.4
+pymupdf==1.26.3
+pyproj==3.7.1
+requests==2.32.4

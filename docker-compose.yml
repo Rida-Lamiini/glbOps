@@ -1,0 +1,107 @@
+# Full glbOps stack: database, OCR service, Django API, frontend.
+#
+#   docker compose up -d --build
+#
+# Everything lands under a single "glbops" project in Docker Desktop.
+name: glbops
+
+services:
+  db:
+    # PostGIS rather than plain postgres: the cadastre app stores each lot's
+    # polygon and centroid as real geometry(...,4326) columns.
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-glbops}
+      POSTGRES_USER: ${POSTGRES_USER:-glbops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glbops}
+    ports:
+      # Published so you can still reach it from a local venv or a GUI client.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-glbops} -d ${POSTGRES_DB:-glbops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ocr:
+    build: ./backend/ocr-service
+    restart: unless-stopped
+    # Host port 8500, not 8000 — the 7681-8180 TCP range is reserved on this dev
+    # machine (Hyper-V/WSL2 NAT) and binding in it fails. Container port stays 8000.
+    ports:
+      - "${OCR_PORT:-8500}:8000"
+    volumes:
+      # Persist the downloaded PP-OCRv6 weights so a restart doesn't re-fetch them.
+      - ocr_models:/root/.paddlex
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # Weights download on the first /ocr call, and the import itself is slow.
+      start_period: 90s
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      # Inside the compose network the database is "db" on its own port 5432 —
+      # not the published host port.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-glbops}
+      POSTGRES_USER: ${POSTGRES_USER:-glbops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glbops}
+      OCR_SERVICE_URL: http://ocr:8000
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-change-me-in-production}
+      # This compose file is a local stack: DEBUG on means Django serves /media
+      # and the admin's own static files without needing nginx or whitenoise.
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      # Origins the browser loads the SPA from — the frontend container's
+      # published port, plus the Vite dev server for hybrid working.
+      DJANGO_CORS_ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT:-3001},http://127.0.0.1:${FRONTEND_PORT:-3001},http://localhost:5173,http://127.0.0.1:5173
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Uploaded attachments outlive the container.
+      - media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      ocr:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Compile-time for Vite, and it is the browser that calls it — so this
+        # is the backend's published host port, not http://backend:8000.
+        VITE_API_BASE_URL: http://localhost:${BACKEND_PORT:-8000}/api
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3001}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db_data:
+    # Pinned to the name the old backend/docker-compose.yml created, so renaming
+    # the project to "glbops" keeps the existing database instead of starting
+    # against a fresh, empty volume.
+    name: backend_db_data
+  ocr_models:
+    name: backend_ocr_models
+  media:
+    name: glbops_media

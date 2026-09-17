@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'clients',
     'resources',
     'projets',
+    'cadastre',
 ]
 
 MIDDLEWARE = [

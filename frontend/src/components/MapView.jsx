@@ -25,6 +25,9 @@ import {
   X,
   Upload,
   Printer,
+  Layers,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import { projetStatus } from "../utils/stats";
@@ -32,6 +35,18 @@ import { VECTOR_STYLE, RASTER_FALLBACK_STYLE, SATELLITE_STYLE, TOPO_STYLE } from
 import { forwardGeocode } from "../utils/geocode";
 import { formatLambert } from "../utils/lambert";
 import { parseImportFile } from "../utils/importPoints";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+
+const BASEMAPS = [
+  { key: "street", label: "Plan", icon: MapIcon },
+  { key: "satellite", label: "Satellite", icon: Satellite },
+  { key: "topo", label: "Topographie", icon: Mountain },
+];
 
 const LOAD_TIMEOUT_MS = 8000;
 const SOURCE_ID = "gt-projects";
@@ -502,10 +517,10 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     setAttempt((a) => a + 1);
   };
 
-  const BASEMAP_ORDER = ["street", "satellite", "topo"];
-  const cycleBasemap = () => {
+  const selectBasemap = (key) => {
+    if (key === basemap) return;
     setRasterFallback(false);
-    setBasemap((b) => BASEMAP_ORDER[(BASEMAP_ORDER.indexOf(b) + 1) % BASEMAP_ORDER.length]);
+    setBasemap(key);
   };
 
   const toggleStatus = (key) => {
@@ -565,29 +580,6 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
 
   return (
     <>
-      <div className="gt-stats">
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Projets géolocalisés</div>
-          <div className="gt-stat-num">{geolocated.length}</div>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">En cours</div>
-          <div className="gt-stat-num">{counts.encours}</div>
-          <span className="gt-status-pill info"><span className="gt-status-pill-dot" />En cours</span>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Non-conformité</div>
-          <div className="gt-stat-num">{counts.nonconforme}</div>
-          <span className={`gt-status-pill ${counts.nonconforme > 0 ? "danger" : "neutral"}`}>
-            <span className="gt-status-pill-dot" />{counts.nonconforme > 0 ? "À traiter" : "Aucune"}
-          </span>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Livrés</div>
-          <div className="gt-stat-num">{counts.livre}</div>
-          <span className="gt-status-pill success"><span className="gt-status-pill-dot" />Conforme</span>
-        </div>
-      </div>
       <div className="gt-map-wrap">
         <div ref={containerRef} className="gt-map" />
         {!loaded && !mapError && (
@@ -606,11 +598,24 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         )}
 
         <div className="gt-map-toolbar">
-          <button className="gt-map-toolbtn" onClick={cycleBasemap} title="Changer de fond de carte">
-            {basemap === "street" && <><Satellite size={14} /> Satellite</>}
-            {basemap === "satellite" && <><Mountain size={14} /> Topographie</>}
-            {basemap === "topo" && <><MapIcon size={14} /> Plan</>}
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="gt-map-toolbtn" title="Changer de fond de carte">
+                <Layers size={14} />
+                {BASEMAPS.find((b) => b.key === basemap)?.label}
+                <ChevronDown size={12} className="gt-map-toolbtn-caret" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {BASEMAPS.map((b) => (
+                <DropdownMenuItem key={b.key} onClick={() => selectBasemap(b.key)}>
+                  <b.icon size={14} />
+                  {b.label}
+                  {basemap === b.key && <Check size={14} className="gt-dropdown-check" />}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button className={`gt-map-toolbtn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} title="Mesurer une distance">
             <Ruler size={14} /> Distance
           </button>
@@ -681,9 +686,33 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
             </button>
           ))}
         </div>
+      </div>
+      <div className="gt-mapstats">
+        <div className="gt-mapstats-row">
+          <div className="gt-mapstat">
+            <span className="gt-mapstat-dot neutral" />
+            <span className="gt-mapstat-num">{geolocated.length}</span>
+            <span className="gt-mapstat-label">Géolocalisés</span>
+          </div>
+          <div className="gt-mapstat">
+            <span className="gt-mapstat-dot info" />
+            <span className="gt-mapstat-num">{counts.encours}</span>
+            <span className="gt-mapstat-label">En cours</span>
+          </div>
+          <div className="gt-mapstat">
+            <span className={`gt-mapstat-dot ${counts.nonconforme > 0 ? "danger" : "neutral"}`} />
+            <span className="gt-mapstat-num">{counts.nonconforme}</span>
+            <span className="gt-mapstat-label">Non-conformité</span>
+          </div>
+          <div className="gt-mapstat">
+            <span className="gt-mapstat-dot success" />
+            <span className="gt-mapstat-num">{counts.livre}</span>
+            <span className="gt-mapstat-label">Livrés</span>
+          </div>
+        </div>
         {geolocated.length < projects.length && (
-          <div className="gt-map-note">
-            {projects.length - geolocated.length} projet{projects.length - geolocated.length > 1 ? "s" : ""} sans coordonnées, non affiché{projects.length - geolocated.length > 1 ? "s" : ""}.
+          <div className="gt-mapstats-note">
+            {projects.length - geolocated.length} projet{projects.length - geolocated.length > 1 ? "s" : ""} sans coordonnées, non affiché{projects.length - geolocated.length > 1 ? "s" : ""}
           </div>
         )}
       </div>

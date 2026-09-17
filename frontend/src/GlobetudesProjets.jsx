@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Folder,
   AlertTriangle,
+  ArrowUpRight,
 } from "lucide-react";
 import "./styles/app.css";
 
@@ -25,7 +26,7 @@ import { blankPrestation, blankResource, blankEmployee, blankClient } from "./da
 import { apiGet } from "./lib/api";
 import { adaptClient, adaptEmployee, adaptProjet, adaptResource } from "./lib/apiAdapters";
 
-import ProjetDrawer from "./components/ProjetDrawer";
+import ProjetFiche from "./components/ProjetFiche";
 import PrestationDrawer from "./components/PrestationDrawer";
 import ClientDrawer from "./components/ClientDrawer";
 import ClientsView from "./components/ClientsView";
@@ -36,6 +37,7 @@ import EmployeeListView from "./components/EmployeeListView";
 import MapView from "./components/MapView";
 import OverviewDashboard from "./components/OverviewDashboard";
 import CalendarView from "./components/CalendarView";
+import OcrView from "./components/ocr/OcrView";
 import MiniPipeline from "./components/MiniPipeline";
 import ProjetsToolbar from "./components/ProjetsToolbar";
 import KanbanBoard from "./components/KanbanBoard";
@@ -161,11 +163,21 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     return [];
   };
 
+  // The projet fiche renders in place of the view content rather than as an overlay, so it has
+  // to be dismissed on navigation — otherwise switching tabs only swaps the header and leaves
+  // the fiche on screen.
+  const navigateToView = (next) => {
+    setOpenProjetId(null);
+    setView(next);
+  };
+
   const handleRoleChange = (role) => {
     const opts = ["Agent Chantier", "Agent Bureau", "Agent Contrôle"].includes(role)
       ? activeAgentsByRole(employees, role).map((e) => e.nom)
       : [role];
     setCurrentUser({ role, name: opts[0] });
+    // A projet open under the previous role may be invisible to the new one, so drop the fiche.
+    setOpenProjetId(null);
     if (!visibleTabsForRole(role).includes(view)) setView("projets");
   };
 
@@ -568,7 +580,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
       <AppSidebar
         visibleTabs={visibleTabs}
         view={view}
-        setView={setView}
+        setView={navigateToView}
         currentUser={currentUser}
         onRoleChange={handleRoleChange}
         onLogout={onLogout}
@@ -584,18 +596,20 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
               <activeNavItem.icon size={15} />
             </span>
           )}
-          <span className="gt-topbar-titletext">{activeNavItem?.label || ""}</span>
+          <span className="gt-topbar-titletext">
+            {openProjet ? `${activeNavItem?.label || "Projets"} · ${openProjet.id}` : activeNavItem?.label || ""}
+          </span>
         </div>
 
         <div className="gt-topbar-right">
           <NotificationBell notifications={officeNotifications} onOpen={handleOpenNotification} />
-          {view !== "overview" && (
+          {view !== "overview" && !openProjet && (
             <div className="gt-search">
               <Search size={14} color="#9A9C92" />
               <input placeholder={searchPlaceholder} value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
           )}
-          {view === "projets" && isOffice && (
+          {view === "projets" && isOffice && !openProjet && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-auto py-2">
@@ -609,27 +623,27 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {view === "projets" && isOffice && (
+          {view === "projets" && isOffice && !openProjet && (
             <button className="gt-newbtn" onClick={() => { setNewProjetPresetClient(null); setShowNewProjet(true); }}>
               <Plus size={15} /> Nouveau projet
             </button>
           )}
-          {view === "clients" && isOffice && (
+          {view === "clients" && isOffice && !openProjet && (
             <button className="gt-newbtn" onClick={() => setShowNewClient(true)}>
               <Plus size={15} /> Nouveau client
             </button>
           )}
-          {view === "materiels" && isOffice && (
+          {view === "materiels" && isOffice && !openProjet && (
             <button className="gt-newbtn" onClick={() => setShowNewMateriel(true)}>
               <Plus size={15} /> Nouveau matériel
             </button>
           )}
-          {view === "vehicules" && isOffice && (
+          {view === "vehicules" && isOffice && !openProjet && (
             <button className="gt-newbtn" onClick={() => setShowNewVehicule(true)}>
               <Plus size={15} /> Nouveau véhicule
             </button>
           )}
-          {view === "employes" && isOffice && (
+          {view === "employes" && isOffice && !openProjet && (
             <button className="gt-newbtn" onClick={() => setShowNewEmployee(true)}>
               <Plus size={15} /> Nouvel employé
             </button>
@@ -637,6 +651,32 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
         </div>
       </div>
 
+      {openProjet ? (
+        <ProjetFiche
+          key={openProjet.id}
+          projet={openProjet}
+          client={getClient(openProjet.clientId)}
+          materiels={materiels}
+          vehicules={vehicules}
+          onClose={() => setOpenProjetId(null)}
+          onOpenPrestation={(id) => {
+            setOpenProjetId(null);
+            setOpenPrestationId(id);
+          }}
+          onAddPrestation={addPrestation}
+          onOpenClient={isOffice ? (clientId) => {
+            setOpenProjetId(null);
+            setOpenClientId(clientId);
+          } : undefined}
+          onEditProjet={editProjet}
+          onUpdateNotes={updateProjetNotes}
+          onAddAttachments={addProjetAttachments}
+          onRemoveAttachment={removeProjetAttachment}
+          currentUser={currentUser}
+          isOffice={isOffice}
+        />
+      ) : (
+      <>
       {(view === "projets" || view === "overview") && enRetardCount > 0 && (
         <div style={{ padding: "16px 24px 0" }}>
           <div className="gt-insight-card">
@@ -754,6 +794,13 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
                     <span><MapPin size={12} style={{ verticalAlign: -2 }} /> {pr.situation}</span>
                     <span><Folder size={12} style={{ verticalAlign: -2 }} /> {pr.naturePrestationProjet}</span>
                     <span>{pr.prestations.length} prestation{pr.prestations.length > 1 ? "s" : ""}</span>
+                    <button
+                      type="button"
+                      className="gt-projetcard-open"
+                      onClick={(e) => { e.stopPropagation(); setOpenProjetId(pr.id); }}
+                    >
+                      Ouvrir <ArrowUpRight size={12} />
+                    </button>
                   </div>
                   <div className="gt-projetcard-prestlist">
                     {pr.prestations.map((p) => (
@@ -858,35 +905,22 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
             <CalendarView projects={filteredProjets} employees={employees} getClient={getClient} onOpenPrestation={setOpenPrestationId} />
           </motion.div>
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {openProjet && (
-          <ProjetDrawer
-            key={openProjet.id}
-            projet={openProjet}
-            client={getClient(openProjet.clientId)}
-            materiels={materiels}
-            vehicules={vehicules}
-            onClose={() => setOpenProjetId(null)}
-            onOpenPrestation={(id) => {
-              setOpenProjetId(null);
-              setOpenPrestationId(id);
-            }}
-            onAddPrestation={addPrestation}
-            onOpenClient={isOffice ? (clientId) => {
-              setOpenProjetId(null);
-              setOpenClientId(clientId);
-            } : undefined}
-            onEditProjet={editProjet}
-            onUpdateNotes={updateProjetNotes}
-            onAddAttachments={addProjetAttachments}
-            onRemoveAttachment={removeProjetAttachment}
-            currentUser={currentUser}
-            isOffice={isOffice}
-          />
+        {view === "ocr" && (
+          <motion.div
+            key="ocr"
+            style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+            variants={fadeUpVariants}
+            initial="hidden"
+            animate="visible"
+            exit={{ opacity: 0 }}
+          >
+            <OcrView />
+          </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
 
       <AnimatePresence>
         {openPrestationCtx?.prestation && (

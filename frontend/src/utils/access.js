@@ -1,4 +1,4 @@
-export const ALL_TABS = ["overview", "projets", "clients", "materiels", "vehicules", "employes", "carte", "calendrier"];
+export const ALL_TABS = ["overview", "projets", "clients", "materiels", "vehicules", "employes", "carte", "calendrier", "ocr"];
 
 // Dispatcher/Directrice run the business and see every tab. Field and support roles (Agent
 // Chantier/Bureau/Contrôle) only need their own work (Projets, already scoped by
@@ -7,6 +7,8 @@ export const ALL_TABS = ["overview", "projets", "clients", "materiels", "vehicul
 export function visibleTabsForRole(role) {
   const office = role === "Dispatcher" || role === "Directrice";
   if (office) return ALL_TABS;
+  // Agent Bureau does the plan/document processing, so the OCR tool is part of their job.
+  if (role === "Agent Bureau") return ["projets", "carte", "calendrier", "ocr"];
   return ["projets", "carte", "calendrier"];
 }
 
