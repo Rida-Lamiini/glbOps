@@ -67,6 +67,22 @@ Uploaded files are stored locally under `backend/media/` (gitignored) and served
 - `content_type_model_input` — `projet` | `prestation` | `resource`
 - `object_id` — the id of the record the file attaches to (e.g. `PRJ-2026-001`)
 
+## OCR
+
+Image attachments (`.png`/`.jpg`/`.jpeg`) are sent to a PaddleOCR
+microservice (`ocr-service/`) on upload; the extracted text is stored on
+`Attachment.ocr_text`. See `ocr-service/README.md` for the service itself
+and `core/ocr.py` for the client. It runs as its own container:
+
+```bash
+docker compose up -d ocr
+```
+
+`OCR_SERVICE_URL` in `.env` points Django at it (`http://localhost:8500`
+locally, `http://ocr:8000` if Django itself is containerized on the same
+Compose network). A slow or unreachable OCR service never blocks an
+upload — extraction failures are logged and `ocr_text` is left blank.
+
 ## Apps
 
 - `core` — shared/base endpoints (health check, `/api/auth/me/`, `Attachment`) and the `seed_demo` management command.

@@ -26,10 +26,10 @@ class AttachmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attachment
         fields = [
-            "id", "type", "label", "file", "uploaded_at", "uploaded_by",
+            "id", "type", "label", "file", "ocr_text", "uploaded_at", "uploaded_by",
             "content_type_model", "content_type_model_input", "object_id",
         ]
-        read_only_fields = ["uploaded_at", "uploaded_by"]
+        read_only_fields = ["ocr_text", "uploaded_at", "uploaded_by"]
 
     def get_content_type_model(self, instance):
         return instance.content_type.model

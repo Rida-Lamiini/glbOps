@@ -13,6 +13,7 @@ class Attachment(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="autre")
     label = models.CharField(max_length=300, blank=True)
     file = models.FileField(upload_to="attachments/%Y/%m/")
+    ocr_text = models.TextField(blank=True, default="")
     uploaded_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(
         "auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="attachments",

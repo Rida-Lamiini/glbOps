@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'clients',
     'resources',
     'projets',
+    'cadastre',
 ]
 
 MIDDLEWARE = [
@@ -164,6 +165,11 @@ STATIC_URL = 'static/'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+
+# OCR microservice (backend/ocr-service) — see core/ocr.py
+
+OCR_SERVICE_URL = os.getenv('OCR_SERVICE_URL', 'http://localhost:8500')
 
 
 # Email

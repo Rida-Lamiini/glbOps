@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/', include('clients.urls')),
     path('api/', include('resources.urls')),
     path('api/', include('projets.urls')),
+    path('api/', include('cadastre.urls')),
 ]
 
 if settings.DEBUG:

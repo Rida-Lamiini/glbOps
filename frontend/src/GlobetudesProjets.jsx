@@ -48,6 +48,7 @@ import AgentBureauApp from "./components/AgentBureauApp";
 import AgentControleApp from "./components/AgentControleApp";
 import FieldTopstrip from "./components/FieldTopstrip";
 import NotificationBell from "./components/NotificationBell";
+import CadastreTool from "./components/cadastre/CadastreTool";
 import AppSidebar from "./components/AppSidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -589,7 +590,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
 
         <div className="gt-topbar-right">
           <NotificationBell notifications={officeNotifications} onOpen={handleOpenNotification} />
-          {view !== "overview" && (
+          {view !== "overview" && view !== "cadastre" && (
             <div className="gt-search">
               <Search size={14} color="#9A9C92" />
               <input placeholder={searchPlaceholder} value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -843,6 +844,12 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
                 setShowNewProjet(true);
               }}
             />
+          </motion.div>
+        )}
+
+        {view === "cadastre" && (
+          <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
+            <CadastreTool />
           </motion.div>
         )}
 

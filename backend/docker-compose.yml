@@ -1,6 +1,11 @@
 services:
   db:
-    image: postgres:16-alpine
+    # postgis/postgis, not plain postgres: the cadastre app's Lot polygon/
+    # centroid columns need the postgis extension (see
+    # cadastre/migrations/0002_postgis_geometry.py). Compatible with an
+    # existing postgres:16 data volume — it's the same Postgres major version
+    # underneath, just with the extension binaries available.
+    image: postgis/postgis:16-3.4-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-glbops}
@@ -11,5 +16,14 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  ocr:
+    build: ./ocr-service
+    restart: unless-stopped
+    ports:
+      - "${OCR_PORT:-8500}:8000"
+    volumes:
+      - ocr_models:/root/.paddlex
+
 volumes:
   db_data:
+  ocr_models:

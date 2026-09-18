@@ -3,6 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from . import ocr
 from .models import Attachment
 from .serializers import AttachmentSerializer, UserSerializer
 
@@ -35,4 +36,7 @@ class AttachmentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
-        serializer.save(uploaded_by=user)
+        instance = serializer.save(uploaded_by=user)
+        if ocr.is_ocr_eligible(instance.file.name):
+            instance.ocr_text = ocr.extract_text(instance.file)
+            instance.save(update_fields=["ocr_text"])

@@ -25,6 +25,7 @@ import {
   X,
   Upload,
   Printer,
+  FileScan,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import { projetStatus } from "../utils/stats";
@@ -32,11 +33,13 @@ import { VECTOR_STYLE, RASTER_FALLBACK_STYLE, SATELLITE_STYLE, TOPO_STYLE } from
 import { forwardGeocode } from "../utils/geocode";
 import { formatLambert } from "../utils/lambert";
 import { parseImportFile } from "../utils/importPoints";
+import { getAllCadastreLotsGeoJSON } from "./cadastre/api";
 
 const LOAD_TIMEOUT_MS = 8000;
 const SOURCE_ID = "gt-projects";
 const BOUNDARY_SOURCE_ID = "gt-boundaries";
 const MEASURE_SOURCE_ID = "gt-measure";
+const CADASTRE_SOURCE_ID = "gt-cadastre-lots";
 
 function pinSVG(color) {
   return `
@@ -78,6 +81,8 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const [importedPoints, setImportedPoints] = useState([]);
   const [importError, setImportError] = useState(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [cadastreGeojson, setCadastreGeojson] = useState(null);
+  const [showCadastreLots, setShowCadastreLots] = useState(true);
 
   const geolocated = projects.filter((p) => p.lat != null && p.lng != null);
   const visibleProjects = geolocated.filter((pr) => activeStatuses.has(projetStatus(pr)));
@@ -313,7 +318,11 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       }
     };
 
-    if (map.isStyleLoaded()) setupLayers();
+    // `loaded` flips true on the map's "load" event, after which addSource/addLayer are safe.
+    // isStyleLoaded() is stricter (false while any source/tiles are still loading) and, since
+    // "load" has already fired by then, a once("load") fallback would never run — layers and
+    // markers would silently never be set up.
+    if (loaded) setupLayers();
     else map.once("load", setupLayers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, activeStatuses, style, attempt, loaded]);
@@ -390,6 +399,54 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       if (map.getCanvas()) map.getCanvas().style.cursor = "";
     };
   }, [measureMode]);
+
+  // Saved cadastral lot polygons — past surveys are useful context when
+  // siting a new project nearby, so they're shown by default (toggleable).
+  useEffect(() => {
+    getAllCadastreLotsGeoJSON().then(setCadastreGeojson).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !cadastreGeojson) return;
+
+    const setup = () => {
+      if (!map.getSource(CADASTRE_SOURCE_ID)) {
+        map.addSource(CADASTRE_SOURCE_ID, { type: "geojson", data: cadastreGeojson });
+        map.addLayer({
+          id: "gt-cadastre-fill",
+          type: "fill",
+          source: CADASTRE_SOURCE_ID,
+          paint: { "fill-color": "#8B5CF6", "fill-opacity": 0.12 },
+        });
+        map.addLayer({
+          id: "gt-cadastre-line",
+          type: "line",
+          source: CADASTRE_SOURCE_ID,
+          paint: { "line-color": "#8B5CF6", "line-width": 1.5, "line-dasharray": [3, 2] },
+        });
+        map.on("click", "gt-cadastre-fill", (e) => {
+          const props = e.features[0].properties;
+          new MaplibrePopup({ closeButton: true })
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<strong>${props.proprieteDite || "Lot cadastral"}</strong><br/>Titre foncier ${props.titreFoncier || "—"}`,
+            )
+            .addTo(map);
+        });
+        map.on("mouseenter", "gt-cadastre-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", "gt-cadastre-fill", () => { map.getCanvas().style.cursor = ""; });
+      } else {
+        map.getSource(CADASTRE_SOURCE_ID).setData(cadastreGeojson);
+      }
+      const visibility = showCadastreLots ? "visible" : "none";
+      map.setLayoutProperty("gt-cadastre-fill", "visibility", visibility);
+      map.setLayoutProperty("gt-cadastre-line", "visibility", visibility);
+    };
+
+    if (loaded) setup();
+    else map.once("load", setup);
+  }, [cadastreGeojson, showCadastreLots, style, attempt, loaded]);
 
   // Imported GPX/CSV points
   useEffect(() => {
@@ -619,6 +676,13 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           </button>
           <button className="gt-map-toolbtn" onClick={() => fileInputRef.current?.click()} title="Importer des points GPX ou CSV">
             <Upload size={14} /> Importer
+          </button>
+          <button
+            className={`gt-map-toolbtn ${showCadastreLots ? "active" : ""}`}
+            onClick={() => setShowCadastreLots((v) => !v)}
+            title="Afficher/masquer les lots cadastraux enregistrés"
+          >
+            <FileScan size={14} /> Lots cadastraux
           </button>
           <button className="gt-map-toolbtn" onClick={exportPdf} disabled={exportingPdf} title="Exporter la carte en PDF">
             <Printer size={14} /> {exportingPdf ? "Export…" : "PDF"}
