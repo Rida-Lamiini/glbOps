@@ -18,6 +18,8 @@
   --color-accent-foreground: var(--ink);
   --color-destructive: var(--bad);
   --color-destructive-foreground: #ffffff;
+  --color-card: var(--surface);
+  --color-card-foreground: var(--ink);
   --color-popover: var(--panel);
   --color-popover-foreground: var(--ink);
   --radius-lg: 8px;
@@ -38,6 +40,11 @@
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--border-subtle);
   --sidebar-ring: var(--accent);
+}
+
+/* Tailwind v4 defaults borders to currentcolor; shadcn components expect the theme border token. */
+@layer base {
+  *, ::before, ::after { border-color: var(--color-border); }
 }
 
 body {
