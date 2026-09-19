@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from core.serializers import AttachmentSerializer
+
 from .models import HistoryEntry, Prestation, Projet, Tache
 
 
@@ -18,6 +20,7 @@ class TacheSerializer(serializers.ModelSerializer):
 class PrestationSerializer(serializers.ModelSerializer):
     taches = TacheSerializer(many=True, read_only=True)
     history = HistoryEntrySerializer(many=True, read_only=True)
+    attachments = AttachmentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Prestation
@@ -31,16 +34,18 @@ class PrestationSerializer(serializers.ModelSerializer):
             "agent_controle", "date_debut_controle", "date_fin_controle",
             "date_livraison", "ref", "chemin", "cd_n", "disque_n",
             "stage", "cycles", "reprogramme", "non_conformite_source",
-            "taches", "history",
+            "taches", "history", "attachments",
         ]
 
 
 class ProjetSerializer(serializers.ModelSerializer):
     prestations = PrestationSerializer(many=True, read_only=True)
+    attachments = AttachmentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Projet
         fields = [
             "id", "client", "reference_fonciere", "situation", "lat", "lng",
-            "nature_prestation_projet", "date_debut", "notes", "prestations",
+            "nature_prestation_projet", "date_debut", "notes", "boundary",
+            "prestations", "attachments",
         ]

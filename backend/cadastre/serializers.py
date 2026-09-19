@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from projets.models import Projet
+from projets.models import Prestation, Projet
 
 from .geo.build_lot import is_surface_conforme
 from .models import Borne, DistanceCheck, Lot, ReferencePoint
@@ -24,15 +24,29 @@ class ReferencePointSerializer(serializers.ModelSerializer):
         fields = ["id", "label", "lat", "lng", "distance_m", "bearing_deg"]
 
 
+def _person_name(user):
+    if user is None:
+        return ""
+    employee = getattr(user, "employee", None)
+    return employee.nom if employee else (user.first_name or user.username)
+
+
 class LotListSerializer(serializers.ModelSerializer):
     conforme = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    statut_par_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Lot
         fields = [
             "id",
             "projet",
+            "prestation",
             "derive_de",
+            "statut",
+            "statut_at",
+            "created_by_name",
+            "statut_par_name",
             "titre_foncier",
             "propriete_dite",
             "surface_document_m2",
@@ -41,6 +55,12 @@ class LotListSerializer(serializers.ModelSerializer):
             "updated_at",
             "conforme",
         ]
+
+    def get_created_by_name(self, lot: Lot) -> str:
+        return _person_name(lot.created_by)
+
+    def get_statut_par_name(self, lot: Lot) -> str:
+        return _person_name(lot.statut_par)
 
     def get_conforme(self, lot: Lot) -> bool:
         return is_surface_conforme(
@@ -95,6 +115,9 @@ class CreateLotSerializer(serializers.Serializer):
     projet = serializers.PrimaryKeyRelatedField(
         queryset=Projet.objects.all(), required=False, allow_null=True,
     )
+    prestation = serializers.PrimaryKeyRelatedField(
+        queryset=Prestation.objects.all(), required=False, allow_null=True,
+    )
     titre_foncier = serializers.CharField(min_length=1, max_length=100)
     propriete_dite = serializers.CharField(min_length=1, max_length=300)
     lot_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
@@ -108,6 +131,11 @@ class CreateLotSerializer(serializers.Serializer):
     bornes = BorneInputSerializer(many=True)
     distance_checks = DistanceCheckInputSerializer(many=True, required=False, default=list)
     reference_points = ReferencePointInputSerializer(many=True, required=False, default=list)
+
+    def _check_prestation_belongs_to_projet(self, attrs):
+        prestation, projet = attrs.get("prestation"), attrs.get("projet")
+        if prestation is not None and (projet is None or prestation.projet_id != projet.pk):
+            raise serializers.ValidationError({"prestation": "Cette prestation n'appartient pas au projet choisi."})
 
     def _check_titre_unique_per_projet(self, attrs):
         # A titre foncier may appear on several projets (a reused survey), but
@@ -133,6 +161,7 @@ class CreateLotSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         self._check_titre_unique_per_projet(attrs)
+        self._check_prestation_belongs_to_projet(attrs)
         # A distance check names its two endpoints by borne name. If either name
         # isn't in the submitted table the distance is unmeasurable, so reject it
         # here rather than storing an unusable row that would silently read as a

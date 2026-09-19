@@ -136,3 +136,100 @@ class LotReuseTests(TestCase):
         self.assertEqual((r["mode"], r["id"]), ("attached", str(orphan.id)))
         orphan.refresh_from_db()
         self.assertEqual(orphan.projet_id, self.p2.id)
+
+
+# --- Prestation link, author and review status -----------------------------
+
+import tempfile  # noqa: E402
+
+from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
+from django.test import override_settings  # noqa: E402
+from employees.models import Employee  # noqa: E402
+from projets.models import Prestation  # noqa: E402
+
+
+class LotReviewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        client = Client.objects.create(id="CLI-T2", nom="Client test")
+        cls.projet = Projet.objects.create(id="PRJ-T-3", client=client)
+        cls.other = Projet.objects.create(id="PRJ-T-4", client=client)
+        cls.prestation = Prestation.objects.create(id="PRS-T-1", projet=cls.projet)
+        cls.bureau_user = User.objects.create_user("bureau", password="x")
+        Employee.objects.create(id="EMP-T1", nom="Marc Bureau", role="Agent Bureau", user=cls.bureau_user)
+        cls.chantier_user = User.objects.create_user("chantier", password="x")
+        Employee.objects.create(id="EMP-T2", nom="Paul Chantier", role="Agent Chantier", user=cls.chantier_user)
+        cls.controle_user = User.objects.create_user("controle", password="x")
+        Employee.objects.create(id="EMP-T3", nom="Jean Controle", role="Agent Contrôle", user=cls.controle_user)
+
+    def _as(self, user):
+        api = APIClient(SERVER_NAME="localhost")
+        api.force_authenticate(user)
+        return api
+
+    def _lot(self, api, **extra):
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id, **extra}
+        r = api.post("/api/cadastre/lots/", body, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        return r.json()["id"]
+
+    def test_lot_records_prestation_and_author(self):
+        lot_id = self._lot(self._as(self.bureau_user))
+        d = self._as(self.bureau_user).get(f"/api/cadastre/lots/{lot_id}/").json()
+        self.assertEqual((d["prestation"], d["created_by_name"], d["statut"]), (self.prestation.id, "Marc Bureau", "brouillon"))
+
+    def test_prestation_must_belong_to_the_projet(self):
+        body = {**_payload(self.other.id, "TF/9/R"), "prestation": self.prestation.id}
+        self.assertEqual(self._as(self.bureau_user).post("/api/cadastre/lots/", body, format="json").status_code, 400)
+
+    def test_review_flow_and_roles(self):
+        lot_id = self._lot(self._as(self.bureau_user))
+        url = f"/api/cadastre/lots/{lot_id}/statut/"
+        # chantier cannot verify, bureau cannot validate, validation needs a verified lot first
+        self.assertEqual(self._as(self.chantier_user).post(url, {"statut": "verifie"}, format="json").status_code, 403)
+        self.assertEqual(self._as(self.controle_user).post(url, {"statut": "valide"}, format="json").status_code, 400)
+        r = self._as(self.bureau_user).post(url, {"statut": "verifie"}, format="json")
+        self.assertEqual((r.status_code, r.json()["statut_par_name"]), (200, "Marc Bureau"))
+        self.assertEqual(self._as(self.bureau_user).post(url, {"statut": "valide"}, format="json").status_code, 403)
+        self.assertEqual(self._as(self.controle_user).post(url, {"statut": "valide"}, format="json").json()["statut"], "valide")
+
+    def test_editing_a_lot_sends_it_back_to_brouillon(self):
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api)
+        api.post(f"/api/cadastre/lots/{lot_id}/statut/", {"statut": "verifie"}, format="json")
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id, "propriete_dite": "Modifié"}
+        self.assertEqual(api.put(f"/api/cadastre/lots/{lot_id}/", body, format="json").json()["statut"], "brouillon")
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class AttachmentAndBoundaryTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        client = Client.objects.create(id="CLI-T3", nom="Client test")
+        cls.projet = Projet.objects.create(id="PRJ-T-5", client=client)
+        cls.prestation = Prestation.objects.create(id="PRS-T-2", projet=cls.projet)
+        cls.user = User.objects.create_user("uploader", password="x")
+
+    def setUp(self):
+        self.api = APIClient(SERVER_NAME="localhost")
+        self.api.force_authenticate(self.user)
+
+    def test_upload_file_and_network_path_show_up_on_the_projet_and_prestation(self):
+        f = SimpleUploadedFile("plan.pdf", b"%PDF-1.4 test", content_type="application/pdf")
+        r = self.api.post("/api/attachments/", {"content_type_model_input": "projet", "object_id": self.projet.id, "label": "Plan", "file": f}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        r2 = self.api.post("/api/attachments/", {"content_type_model_input": "prestation", "object_id": self.prestation.id, "chemin": "//SRV/projets/x", "type": "livrable"}, format="json")
+        self.assertEqual(r2.status_code, 201, r2.content)
+        projet = self.api.get("/api/projets/PRJ-T-5/").json()
+        self.assertEqual((projet["attachments"][0]["label"], projet["attachments"][0]["size"]), ("Plan", 13))
+        self.assertEqual(projet["attachments"][0]["name"].endswith(".pdf"), True)
+        self.assertEqual(projet["prestations"][0]["attachments"][0]["chemin"], "//SRV/projets/x")
+
+    def test_attachment_needs_a_file_or_a_path(self):
+        r = self.api.post("/api/attachments/", {"content_type_model_input": "projet", "object_id": self.projet.id}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_projet_boundary_round_trips(self):
+        ring = {"type": "Polygon", "coordinates": [[[-6.8, 33.9], [-6.79, 33.9], [-6.79, 33.91], [-6.8, 33.9]]]}
+        self.assertEqual(self.api.patch("/api/projets/PRJ-T-5/", {"boundary": ring}, format="json").status_code, 200)
+        self.assertEqual(self.api.get("/api/projets/PRJ-T-5/").json()["boundary"], ring)

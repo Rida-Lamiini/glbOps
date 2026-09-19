@@ -73,7 +73,7 @@ def list_all_lot_polygons_geojson() -> list[dict]:
     with connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT id, titre_foncier, propriete_dite, ST_AsGeoJSON(polygon)
+            SELECT id, titre_foncier, propriete_dite, ST_AsGeoJSON(polygon), projet_id
             FROM cadastre_lots
             WHERE polygon IS NOT NULL
             ORDER BY created_at DESC
@@ -86,6 +86,7 @@ def list_all_lot_polygons_geojson() -> list[dict]:
             "titre_foncier": row[1],
             "propriete_dite": row[2],
             "polygon": json.loads(row[3]),
+            "projet_id": row[4],
         }
         for row in rows
         if row[3]

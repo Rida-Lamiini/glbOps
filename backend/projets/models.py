@@ -1,4 +1,7 @@
+from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
+
+from core.models import Attachment
 
 from clients.models import Client
 from employees.models import Employee
@@ -30,6 +33,9 @@ class Projet(models.Model):
     nature_prestation_projet = models.CharField(max_length=200, blank=True)
     date_debut = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    # GeoJSON Polygon drawn by the team; empty until a real boundary is known.
+    boundary = models.JSONField(null=True, blank=True)
+    attachments = GenericRelation(Attachment)
 
     class Meta:
         ordering = ["-date_debut"]
@@ -40,6 +46,7 @@ class Projet(models.Model):
 
 class Prestation(models.Model):
     id = models.CharField(max_length=30, primary_key=True)
+    attachments = GenericRelation(Attachment)
     projet = models.ForeignKey(Projet, related_name="prestations", on_delete=models.CASCADE)
 
     nature_demandee = models.CharField(max_length=300, blank=True)

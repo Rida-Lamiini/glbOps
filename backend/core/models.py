@@ -12,7 +12,9 @@ TYPE_CHOICES = [
 class Attachment(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="autre")
     label = models.CharField(max_length=300, blank=True)
-    file = models.FileField(upload_to="attachments/%Y/%m/")
+    # Either an uploaded file or a network path (chemin) the team keeps on their server.
+    file = models.FileField(upload_to="attachments/%Y/%m/", blank=True)
+    chemin = models.CharField(max_length=500, blank=True)
     ocr_text = models.TextField(blank=True, default="")
     uploaded_at = models.DateTimeField(auto_now_add=True)
     uploaded_by = models.ForeignKey(

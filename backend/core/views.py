@@ -37,6 +37,6 @@ class AttachmentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
         instance = serializer.save(uploaded_by=user)
-        if ocr.is_ocr_eligible(instance.file.name):
+        if instance.file and ocr.is_ocr_eligible(instance.file.name):
             instance.ocr_text = ocr.extract_text(instance.file)
             instance.save(update_fields=["ocr_text"])

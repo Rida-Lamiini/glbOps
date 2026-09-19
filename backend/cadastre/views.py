@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.utils import timezone
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -19,7 +20,7 @@ from .serializers import CreateLotSerializer, LotDetailSerializer, LotListSerial
 MAX_PDF_BYTES = 25 * 1024 * 1024
 
 
-def _save_lot(data, existing_lot=None):
+def _save_lot(data, existing_lot=None, user=None):
     """Creates a new Lot, or overwrites an existing one in place — the same
     geometry recomputation either way, so a client never gets to assert a
     surface, a distance or a centroid; it only ever supplies bornes (and,
@@ -34,6 +35,7 @@ def _save_lot(data, existing_lot=None):
 
     field_values = dict(
         projet=data.get("projet"),
+        prestation=data.get("prestation"),
         titre_foncier=data["titre_foncier"],
         propriete_dite=data["propriete_dite"],
         lot_number=data.get("lot_number", ""),
@@ -49,11 +51,13 @@ def _save_lot(data, existing_lot=None):
 
     with transaction.atomic():
         if existing_lot is None:
-            lot = Lot.objects.create(**field_values)
+            lot = Lot.objects.create(created_by=user, **field_values)
         else:
             lot = existing_lot
             for field, value in field_values.items():
                 setattr(lot, field, value)
+            # An edited survey has to be reviewed again.
+            lot.statut, lot.statut_par, lot.statut_at = "brouillon", None, None
             lot.save()
             lot.bornes.all().delete()
             lot.distance_checks.all().delete()
@@ -110,7 +114,7 @@ def _save_lot(data, existing_lot=None):
 @permission_classes([IsAuthenticated])
 def lots(request):
     if request.method == "GET":
-        queryset = Lot.objects.all()
+        queryset = Lot.objects.select_related("created_by", "statut_par")
         search = request.query_params.get("q")
         if search:
             queryset = queryset.filter(
@@ -120,7 +124,7 @@ def lots(request):
 
     serializer = CreateLotSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    lot = _save_lot(serializer.validated_data)
+    lot = _save_lot(serializer.validated_data, user=request.user)
     return Response({"id": str(lot.id)}, status=status.HTTP_201_CREATED)
 
 
@@ -195,6 +199,7 @@ def lot_reuse(request, pk):
         copy = Lot.objects.create(
             projet=projet,
             derive_de=source,
+            created_by=request.user,
             titre_foncier=source.titre_foncier,
             propriete_dite=source.propriete_dite,
             lot_number=source.lot_number,
@@ -220,6 +225,40 @@ def lot_reuse(request, pk):
     return Response({"id": str(copy.id), "mode": "copied"}, status=status.HTTP_201_CREATED)
 
 
+# Who may move a lot to which review status. Bureau prepares and verifies; the controle
+# agent (and office) validates. Anyone may put a lot back to brouillon.
+STATUT_ROLES = {
+    "verifie": {"Agent Bureau", "Agent Contrôle", "Dispatcher", "Directrice"},
+    "valide": {"Agent Contrôle", "Dispatcher", "Directrice"},
+}
+
+
+def _role_of(user):
+    employee = getattr(user, "employee", None)
+    if employee is not None:
+        return employee.role
+    return "Directrice" if user.is_superuser else "Dispatcher"
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def lot_statut(request, pk):
+    """Body: ``{"statut": "brouillon" | "verifie" | "valide"}``."""
+    lot = get_object_or_404(Lot, pk=pk)
+    statut = request.data.get("statut")
+    if statut not in ("brouillon", "verifie", "valide"):
+        return Response({"statut": "Statut inconnu."}, status=status.HTTP_400_BAD_REQUEST)
+    if statut in STATUT_ROLES and _role_of(request.user) not in STATUT_ROLES[statut]:
+        return Response({"detail": "Votre rôle ne permet pas ce changement de statut."}, status=status.HTTP_403_FORBIDDEN)
+    if statut == "valide" and lot.statut != "verifie":
+        return Response({"detail": "Un lot doit être vérifié avant d'être validé."}, status=status.HTTP_400_BAD_REQUEST)
+    lot.statut = statut
+    lot.statut_par = None if statut == "brouillon" else request.user
+    lot.statut_at = None if statut == "brouillon" else timezone.now()
+    lot.save(update_fields=["statut", "statut_par", "statut_at", "updated_at"])
+    return Response(LotListSerializer(lot).data)
+
+
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def lot_detail(request, pk):
@@ -234,7 +273,7 @@ def lot_detail(request, pk):
     if request.method == "PUT":
         serializer = CreateLotSerializer(data=request.data, context={"lot_id": lot.id})
         serializer.is_valid(raise_exception=True)
-        _save_lot(serializer.validated_data, existing_lot=lot)
+        _save_lot(serializer.validated_data, existing_lot=lot, user=request.user)
         # bornes/distance_checks/reference_points were deleted and recreated
         # inside _save_lot — re-fetch rather than trust lot's prefetch cache,
         # which still holds the pre-update rows.
@@ -267,6 +306,7 @@ def lots_geojson(request):
                         "id": row["id"],
                         "titreFoncier": row["titre_foncier"],
                         "proprieteDite": row["propriete_dite"],
+                        "projetId": row["projet_id"],
                     },
                 }
                 for row in list_all_lot_polygons_geojson()

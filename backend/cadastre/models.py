@@ -1,8 +1,15 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
-from projets.models import Projet
+from projets.models import Prestation, Projet
+
+STATUT_CHOICES = [
+    ("brouillon", "Brouillon"),
+    ("verifie", "Vérifié"),
+    ("valide", "Validé"),
+]
 
 
 class Lot(models.Model):
@@ -24,6 +31,20 @@ class Lot(models.Model):
     projet = models.ForeignKey(
         Projet, related_name="lots_cadastraux", null=True, blank=True, on_delete=models.SET_NULL,
     )
+
+    # The prestation this survey was calculated for, who entered it, and where it
+    # stands in review: brouillon -> verifie (bureau) -> valide (controle).
+    prestation = models.ForeignKey(
+        Prestation, related_name="lots_cadastraux", null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, related_name="+", null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    statut = models.CharField(max_length=12, choices=STATUT_CHOICES, default="brouillon")
+    statut_par = models.ForeignKey(
+        settings.AUTH_USER_MODEL, related_name="+", null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    statut_at = models.DateTimeField(null=True, blank=True)
 
     # A lot the team already surveyed can be reused on a later projet for the
     # same titre foncier: the copy keeps a pointer to where it came from, so
