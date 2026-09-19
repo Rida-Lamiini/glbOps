@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import ResponsiveTableCard from "./ResponsiveTableCard";
 import { AlertTriangle } from "lucide-react";
 import { computeClientStats } from "../utils/stats";
 import { formatTimestamp } from "../utils/dates";
@@ -82,7 +83,7 @@ export default function ClientsView({ clients, projects, query, onOpenClient, is
         )}
       </div>
 
-      <div className="gt-table-card">
+      <ResponsiveTableCard>
         <Table>
           <TableHeader>
             <TableRow>
@@ -135,7 +136,7 @@ export default function ClientsView({ clients, projects, query, onOpenClient, is
           )}
         </TableBody>
         </Table>
-      </div>
+      </ResponsiveTableCard>
     </>
   );
 }

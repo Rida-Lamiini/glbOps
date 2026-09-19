@@ -7,29 +7,36 @@
  */
 :root {
   /* Bright operations workspace */
-  --canvas: #f6f7fb;
-  --surface: #ffffff;
-  --surface-muted: #f0f3f8;
-  --border-subtle: #dfe5ee;
+  --canvas: #f5f1e8;
+  --surface: #fffdf8;
+  --surface-muted: #efe9dc;
+  --border-subtle: #ddd4c2;
+
+  /* Editorial-cartography type pairing: a warm serif for titles and figures,
+     a humanist sans for everything you read or click. */
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Hanken Grotesk', system-ui, sans-serif;
+  /* Faint topographic contour lines behind the canvas */
+  --contours: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='520' height='520' viewBox='0 0 520 520' fill='none' stroke='%23b3a483' stroke-opacity='.16'%3E%3Cpath d='M-20 380C80 320 140 420 260 360S420 260 540 320'/%3E%3Cpath d='M-20 340C90 285 150 380 262 322S415 225 540 282'/%3E%3Cpath d='M-20 300C100 250 160 340 264 284S410 190 540 244'/%3E%3Cpath d='M-20 130C90 60 170 170 280 100S440 20 540 90'/%3E%3Cpath d='M-20 168C96 100 176 206 284 138S436 62 540 128'/%3E%3C/svg%3E");
 
   /* Card system */
   --radius-card: 16px;
   --radius-sm: 8px;
   --radius-pill: 999px;
-  --shadow-card: 0 4px 16px rgba(31, 43, 69, 0.06), 0 1px 3px rgba(31, 43, 69, 0.08);
-  --shadow-card-hover: 0 12px 28px rgba(31, 43, 69, 0.12);
+  --shadow-card: 0 4px 16px rgba(60, 45, 20, 0.06), 0 1px 3px rgba(60, 45, 20, 0.08);
+  --shadow-card-hover: 0 12px 28px rgba(60, 45, 20, 0.14);
 
-  --ink: #172033;
-  --muted: #667085;
-  --accent: #315efb;
-  --accent-strong: #2447c8;
+  --ink: #1d1b18;
+  --muted: #6d665a;
+  --accent: #b3261e;
+  --accent-strong: #8e1c16;
 
   /* Semantic status colors — reused everywhere a state is shown:
      conforme/livré, en cours, non conforme, en attente/retard. */
   --status-success: #16A34A;
   --status-success-bg: #ECFDF3;
-  --status-info: #2563EB;
-  --status-info-bg: #EFF6FF;
+  --status-info: #2F6690;
+  --status-info-bg: #EAF2F8;
   --status-warning: #D97706;
   --status-warning-bg: #FFFBEB;
   --status-danger: #DC2626;
@@ -38,7 +45,7 @@
   --status-neutral-bg: #F3F4F6;
 
   /* Typography scale */
-  --text-metric: 30px;
+  --text-metric: 34px;
   --weight-bold: 700;
   --weight-medium: 500;
   --text-label: 11px;
@@ -76,7 +83,7 @@
 
 /* ===== Metric-first card (label above, big bold number, pill below) ===== */
 .gt-metric-label { font-size: var(--text-label); font-weight: 600; color: var(--status-neutral); text-transform: uppercase; letter-spacing: 0.04em; }
-.gt-metric-value { font-size: var(--text-metric); font-weight: var(--weight-bold); color: var(--ink, #14181F); line-height: 1.1; font-family: 'IBM Plex Sans', sans-serif; }
+.gt-metric-value { font-size: var(--text-metric); font-weight: var(--weight-bold); color: var(--ink, #14181F); line-height: 1.1; font-family: var(--font-display); }
 
 /* ===== Segmented / stacked progress bar ===== */
 .gt-segbar { display: flex; height: 8px; border-radius: var(--radius-pill); overflow: hidden; background: var(--status-neutral-bg); gap: 2px; }
@@ -92,7 +99,7 @@
 .gt-insight-card {
   border-radius: var(--radius-card);
   padding: 16px 20px;
-  background: linear-gradient(135deg, #315efb 0%, #6848d8 100%);
+  background: linear-gradient(135deg, #1d1b18 0%, #8e1c16 100%);
   color: #fff;
   display: flex;
   align-items: center;

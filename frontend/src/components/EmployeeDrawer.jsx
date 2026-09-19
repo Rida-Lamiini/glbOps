@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import DrawerTabs from "./DrawerTabs";
 import { motion } from "framer-motion";
-import { X, Check, Pencil, UserRound, Palmtree, Phone, Mail, Plus, Trash2 } from "lucide-react";
+import { X, Check, Pencil, UserRound, Palmtree, Phone, Mail, Plus, Trash2 , ListChecks } from "lucide-react";
 import { STAGES, STAGE_COLORS, EMPLOYEE_STATUSES, CONGE_TYPES, CONGE_STATUSES, ROLES } from "../constants";
 import { computeEmployeeStats } from "../utils/stats";
 import { today, activeCongeOn } from "../utils/dates";
@@ -24,6 +25,7 @@ export default function EmployeeDrawer({
   onRemoveConge,
   isOffice,
 }) {
+  const [tab, setTab] = useState("profil");
   const [renaming, setRenaming] = useState(false);
   const [nomDraft, setNomDraft] = useState(item.nom);
   const [editing, setEditing] = useState(false);
@@ -142,7 +144,18 @@ export default function EmployeeDrawer({
           )}
         </div>
 
-        <div className="gt-drawer-body">
+        <DrawerTabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: "profil", label: "Profil", icon: UserRound },
+            { key: "conges", label: "Congés", icon: Palmtree, count: conges.length },
+            { key: "affectations", label: "Affectations", icon: ListChecks, count: stats.assignments.length },
+          ]}
+        />
+
+        <div className="gt-drawer-body" role="tabpanel">
+          {tab === "profil" && (
           <section className="gt-section">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h4 style={{ margin: 0 }}><UserRound size={13} strokeWidth={2.2} /> Profil</h4>
@@ -214,7 +227,9 @@ export default function EmployeeDrawer({
               </div>
             )}
           </section>
+          )}
 
+          {tab === "conges" && (
           <section className="gt-section">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h4 style={{ margin: 0 }}><Palmtree size={13} strokeWidth={2.2} /> Congés ({conges.length})</h4>
@@ -299,7 +314,9 @@ export default function EmployeeDrawer({
               </div>
             )}
           </section>
+          )}
 
+          {tab === "affectations" && (
           <section className="gt-section">
             <h4>Affectations ({stats.assignments.length})</h4>
             <div className="gt-projet-prestations">
@@ -317,6 +334,7 @@ export default function EmployeeDrawer({
               {stats.assignments.length === 0 && <div className="gt-list-empty">Aucune affectation enregistrée.</div>}
             </div>
           </section>
+          )}
         </div>
       </motion.div>
     </motion.div>

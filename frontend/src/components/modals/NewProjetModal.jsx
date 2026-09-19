@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import LotSuggestions from "../cadastre/LotSuggestions";
 import { motion } from "framer-motion";
 import { X, ChevronRight, Building2 } from "lucide-react";
 import { backdropVariants, modalVariants } from "../../lib/motionVariants";
@@ -16,6 +17,8 @@ export default function NewProjetModal({ onClose, onCreate, clients, presetClien
   const [lat, setLat] = useState(presetLocation ? String(presetLocation.lat.toFixed(5)) : "");
   const [lng, setLng] = useState(presetLocation ? String(presetLocation.lng.toFixed(5)) : "");
   const [geocoding, setGeocoding] = useState(false);
+  const [reuseLotIds, setReuseLotIds] = useState([]);
+  const toggleLot = (id) => setReuseLotIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
   const geocodeAbort = useRef(null);
 
   const handlePick = (pickedLat, pickedLng) => {
@@ -47,6 +50,7 @@ export default function NewProjetModal({ onClose, onCreate, clients, presetClien
       nature,
       lat: Number.isFinite(latNum) ? latNum : null,
       lng: Number.isFinite(lngNum) ? lngNum : null,
+      reuseLotIds,
     });
     notifySuccess("Projet créé");
     onClose();
@@ -86,6 +90,13 @@ export default function NewProjetModal({ onClose, onCreate, clients, presetClien
           )}
           <label>Référence foncière</label>
           <input value={refFonciere} onChange={(e) => setRefFonciere(e.target.value)} placeholder="ex. TF/12345/R" />
+          <LotSuggestions
+            titre={refFonciere}
+            lat={lat ? parseFloat(lat.replace(",", ".")) : null}
+            lng={lng ? parseFloat(lng.replace(",", ".")) : null}
+            selected={reuseLotIds}
+            onToggle={toggleLot}
+          />
           <label>Situation / localisation</label>
           <input value={situation} onChange={(e) => setSituation(e.target.value)} placeholder="ex. Hay Riad, Rabat" />
           <label>Nature du projet</label>

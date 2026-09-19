@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import DrawerTabs from "./DrawerTabs";
 import { motion } from "framer-motion";
-import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins } from "lucide-react";
+import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins , Clock, ListChecks } from "lucide-react";
 import { STAGES, STAGE_COLORS, RESOURCE_STATUSES, RESOURCE_TYPES } from "../constants";
 import { computeResourceStats } from "../utils/stats";
 import { formatFileSize, fileExt, today, isPastDue } from "../utils/dates";
@@ -28,6 +29,7 @@ export default function ResourceDrawer({
   currentUser,
   isOffice,
 }) {
+  const [tab, setTab] = useState("fiche");
   const [renaming, setRenaming] = useState(false);
   const [nomDraft, setNomDraft] = useState(item.nom);
   const [editing, setEditing] = useState(false);
@@ -175,7 +177,19 @@ export default function ResourceDrawer({
           )}
         </div>
 
-        <div className="gt-drawer-body">
+        <DrawerTabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: "fiche", label: "Fiche", icon: Wrench },
+            { key: "affectations", label: "Affectations", icon: ListChecks, count: stats.assignments.length },
+            { key: "maintenance", label: "Maintenance", icon: Clock, count: maintenanceLog.length },
+            { key: "documents", label: "Documents", icon: Paperclip, count: attachments.length },
+          ]}
+        />
+
+        <div className="gt-drawer-body" role="tabpanel">
+          {tab === "fiche" && (
           <section className="gt-section">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h4 style={{ margin: 0 }}><Wrench size={13} strokeWidth={2.2} /> Identité & suivi</h4>
@@ -283,7 +297,9 @@ export default function ResourceDrawer({
               </div>
             )}
           </section>
+          )}
 
+          {tab === "affectations" && (
           <section className="gt-section">
             <h4>Affectations ({stats.assignments.length})</h4>
             <div className="gt-projet-prestations">
@@ -301,7 +317,9 @@ export default function ResourceDrawer({
               {stats.assignments.length === 0 && <div className="gt-list-empty">Aucune affectation enregistrée.</div>}
             </div>
           </section>
+          )}
 
+          {tab === "maintenance" && (
           <section className="gt-section">
             <h4>Historique de maintenance ({maintenanceLog.length})</h4>
             <div className="gt-timeline">
@@ -332,7 +350,9 @@ export default function ResourceDrawer({
               </div>
             )}
           </section>
+          )}
 
+          {tab === "documents" && (
           <section className="gt-section">
             <h4>
               <Paperclip size={13} strokeWidth={2.2} /> Pièces jointes ({attachments.length})
@@ -401,6 +421,7 @@ export default function ResourceDrawer({
               {attachments.length === 0 && <div className="gt-list-empty">Aucune pièce jointe (photo, certificat d'étalonnage, manuel...).</div>}
             </div>
           </section>
+          )}
         </div>
       </motion.div>
     </motion.div>

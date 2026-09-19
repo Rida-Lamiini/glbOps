@@ -1,18 +1,14 @@
-import React, { useEffect, useState } from "react";
-import { ScanText, Upload, Loader2, ArrowLeft, Trash2, Plus, CheckCircle2, AlertTriangle, Pencil, FilePlus2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  parseCadastrePdf,
-  listCadastreLots,
-  getCadastreLot,
-  getCadastreLotGeoJSON,
-  createCadastreLot,
-  updateCadastreLot,
-  deleteCadastreLot,
-  readApiError,
+  Upload, Loader2, ArrowLeft, Trash2, Plus, CheckCircle2, AlertTriangle, Pencil, FilePlus2,
+  Search, X,
+} from "lucide-react";
+import {
+  parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
+  createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError,
 } from "./api";
 import LotMap from "./LotMap";
+import "./cadastre.css";
 
 const EMPTY_INITIAL = {
   extractionMethod: "manual",
@@ -26,32 +22,76 @@ const EMPTY_INITIAL = {
   lotId: null,
 };
 
-const EXTRACTION_LABELS = {
-  ocr: "lu par OCR — à vérifier",
-  "text-layer": "texte natif du PDF",
-  manual: "saisie manuelle",
-  edit: "modification d'un lot existant",
+const SOURCE_LABELS = {
+  ocr: "Lu par OCR — à vérifier ligne par ligne",
+  "text-layer": "Texte natif du PDF",
+  manual: "Saisie manuelle",
+  edit: "Modification d'un lot enregistré",
 };
 
-const HEADER_FIELDS = [
-  { key: "titreFoncier", label: "Titre foncier", required: true },
-  { key: "proprieteDite", label: "Propriété dite", required: true },
-  { key: "lot", label: "Lot n°" },
-  { key: "geometre", label: "Géomètre" },
-];
+const SURFACE_TOLERANCE_M2 = 1;
+const fmt = (n, d = 2) => Number(n).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-function nextSequence(bornes) {
-  return bornes.length === 0 ? 0 : Math.max(...bornes.map((b) => b.sequence)) + 1;
+// Planar shoelace on the Lambert plane — same maths as the backend, used only for a live preview.
+function previewArea(bornes) {
+  const pts = [...bornes].sort((a, b) => a.sequence - b.sequence).filter((b) => Number.isFinite(b.x) && Number.isFinite(b.y));
+  if (pts.length < 3) return null;
+  let twice = 0;
+  pts.forEach((a, i) => {
+    const b = pts[(i + 1) % pts.length];
+    twice += a.x * b.y - b.x * a.y;
+  });
+  return Math.abs(twice) / 2;
 }
 
-// --- Upload + review -------------------------------------------------------
+const nextSequence = (bornes) => (bornes.length === 0 ? 0 : Math.max(...bornes.map((b) => b.sequence)) + 1);
 
-function UploadPanel({ onReview }) {
+function Hero({ eyebrow = "Outils", title, children }) {
+  return (
+    <header className="cad-hero">
+      <div className="cad-eyebrow">{eyebrow}</div>
+      <h1>{title}</h1>
+      {children && <p>{children}</p>}
+    </header>
+  );
+}
+
+function Stepper({ step }) {
+  const steps = ["Document", "Vérification", "Lot enregistré"];
+  return (
+    <ol className="cad-steps" aria-label="Progression">
+      {steps.map((label, i) => (
+        <li key={label} className={`cad-step ${i === step ? "is-active" : i < step ? "is-done" : ""}`} aria-current={i === step ? "step" : undefined}>
+          <b>{i < step ? "✓" : i + 1}</b>
+          {label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function ConformiteBadge({ conforme }) {
+  return (
+    <span className={`gt-status-pill ${conforme ? "success" : "danger"}`}>
+      <span className="gt-status-pill-dot" />
+      {conforme ? "Conforme" : "Écart de surface"}
+    </span>
+  );
+}
+
+// --- Home: import + lots ------------------------------------------------------
+
+function ImportZone({ onReview }) {
   const [loading, setLoading] = useState(false);
+  const [over, setOver] = useState(false);
   const [error, setError] = useState(null);
 
-  const pick = async (file) => {
+  const handle = async (file) => {
     if (!file) return;
+    if (file.type !== "application/pdf") {
+      setError("Le fichier doit être un PDF.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -73,44 +113,120 @@ function UploadPanel({ onReview }) {
         lotId: null,
       });
     } catch (e) {
-      setError(readApiError(e, "Échec de l'analyse du PDF. Vous pouvez saisir les bornes manuellement."));
+      setError(readApiError(e, "Analyse impossible. Vous pouvez saisir le lot manuellement."));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="gt-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <ScanText size={18} />
-        <strong>Analyser un Calcul de Contenances (PDF)</strong>
+    <section
+      className={`cad-drop ${over ? "is-over" : ""}`}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); handle(e.dataTransfer.files[0]); }}
+    >
+      <div>
+        <h2>{loading ? "Lecture du document…" : "Déposez un Calcul de Contenances"}</h2>
+        <p>
+          {loading
+            ? "Si le PDF est un scan, chaque page passe par le service OCR — comptez jusqu'à deux minutes."
+            : "PDF ANCFCC : les bornes, coordonnées Lambert et surfaces sont extraites automatiquement. Vous vérifiez avant d'enregistrer."}
+        </p>
+        {error && <div className="cad-error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
       </div>
-      <div className="gt-attach-note">
-        Le document est d'abord lu directement (texte natif) ; s'il s'agit d'un scan sans
-        texte (le cas le plus courant pour ces documents ANCFCC), chaque page est envoyée
-        au service OCR. Les valeurs extraites restent à vérifier avant enregistrement.
-      </div>
-      <div className="gt-formrow" style={{ gap: 10 }}>
-        <label className="gt-btn gt-btn-neutral gt-attach-uploadbtn" style={{ alignSelf: "flex-start" }}>
-          {loading ? <Loader2 size={14} className="gt-spin-icon" /> : <Upload size={14} />}
-          {loading ? "Analyse en cours… (peut prendre 1-2 min si OCR)" : "Choisir un PDF"}
-          <input type="file" accept="application/pdf" disabled={loading} onChange={(e) => { pick(e.target.files[0]); e.target.value = ""; }} />
+      <div className="cad-drop-actions">
+        <label className="cad-btn primary">
+          {loading ? <Loader2 size={16} className="gt-spin-icon" /> : <Upload size={16} />}
+          {loading ? "Analyse en cours" : "Choisir un PDF"}
+          <input type="file" accept="application/pdf" disabled={loading} onChange={(e) => { handle(e.target.files[0]); e.target.value = ""; }} />
         </label>
-        <button className="gt-btn gt-btn-neutral" onClick={() => onReview(EMPTY_INITIAL)}>
-          <FilePlus2 size={14} /> Saisir un lot manuellement
+        <button className="cad-btn" disabled={loading} onClick={() => onReview(EMPTY_INITIAL)}>
+          <FilePlus2 size={16} /> Saisir manuellement
         </button>
       </div>
-      {error && <div style={{ color: "var(--status-danger)" }}>{error}</div>}
+    </section>
+  );
+}
+
+function LotsList({ reloadKey, onOpenLot }) {
+  const [lots, setLots] = useState(null);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      listCadastreLots(query)
+        .then((data) => !cancelled && (setLots(data), setError(null)))
+        .catch((e) => !cancelled && setError(readApiError(e, "Impossible de charger les lots.")));
+    }, query ? 250 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, reloadKey]);
+
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="cad-listhead">
+        <h2>Lots enregistrés{lots ? ` · ${lots.length}` : ""}</h2>
+        <label className="cad-search">
+          <Search size={16} color="var(--muted)" />
+          <input placeholder="Titre foncier, propriété…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Rechercher un lot" />
+        </label>
+      </div>
+      {error && <div className="cad-error" role="alert">{error}</div>}
+      {!lots ? (
+        <div className="cad-note">Chargement…</div>
+      ) : lots.length === 0 ? (
+        <div className="cad-empty">
+          <strong>{query ? "Aucun résultat" : "Aucun lot pour l'instant"}</strong>
+          {query ? "Essayez un autre titre foncier." : "Importez un PDF ci-dessus : le lot apparaîtra ici et sur la carte."}
+        </div>
+      ) : (
+        <div className="cad-grid">
+          {lots.map((l) => (
+            <button key={l.id} className="cad-card" onClick={() => onOpenLot(l.id)}>
+              <div className="cad-card-top">
+                <div>
+                  <h3>{l.proprieteDite}</h3>
+                  <span className="cad-ref">Titre {l.titreFoncier}</span>
+                </div>
+                <ConformiteBadge conforme={l.conforme} />
+              </div>
+              <div className="cad-kpis">
+                <div className="cad-kpi"><span>Calculée</span><strong>{fmt(l.surfaceCalculeeM2, 0)} m²</strong></div>
+                <div className="cad-kpi"><span>Document</span><strong>{fmt(l.surfaceDocumentM2, 0)} m²</strong></div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HomeScreen({ reloadKey, onReview, onOpenLot }) {
+  return (
+    <div className="cad">
+      <Hero title="Cadastre">
+        Transformez un plan de bornage en lot vérifié : import du PDF, contrôle des coordonnées, puis affichage sur la carte
+        générale pour réutiliser l'existant sur vos nouveaux projets.
+      </Hero>
+      <Stepper step={0} />
+      <ImportZone onReview={onReview} />
+      <LotsList reloadKey={reloadKey} onOpenLot={onOpenLot} />
     </div>
   );
 }
 
-function FlagBadge({ borne }) {
-  if (!borne.flagged) return null;
+// --- Review (create / edit) ----------------------------------------------------
+
+function Field({ label, required, hint, value, onChange, type = "text", missing }) {
   return (
-    <span title={borne.flagReason} style={{ display: "inline-flex", color: "var(--status-warning)" }}>
-      <AlertTriangle size={14} />
-    </span>
+    <label className="cad-field">
+      <span>{label}{required && <span className="cad-req"> *</span>}</span>
+      <input type={type} inputMode={type === "number" ? "decimal" : undefined} value={value} onChange={(e) => onChange(e.target.value)} className={missing ? "is-missing" : ""} />
+      {hint && <small>{hint}</small>}
+    </label>
   );
 }
 
@@ -122,15 +238,20 @@ function ReviewScreen({ initial, onCancel, onSaved }) {
   const [bornes, setBornes] = useState(initial.bornes);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-
   const isEditing = Boolean(initial.lotId);
 
-  const updateBorne = (index, patch) => {
-    setBornes((prev) => prev.map((b, i) => (i === index ? { ...b, ...patch, flagged: false, flagReason: undefined } : b)));
-  };
-  const removeBorne = (index) => setBornes((prev) => prev.filter((_, i) => i !== index));
-  const addBorne = () =>
-    setBornes((prev) => [...prev, { name: "", sequence: nextSequence(prev), x: 0, y: 0, flagged: false }]);
+  const setBorne = (i, patch) => setBornes((p) => p.map((b, k) => (k === i ? { ...b, ...patch, flagged: false, flagReason: undefined } : b)));
+  const flagged = bornes.filter((b) => b.flagged).length;
+  const area = useMemo(() => previewArea(bornes), [bornes]);
+  const ecart = area == null ? null : area + (Number(correctionLambertM2) || 0) - (Number(surfaceDocumentM2) || 0);
+
+  const checks = [
+    { ok: Boolean(header.titreFoncier.trim()), label: "Titre foncier renseigné" },
+    { ok: Boolean(header.proprieteDite.trim()), label: "Propriété dite renseignée" },
+    { ok: bornes.length >= 3, label: `Au moins 3 bornes (${bornes.length})` },
+    { ok: flagged === 0, label: flagged ? `${flagged} borne${flagged > 1 ? "s" : ""} à vérifier` : "Aucune borne suspecte" },
+  ];
+  const blocking = checks.slice(0, 3).some((c) => !c.ok);
 
   const save = async () => {
     setSaving(true);
@@ -148,9 +269,7 @@ function ReviewScreen({ initial, onCancel, onSaved }) {
       referencePoints: initial.referencePoints,
     };
     try {
-      const lot = isEditing
-        ? await updateCadastreLot(initial.lotId, payload)
-        : await createCadastreLot(payload);
+      const lot = isEditing ? await updateCadastreLot(initial.lotId, payload) : await createCadastreLot(payload);
       onSaved(isEditing ? initial.lotId : lot.id);
     } catch (e) {
       setError(readApiError(e, "Échec de l'enregistrement."));
@@ -159,296 +278,224 @@ function ReviewScreen({ initial, onCancel, onSaved }) {
     }
   };
 
-  const flaggedCount = bornes.filter((b) => b.flagged).length;
-
-  const missingReasons = [
-    !header.titreFoncier.trim() && "le titre foncier",
-    !header.proprieteDite.trim() && "la propriété dite",
-    bornes.length < 3 && "au moins 3 bornes",
-  ].filter(Boolean);
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <button className="gt-btn gt-btn-neutral" style={{ alignSelf: "flex-start" }} onClick={onCancel}>
-        <ArrowLeft size={14} /> Annuler
-      </button>
+    <div className="cad">
+      <button className="cad-btn" style={{ alignSelf: "flex-start" }} onClick={onCancel}><ArrowLeft size={16} /> Retour</button>
+      <Hero title={isEditing ? "Modifier le lot" : "Vérifier le lot"}>{SOURCE_LABELS[initial.extractionMethod]}</Hero>
+      <Stepper step={1} />
 
-      <div className="gt-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-        <strong>
-          {isEditing ? "Modifier le lot" : "Nouveau lot"} ({EXTRACTION_LABELS[initial.extractionMethod] || initial.extractionMethod})
-        </strong>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
-          {HEADER_FIELDS.map((f) => (
-            <label key={f.key} style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 }}>
-              <span>
-                {f.label}
-                {f.required && <span style={{ color: "var(--status-danger)" }}> *</span>}
-              </span>
-              <input
-                value={header[f.key]}
-                onChange={(e) => setHeader((h) => ({ ...h, [f.key]: e.target.value }))}
-                style={f.required && !header[f.key].trim() ? { borderColor: "var(--status-warning)" } : undefined}
-              />
-            </label>
-          ))}
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 }}>
-            Surface document (m²)
-            <input type="number" value={surfaceDocumentM2} onChange={(e) => setSurfaceDocumentM2(e.target.value)} />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 }}>
-            Correction Lambert (m²)
-            <input type="number" value={correctionLambertM2} onChange={(e) => setCorrectionLambertM2(e.target.value)} />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12.5 }}>
-            Projet lié (optionnel — ex. PRJ-2026-001)
-            <input value={projetId} onChange={(e) => setProjetId(e.target.value)} />
-          </label>
+      <div className="cad-layout">
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <section className="cad-panel">
+            <h2>Identification</h2>
+            <div className="cad-fields">
+              <Field label="Titre foncier" required value={header.titreFoncier} missing={!header.titreFoncier.trim()} onChange={(v) => setHeader((h) => ({ ...h, titreFoncier: v }))} />
+              <Field label="Propriété dite" required value={header.proprieteDite} missing={!header.proprieteDite.trim()} onChange={(v) => setHeader((h) => ({ ...h, proprieteDite: v }))} />
+              <Field label="Lot n°" value={header.lot} onChange={(v) => setHeader((h) => ({ ...h, lot: v }))} />
+              <Field label="Géomètre" value={header.geometre} onChange={(v) => setHeader((h) => ({ ...h, geometre: v }))} />
+              <Field label="Surface du document (m²)" type="number" value={surfaceDocumentM2} onChange={setSurfaceDocumentM2} />
+              <Field label="Correction Lambert (m²)" type="number" value={correctionLambertM2} onChange={setCorrectionLambertM2} />
+              <Field label="Projet lié" hint="Optionnel, ex. PRJ-2026-001" value={projetId} onChange={setProjetId} />
+            </div>
+          </section>
+
+          <section className="cad-panel">
+            <div className="cad-top">
+              <h2>Bornes · {bornes.length}</h2>
+              <button className="cad-btn" onClick={() => setBornes((p) => [...p, { name: "", sequence: nextSequence(p), x: 0, y: 0, flagged: false }])}>
+                <Plus size={16} /> Ajouter
+              </button>
+            </div>
+            {bornes.length === 0 ? (
+              <div className="cad-empty"><strong>Aucune borne</strong>Ajoutez au moins trois bornes pour former le polygone.</div>
+            ) : (
+              <table className="cad-bornes">
+                <thead><tr><th>Nom</th><th>X Lambert</th><th>Y Lambert</th><th aria-label="Actions" /></tr></thead>
+                <tbody>
+                  {bornes.map((b, i) => (
+                    <React.Fragment key={i}>
+                      <tr className={b.flagged ? "is-flagged" : ""}>
+                        <td data-label="Nom"><input value={b.name} onChange={(e) => setBorne(i, { name: e.target.value })} aria-label={`Nom de la borne ${i + 1}`} /></td>
+                        <td data-label="X Lambert"><input type="number" inputMode="decimal" value={b.x} onChange={(e) => setBorne(i, { x: Number(e.target.value) })} /></td>
+                        <td data-label="Y Lambert"><input type="number" inputMode="decimal" value={b.y} onChange={(e) => setBorne(i, { y: Number(e.target.value) })} /></td>
+                        <td style={{ width: 52 }}>
+                          <button className="cad-btn danger" style={{ minHeight: 40, padding: "0 10px" }} onClick={() => setBornes((p) => p.filter((_, k) => k !== i))} aria-label={`Supprimer la borne ${b.name || i + 1}`}>
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                      {b.flagged && b.flagReason && (
+                        <tr className="is-flagged"><td colSpan={4} style={{ padding: 0, border: 0 }}>
+                          <div className="cad-flag"><AlertTriangle size={14} style={{ flex: "none", marginTop: 2 }} />{b.flagReason}</div>
+                        </td></tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
         </div>
+
+        <aside className="cad-rail" aria-label="Contrôles">
+          <section className="cad-panel">
+            <h2>Avant d'enregistrer</h2>
+            {checks.map((c) => (
+              <div key={c.label} className={`cad-check ${c.ok ? "ok" : "todo"}`}><i>{c.ok ? "✓" : "!"}</i>{c.label}</div>
+            ))}
+          </section>
+          <section className="cad-panel">
+            <h2>Aperçu de la surface</h2>
+            {area == null ? (
+              <div className="cad-note">Renseignez 3 bornes pour calculer la surface.</div>
+            ) : (
+              <>
+                <div className="cad-figure"><span>Calculée (bornes)</span><strong>{fmt(area)} m²</strong></div>
+                <div className="cad-figure"><span>Document + correction</span><strong>{fmt((Number(surfaceDocumentM2) || 0) - (Number(correctionLambertM2) || 0))} m²</strong></div>
+                <div className="cad-figure"><span>Écart</span><strong style={{ color: Math.abs(ecart) <= SURFACE_TOLERANCE_M2 ? "var(--status-success)" : "var(--status-danger)" }}>{ecart > 0 ? "+" : ""}{fmt(ecart)} m²</strong></div>
+                <div className="cad-note">Tolérance : ±{SURFACE_TOLERANCE_M2} m². Un écart signale souvent un chiffre mal lu.</div>
+              </>
+            )}
+          </section>
+        </aside>
       </div>
 
-      <div className="gt-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <strong>Bornes ({bornes.length})</strong>
-          {flaggedCount > 0 && (
-            <Badge variant="outline" style={{ color: "var(--status-warning)" }}>
-              {flaggedCount} à vérifier
-            </Badge>
-          )}
-        </div>
-        <div className="gt-table-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nom</TableHead>
-                <TableHead>X (Lambert)</TableHead>
-                <TableHead>Y (Lambert)</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {bornes.map((b, i) => (
-                <TableRow key={i} style={b.flagged ? { background: "var(--status-warning-bg, #fff8e6)" } : undefined}>
-                  <TableCell>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <input style={{ width: 90 }} value={b.name} onChange={(e) => updateBorne(i, { name: e.target.value })} />
-                      <FlagBadge borne={b} />
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <input type="number" style={{ width: 110 }} value={b.x} onChange={(e) => updateBorne(i, { x: Number(e.target.value) })} />
-                  </TableCell>
-                  <TableCell>
-                    <input type="number" style={{ width: 110 }} value={b.y} onChange={(e) => updateBorne(i, { y: Number(e.target.value) })} />
-                  </TableCell>
-                  <TableCell>
-                    <button className="gt-iconbtn" onClick={() => removeBorne(i)}><Trash2 size={13} /></button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        <button className="gt-btn gt-btn-neutral" style={{ alignSelf: "flex-start" }} onClick={addBorne}>
-          <Plus size={14} /> Ajouter une borne
+      {error && <div className="cad-error" role="alert">{error}</div>}
+
+      <div className="cad-actionbar">
+        <span className="cad-note">{blocking ? "Complétez les contrôles pour enregistrer." : "Prêt à enregistrer."}</span>
+        <button className="cad-btn" onClick={onCancel}>Annuler</button>
+        <button className="cad-btn primary" disabled={saving || blocking} onClick={save}>
+          {saving ? <Loader2 size={16} className="gt-spin-icon" /> : <CheckCircle2 size={16} />}
+          {saving ? "Enregistrement…" : isEditing ? "Mettre à jour" : "Enregistrer le lot"}
         </button>
       </div>
-
-      {error && <div style={{ color: "var(--status-danger)" }}>{error}</div>}
-
-      <button
-        className="gt-newbtn"
-        style={{ alignSelf: "flex-start" }}
-        disabled={saving || missingReasons.length > 0}
-        onClick={save}
-      >
-        {saving ? <Loader2 size={15} className="gt-spin-icon" /> : <CheckCircle2 size={15} />}
-        {saving ? "Enregistrement…" : isEditing ? "Mettre à jour le lot" : "Enregistrer le lot"}
-      </button>
-      {missingReasons.length > 0 && (
-        <div className="gt-attach-note">
-          Il manque : {missingReasons.join(", ")}{initial.extractionMethod !== "manual" && " — le PDF ne les a pas lus clairement"}, complétez-les ci-dessus.
-        </div>
-      )}
     </div>
   );
 }
 
-// --- Lot detail --------------------------------------------------------
-
-function ConformiteBadge({ conforme }) {
-  return conforme ? (
-    <Badge style={{ background: "var(--status-success-bg, #e6f6ee)", color: "var(--good)" }}>Conforme</Badge>
-  ) : (
-    <Badge style={{ background: "var(--status-danger-bg)", color: "var(--status-danger)" }}>Écart</Badge>
-  );
-}
+// --- Detail --------------------------------------------------------------------
 
 function lotToReviewInitial(lot) {
   return {
     extractionMethod: "edit",
-    header: {
-      titreFoncier: lot.titreFoncier,
-      proprieteDite: lot.proprieteDite,
-      lot: lot.lotNumber || "",
-      geometre: lot.geometre || "",
-    },
+    header: { titreFoncier: lot.titreFoncier, proprieteDite: lot.proprieteDite, lot: lot.lotNumber || "", geometre: lot.geometre || "" },
     bornes: lot.bornes.map((b) => ({ name: b.name, sequence: b.sequence, x: b.xLambert, y: b.yLambert, flagged: false })),
     surfaceDocumentM2: lot.surfaceDocumentM2,
     correctionLambertM2: lot.correctionLambertM2,
     projetId: lot.projet || "",
-    distanceChecks: lot.distanceChecks.map((dc) => ({ segmentLabel: dc.segmentLabel, croquisM: dc.croquisM })),
-    referencePoints: lot.referencePoints.map((rp) => ({ label: rp.label, lat: rp.lat, lng: rp.lng })),
+    distanceChecks: lot.distanceChecks.map((d) => ({ segmentLabel: d.segmentLabel, croquisM: d.croquisM })),
+    referencePoints: lot.referencePoints.map((r) => ({ label: r.label, lat: r.lat, lng: r.lng })),
     lotId: lot.id,
   };
 }
 
-function LotDetail({ lotId, onBack, onEdit, onDeleted }) {
+function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
   const [lot, setLot] = useState(null);
   const [geojson, setGeojson] = useState(null);
   const [error, setError] = useState(null);
+  const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([getCadastreLot(lotId), getCadastreLotGeoJSON(lotId)])
-      .then(([l, g]) => {
-        if (cancelled) return;
-        setLot(l);
-        setGeojson(g);
-      })
+      .then(([l, g]) => !cancelled && (setLot(l), setGeojson(g)))
       .catch((e) => !cancelled && setError(readApiError(e, "Échec du chargement.")));
     return () => { cancelled = true; };
   }, [lotId]);
 
   const remove = async () => {
-    if (!window.confirm(`Supprimer définitivement le lot "${lot.proprieteDite}" (titre foncier ${lot.titreFoncier}) ?`)) return;
     setDeleting(true);
-    setError(null);
     try {
       await deleteCadastreLot(lotId);
       onDeleted();
     } catch (e) {
       setError(readApiError(e, "Échec de la suppression."));
       setDeleting(false);
+      setConfirming(false);
     }
   };
 
-  if (error) return <div style={{ color: "var(--status-danger)" }}>{error}</div>;
-  if (!lot) return <div className="gt-attach-note">Chargement…</div>;
+  if (error) return <div className="cad"><div className="cad-error" role="alert">{error}</div><button className="cad-btn" onClick={onBack}><ArrowLeft size={16} /> Retour</button></div>;
+  if (!lot) return <div className="cad"><div className="cad-note">Chargement…</div></div>;
+
+  const ecart = lot.surfaceCalculeeM2 + lot.correctionLambertM2 - lot.surfaceDocumentM2;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="gt-formrow" style={{ justifyContent: "space-between" }}>
-        <button className="gt-btn gt-btn-neutral" onClick={onBack}>
-          <ArrowLeft size={14} /> Retour
-        </button>
-        <div className="gt-formrow" style={{ gap: 8 }}>
-          <button className="gt-btn gt-btn-neutral" onClick={() => onEdit(lotToReviewInitial(lot))}>
-            <Pencil size={14} /> Modifier
-          </button>
-          <button className="gt-btn gt-btn-neutral" style={{ color: "var(--status-danger)" }} disabled={deleting} onClick={remove}>
-            {deleting ? <Loader2 size={14} className="gt-spin-icon" /> : <Trash2 size={14} />} Supprimer
-          </button>
+    <div className="cad">
+      <div className="cad-top">
+        <button className="cad-btn" onClick={onBack}><ArrowLeft size={16} /> Tous les lots</button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="cad-btn" onClick={() => onEdit(lotToReviewInitial(lot))}><Pencil size={16} /> Modifier</button>
+          {confirming ? (
+            <>
+              <button className="cad-btn danger" disabled={deleting} onClick={remove}>
+                {deleting ? <Loader2 size={16} className="gt-spin-icon" /> : <Trash2 size={16} />} Confirmer la suppression
+              </button>
+              <button className="cad-btn" onClick={() => setConfirming(false)} aria-label="Annuler la suppression"><X size={16} /></button>
+            </>
+          ) : (
+            <button className="cad-btn danger" onClick={() => setConfirming(true)}><Trash2 size={16} /> Supprimer</button>
+          )}
         </div>
       </div>
-      <div className="gt-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <strong>{lot.proprieteDite}</strong>
-          <ConformiteBadge conforme={lot.conforme} />
+
+      <Stepper step={2} />
+      {justSaved && <div className="cad-check ok" role="status"><i>✓</i>Lot enregistré. Il est désormais visible sur la carte générale (couche « Lots cadastraux »).</div>}
+
+      <Hero eyebrow={`Titre foncier ${lot.titreFoncier}`} title={lot.proprieteDite}>
+        {[lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`].filter(Boolean).join(" · ")}
+      </Hero>
+
+      <div className="cad-layout">
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <LotMap geojson={geojson} />
+          <section className="cad-panel">
+            <h2>Bornes · {lot.bornes.length}</h2>
+            <div style={{ overflowX: "auto" }}>
+              <table className="cad-bornes">
+                <thead><tr><th>Borne</th><th>X Lambert</th><th>Y Lambert</th><th>Lat, Lng</th></tr></thead>
+                <tbody>
+                  {lot.bornes.map((b) => (
+                    <tr key={b.id}>
+                      <td data-label="Borne"><strong>{b.name}</strong></td>
+                      <td data-label="X Lambert" className="gt-mono">{fmt(b.xLambert, 3)}</td>
+                      <td data-label="Y Lambert" className="gt-mono">{fmt(b.yLambert, 3)}</td>
+                      <td data-label="Lat, Lng" className="gt-mono">{b.lat.toFixed(6)}, {b.lng.toFixed(6)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
-        <div className="gt-attach-note">
-          Titre foncier {lot.titreFoncier} · Surface calculée {lot.surfaceCalculeeM2.toFixed(2)} m² (document : {lot.surfaceDocumentM2.toFixed(2)} m²)
-          {lot.projet && <> · Projet {lot.projet}</>}
-        </div>
-      </div>
-      <LotMap geojson={geojson} />
-      <div className="gt-table-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Borne</TableHead>
-              <TableHead>X (Lambert)</TableHead>
-              <TableHead>Y (Lambert)</TableHead>
-              <TableHead>Lat / Lng</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {lot.bornes.map((b) => (
-              <TableRow key={b.id}>
-                <TableCell>{b.name}</TableCell>
-                <TableCell>{b.xLambert.toFixed(3)}</TableCell>
-                <TableCell>{b.yLambert.toFixed(3)}</TableCell>
-                <TableCell>{b.lat.toFixed(6)}, {b.lng.toFixed(6)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
 
-// --- Lots list -----------------------------------------------------------
-
-function LotsList({ reloadKey, onOpenLot }) {
-  const [lots, setLots] = useState(null);
-  const [query, setQuery] = useState("");
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    listCadastreLots(query)
-      .then((data) => !cancelled && setLots(data))
-      .catch((e) => !cancelled && setError(readApiError(e, "Échec du chargement des lots.")));
-    return () => { cancelled = true; };
-  }, [query, reloadKey]);
-
-  return (
-    <div className="gt-card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <strong>Lots cadastraux enregistrés</strong>
-        <input placeholder="Rechercher…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ maxWidth: 220 }} />
-      </div>
-      {error && <div style={{ color: "var(--status-danger)" }}>{error}</div>}
-      {!lots ? (
-        <div className="gt-attach-note">Chargement…</div>
-      ) : lots.length === 0 ? (
-        <div className="gt-list-empty">Aucun lot enregistré pour l'instant.</div>
-      ) : (
-        <div className="gt-table-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Titre foncier</TableHead>
-                <TableHead>Propriété dite</TableHead>
-                <TableHead>Surface calculée</TableHead>
-                <TableHead>Conformité</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lots.map((l) => (
-                <TableRow key={l.id} style={{ cursor: "pointer" }} onClick={() => onOpenLot(l.id)}>
-                  <TableCell>{l.titreFoncier}</TableCell>
-                  <TableCell>{l.proprieteDite}</TableCell>
-                  <TableCell>{l.surfaceCalculeeM2.toFixed(2)} m²</TableCell>
-                  <TableCell><ConformiteBadge conforme={l.conforme} /></TableCell>
-                </TableRow>
+        <aside className="cad-rail">
+          <section className="cad-panel">
+            <div className="cad-top"><h2>Surface</h2><ConformiteBadge conforme={lot.conforme} /></div>
+            <div className="cad-figure"><span>Calculée (bornes)</span><strong>{fmt(lot.surfaceCalculeeM2)} m²</strong></div>
+            <div className="cad-figure"><span>Document</span><strong>{fmt(lot.surfaceDocumentM2)} m²</strong></div>
+            <div className="cad-figure"><span>Correction Lambert</span><strong>{fmt(lot.correctionLambertM2)} m²</strong></div>
+            <div className="cad-figure"><span>Écart</span><strong style={{ color: lot.conforme ? "var(--status-success)" : "var(--status-danger)" }}>{ecart > 0 ? "+" : ""}{fmt(ecart)} m²</strong></div>
+          </section>
+          {lot.distanceChecks.length > 0 && (
+            <section className="cad-panel">
+              <h2>Contrôle des distances</h2>
+              {lot.distanceChecks.map((d) => (
+                <div className="cad-figure" key={d.id}><span className="gt-mono">{d.segmentLabel}</span><strong style={{ color: Math.abs(d.ecartM) <= 0.1 ? "var(--status-success)" : "var(--status-danger)" }}>{d.ecartM > 0 ? "+" : ""}{d.ecartM.toFixed(2)} m</strong></div>
               ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+            </section>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }
 
-// --- Entry point -----------------------------------------------------------
+// --- Entry point ---------------------------------------------------------------
 
-/**
- * PDF → OCR → borne table → cadastral lot. Everything the feature owns lives
- * under components/cadastre/, mirroring how the rest of the app keeps each
- * view self-contained; GlobetudesProjets renders this for view === "cadastre".
- */
+/** PDF → OCR → vérification → lot cadastral. Rendered by GlobetudesProjets for view === "cadastre". */
 export default function CadastreTool() {
   const [screen, setScreen] = useState({ name: "list" });
   const [reloadKey, setReloadKey] = useState(0);
@@ -458,32 +505,20 @@ export default function CadastreTool() {
       <ReviewScreen
         initial={screen.initial}
         onCancel={() => setScreen(screen.initial.lotId ? { name: "detail", id: screen.initial.lotId } : { name: "list" })}
-        onSaved={(id) => {
-          setReloadKey((k) => k + 1);
-          setScreen({ name: "detail", id });
-        }}
+        onSaved={(id) => { setReloadKey((k) => k + 1); setScreen({ name: "detail", id, justSaved: true }); }}
       />
     );
   }
-
   if (screen.name === "detail") {
     return (
       <LotDetail
         lotId={screen.id}
+        justSaved={screen.justSaved}
         onBack={() => setScreen({ name: "list" })}
         onEdit={(initial) => setScreen({ name: "review", initial })}
-        onDeleted={() => {
-          setReloadKey((k) => k + 1);
-          setScreen({ name: "list" });
-        }}
+        onDeleted={() => { setReloadKey((k) => k + 1); setScreen({ name: "list" }); }}
       />
     );
   }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 960 }}>
-      <UploadPanel onReview={(initial) => setScreen({ name: "review", initial })} />
-      <LotsList reloadKey={reloadKey} onOpenLot={(id) => setScreen({ name: "detail", id })} />
-    </div>
-  );
+  return <HomeScreen reloadKey={reloadKey} onReview={(initial) => setScreen({ name: "review", initial })} onOpenLot={(id) => setScreen({ name: "detail", id })} />;
 }

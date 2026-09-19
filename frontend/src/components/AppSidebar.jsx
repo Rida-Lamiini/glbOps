@@ -14,9 +14,15 @@ import {
   SidebarMenuButton,
   SidebarFooter,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 export default function AppSidebar({ visibleTabs, view, setView, currentUser, onRoleChange, onLogout }) {
+  const { isMobile, setOpenMobile } = useSidebar();
+  const go = (key) => {
+    setView(key);
+    if (isMobile) setOpenMobile(false);
+  };
   return (
     <Sidebar variant="sidebar" collapsible="icon" className="border-sidebar-border">
       <SidebarHeader>
@@ -35,7 +41,7 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
                 <SidebarMenu>
                   {items.map((item) => (
                     <SidebarMenuItem key={item.key}>
-                      <SidebarMenuButton isActive={view === item.key} onClick={() => setView(item.key)} tooltip={item.label}>
+                      <SidebarMenuButton isActive={view === item.key} onClick={() => go(item.key)} tooltip={item.label}>
                         <span className="gt-sidebar-icon" style={{ "--icon-color": item.color }}>
                           <item.icon size={15} />
                         </span>

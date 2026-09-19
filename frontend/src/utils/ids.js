@@ -14,5 +14,5 @@ export const nextPrestationId = (projets) => {
       if (Number.isFinite(n) && n > max) max = n;
     });
   });
-  return `PRS-2026-0${max + 1}`;
+  return `PRS-2026-${max + 1}`;
 };

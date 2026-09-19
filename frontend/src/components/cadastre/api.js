@@ -157,3 +157,31 @@ export function readApiError(error, fallback) {
   }
   return fallback;
 }
+
+// Earlier lots worth reusing on a projet: same titre foncier, or within `radius` metres.
+export const findLotMatches = async ({ titre, lat, lng, radius = 200, projet } = {}) => {
+  const params = new URLSearchParams();
+  if (titre) params.set("titre", titre);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    params.set("lat", lat);
+    params.set("lng", lng);
+    params.set("radius", radius);
+  }
+  if (projet) params.set("projet", projet);
+  const data = await apiGet(`/cadastre/lots/matches/?${params}`);
+  const toMatch = (m) => ({
+    id: m.id,
+    titreFoncier: m.titre_foncier,
+    proprieteDite: m.propriete_dite,
+    projet: m.projet,
+    surfaceM2: Number(m.surface_document_m2),
+    nbBornes: m.nb_bornes,
+    createdAt: m.created_at,
+    distanceM: m.distance_m,
+  });
+  return { sameTitre: data.same_titre.map(toMatch), nearby: data.nearby.map(toMatch) };
+};
+
+// Attaches an unowned lot to the projet, or copies one that belongs elsewhere
+// (the copy remembers its origin; the original survey is never modified).
+export const reuseLot = (lotId, projetId) => apiPost(`/cadastre/lots/${lotId}/reuse/`, { projet: projetId });

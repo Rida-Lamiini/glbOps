@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
-import { AlertTriangle, Palmtree, Building2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Palmtree, Building2, FileScan, Map as MapIcon, List, ArrowRight } from "lucide-react";
+import { listCadastreLots } from "./cadastre/api";
 import { computeEmployeeStats } from "../utils/stats";
 import { parseDateFR, nowMs } from "../utils/dates";
 import { STAGES, STAGE_COLORS, RESOURCE_STATUSES } from "../constants";
@@ -31,6 +32,24 @@ function getRange(mode, customFrom, customTo) {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { start: startOfDay(start.getTime()), end: endOfDay(end.getTime()), label: "ce mois" };
+}
+
+// Same-length window immediately before the current one (week -> previous week, month -> previous month).
+function previousRange(mode) {
+  const now = new Date();
+  if (mode === "week") {
+    const day = (now.getDay() + 6) % 7;
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day - 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return { start: startOfDay(start.getTime()), end: endOfDay(end.getTime()), label: "la semaine dernière" };
+  }
+  if (mode === "month") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { start: startOfDay(start.getTime()), end: endOfDay(end.getTime()), label: "le mois dernier" };
+  }
+  return null;
 }
 
 const inRange = (dateFR, range) => {
@@ -68,7 +87,19 @@ export default function OverviewDashboard({
   onOpenEmployee,
   onOpenClient,
   onOpenPrestation,
+  onGo,
+  userName,
 }) {
+  const [lots, setLots] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    listCadastreLots().then((l) => !cancelled && setLots(l)).catch(() => !cancelled && setLots([]));
+    return () => { cancelled = true; };
+  }, []);
+  const lotsConformes = lots ? lots.filter((l) => l.conforme).length : 0;
+  const todayLabel = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+  const go = (view, filter) => onGo && onGo(view, filter);
   const [rangeMode, setRangeMode] = useState("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -87,19 +118,25 @@ export default function OverviewDashboard({
     [allPrestationsFlat, range]
   );
 
+  // Current state of every open prestation, by stage — matches what the Kanban shows.
   const funnel = useMemo(() => {
-    const cohort = allPrestationsFlat.filter((p) => inRange(p.history?.[0]?.date, range));
-    const total = cohort.length;
-    const counts = STAGES.map((s) => cohort.filter((p) => p.stage === s.key).length);
-    return STAGES.map((s, i) => ({
-      ...s,
-      count: counts[i],
-      pct: total > 0 ? Math.round((counts[i] / total) * 100) : 0,
-      dropoff: i === 0 ? null : counts[i - 1] - counts[i],
-    }));
-  }, [allPrestationsFlat, range]);
+    const open = allPrestationsFlat.filter((p) => p.stage !== "livraison" || !p.chemin);
+    const total = open.length;
+    return STAGES.map((s) => {
+      const count = open.filter((p) => p.stage === s.key).length;
+      return { ...s, count, pct: total > 0 ? Math.round((count / total) * 100) : 0 };
+    });
+  }, [allPrestationsFlat]);
   const funnelTotal = funnel.reduce((s, f) => s + f.count, 0);
   const funnelMax = Math.max(1, ...funnel.map((f) => f.count));
+  const funnelActive = funnel.filter((f) => f.count > 0);
+  const funnelEmpty = funnel.filter((f) => f.count === 0);
+
+  const prevRange = useMemo(() => previousRange(rangeMode), [rangeMode]);
+  const livreesPrev = useMemo(
+    () => (prevRange ? allPrestationsFlat.filter((p) => p.stage === "livraison" && p.chemin && inRange(p.dateLivraison, prevRange)).length : null),
+    [allPrestationsFlat, prevRange]
+  );
 
   const workload = useMemo(() => {
     const weekAgo = nowMs() - 7 * 86400000;
@@ -213,6 +250,21 @@ export default function OverviewDashboard({
 
   return (
     <div className="gt-dash">
+      <header className="gt-dash-hero">
+        <div>
+          <div className="gt-dash-hero-date">{todayLabel}</div>
+          <h1>{userName ? `Bonjour, ${userName}` : "Tableau de bord"}</h1>
+          <p>L'essentiel de l'activité : ce qui avance, ce qui bloque, et qui est mobilisé.</p>
+        </div>
+        {onGo && (
+          <nav className="gt-dash-shortcuts" aria-label="Raccourcis">
+            <button type="button" onClick={() => onGo("projets")}><List size={15} /> Projets</button>
+            <button type="button" onClick={() => onGo("carte")}><MapIcon size={15} /> Carte</button>
+            <button type="button" onClick={() => onGo("cadastre")}><FileScan size={15} /> Cadastre</button>
+          </nav>
+        )}
+      </header>
+
       <div className="gt-dash-rangebar">
         <span className="gt-projtoolbar-label">Période</span>
         <div className="gt-viewtoggle">
@@ -227,7 +279,7 @@ export default function OverviewDashboard({
             <DatePicker value={customTo} onChange={setCustomTo} className="min-w-[130px]" />
           </div>
         )}
-        <span className="gt-dash-rangebar-hint">s'applique à « Livrées » et au pipeline ci-dessous</span>
+        <span className="gt-dash-rangebar-hint">s'applique à « Livrées » ; les autres chiffres décrivent l'état actuel</span>
       </div>
 
       {insight && (
@@ -241,64 +293,86 @@ export default function OverviewDashboard({
       )}
 
       <div className="gt-stats">
-        <div className="gt-stat gt-card">
+        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("projets")}>
           <div className="gt-stat-label">Prestations actives</div>
-          <div className="gt-stat-num">{prestationsActives}</div>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Non conformes actuellement</div>
-          <div className="gt-stat-num">{nonConfActuel}</div>
+          <div className={`gt-stat-num ${prestationsActives === 0 ? "is-zero" : ""}`}>{prestationsActives}</div>
+          <span className="gt-stat-sub">en cours de traitement</span>
+        </button>
+        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("projets", { stage: "nonconforme" })}>
+          <div className="gt-stat-label">Non conformes</div>
+          <div className={`gt-stat-num ${nonConfActuel === 0 ? "is-zero" : ""}`}>{nonConfActuel}</div>
           <span className={`gt-status-pill ${nonConfActuel > 0 ? "danger" : "neutral"}`}>
             <span className="gt-status-pill-dot" />{nonConfActuel > 0 ? "À traiter" : "Aucune"}
           </span>
-        </div>
-        <div className="gt-stat gt-card">
+        </button>
+        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("projets", { stage: "livraison" })}>
           <div className="gt-stat-label">Livrées ({range.label})</div>
-          <div className="gt-stat-num">{livreesPeriode}</div>
-          <span className="gt-status-pill success"><span className="gt-status-pill-dot" />Conforme</span>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">En retard</div>
-          <div className="gt-stat-num">{enRetardCount}</div>
-          <span className={`gt-status-pill ${enRetardCount > 0 ? "warning" : "neutral"}`}>
-            <span className="gt-status-pill-dot" />{enRetardCount > 0 ? "À revoir" : "Aucune"}
+          <div className={`gt-stat-num ${livreesPeriode === 0 ? "is-zero" : ""}`}>{livreesPeriode}</div>
+          <span className="gt-stat-sub">
+            {livreesPrev == null ? "sur la période choisie" : `${livreesPrev} ${prevRange.label}${livreesPeriode !== livreesPrev ? ` (${livreesPeriode > livreesPrev ? "▲" : "▼"} ${Math.abs(livreesPeriode - livreesPrev)})` : ""}`}
           </span>
-        </div>
+        </button>
+        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("calendrier")}>
+          <div className="gt-stat-label">En retard</div>
+          <div className={`gt-stat-num ${enRetardCount === 0 ? "is-zero" : ""}`}>{enRetardCount}</div>
+          <span className={`gt-status-pill ${enRetardCount > 0 ? "warning" : "neutral"}`}>
+            <span className="gt-status-pill-dot" />{enRetardCount > 0 ? "À revoir" : "À l'heure"}
+          </span>
+        </button>
       </div>
 
       <div className="gt-dash-row">
+        <div className="gt-dash-stack">
         <div className="gt-dash-panel gt-dash-panel-wide">
           <div className="gt-dash-panel-head">
-            <span className="gt-dash-panel-title">Pipeline ({range.label})</span>
+            <span className="gt-dash-panel-title">Pipeline actuel</span>
             {funnelTotal > 0 && <span className="gt-dash-panel-count">{funnelTotal} prestation{funnelTotal > 1 ? "s" : ""}</span>}
           </div>
           {funnelTotal === 0 ? (
-            <div className="gt-list-empty">Aucune prestation démarrée sur cette période.</div>
+            <div className="gt-list-empty">Aucune prestation en cours.</div>
           ) : (
             <TooltipProvider>
               <div className="gt-dash-funnel">
-                {funnel.map((s, i) => (
+                {funnelActive.map((s) => (
                   <Tooltip key={s.key}>
                     <TooltipTrigger asChild>
-                      <div className="gt-dash-funnel-row">
+                      <button type="button" className="gt-dash-funnel-row is-link" onClick={() => go("projets", { stage: s.key })}>
                         <span className="gt-dash-funnel-label">{s.label}</span>
                         <div className="gt-dash-funnel-bar">
-                          {s.count > 0 && (
-                            <div className="gt-dash-funnel-fill" style={{ width: `${(s.count / funnelMax) * 100}%`, background: STAGE_COLORS[s.key] }} />
-                          )}
+                          <div className="gt-dash-funnel-fill" style={{ width: `${(s.count / funnelMax) * 100}%`, background: STAGE_COLORS[s.key] }} />
                         </div>
                         <span className="gt-dash-funnel-count">{s.count}</span>
-                      </div>
+                      </button>
                     </TooltipTrigger>
-                    <TooltipContent side="right">
-                      {s.count} prestation{s.count > 1 ? "s" : ""} · {s.pct}% du total
-                      {i > 0 && s.dropoff != null ? ` · ${s.dropoff >= 0 ? "-" : "+"}${Math.abs(s.dropoff)} vs étape précédente` : ""}
-                    </TooltipContent>
+                    <TooltipContent side="right">{s.count} prestation{s.count > 1 ? "s" : ""} · {s.pct}% — voir dans Projets</TooltipContent>
                   </Tooltip>
                 ))}
               </div>
+              {funnelEmpty.length > 0 && (
+                <div className="gt-dash-funnel-empty">Aucune pour : {funnelEmpty.map((f) => f.label).join(", ")}</div>
+              )}
             </TooltipProvider>
           )}
+        </div>
+        {onGo && (
+          <div className="gt-dash-panel gt-dash-cadastre">
+            <div className="gt-dash-panel-head">
+              <span className="gt-dash-panel-title">Cadastre</span>
+              <button type="button" className="gt-dash-link" onClick={() => onGo("cadastre")}>Ouvrir <ArrowRight size={13} /></button>
+            </div>
+            {lots === null ? (
+              <div className="gt-list-empty">Chargement…</div>
+            ) : lots.length === 0 ? (
+              <div className="gt-list-empty">Aucun lot enregistré. Importez un plan de bornage pour le voir sur la carte.</div>
+            ) : (
+              <div className="gt-dash-cad">
+                <div className="gt-dash-cad-kpi"><strong>{lots.length}</strong><span>lot{lots.length > 1 ? "s" : ""} enregistré{lots.length > 1 ? "s" : ""}</span></div>
+                <div className="gt-dash-cad-kpi"><strong style={{ color: "var(--status-success)" }}>{lotsConformes}</strong><span>conforme{lotsConformes > 1 ? "s" : ""}</span></div>
+                <div className="gt-dash-cad-kpi"><strong style={{ color: lots.length - lotsConformes ? "var(--status-danger)" : undefined }}>{lots.length - lotsConformes}</strong><span>avec écart</span></div>
+              </div>
+            )}
+          </div>
+        )}
         </div>
 
         <div className="gt-dash-panel">
@@ -415,6 +489,7 @@ export default function OverviewDashboard({
           )}
         </div>
       </div>
+
     </div>
   );
 }

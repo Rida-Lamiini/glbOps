@@ -1,0 +1,105 @@
+/* Cadastre module — built only from the shared tokens (tokens.css). */
+.cad { display: flex; flex-direction: column; gap: 20px; padding: 24px 28px 96px; max-width: 1120px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.cad-hero h1 { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 4px; }
+.cad-hero p { margin: 0; color: var(--muted); font-size: 14px; max-width: 62ch; line-height: 1.5; }
+.cad-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+
+/* Stepper */
+.cad-steps { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0; flex-wrap: wrap; }
+.cad-step { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 6px 12px 6px 6px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--surface); }
+.cad-step b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--surface-muted); color: var(--muted); }
+.cad-step.is-active { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+.cad-step.is-active b { background: var(--ink); color: var(--surface); }
+.cad-step.is-done b { background: var(--status-success); color: #fff; }
+
+/* Drop zone */
+.cad-drop { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; padding: 28px; border: 2px dashed #c9bda2; border-radius: 20px; background: linear-gradient(180deg, var(--surface), var(--surface-muted)); transition: border-color .15s, background .15s, transform .15s; }
+.cad-drop.is-over { border-color: var(--accent); background: #fbeeea; transform: scale(1.005); }
+.cad-drop h2 { font-family: var(--font-display); font-size: 20px; margin: 0 0 6px; font-weight: 600; }
+.cad-drop p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; max-width: 60ch; }
+.cad-drop-actions { display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+.cad-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 16px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--surface); color: var(--ink); font-size: 13.5px; font-weight: 600; cursor: pointer; min-height: 44px; transition: background .15s, border-color .15s, transform .1s; }
+.cad-btn:hover:not(:disabled) { border-color: var(--ink); background: var(--surface-muted); }
+.cad-btn:active:not(:disabled) { transform: scale(.98); }
+.cad-btn:disabled { opacity: .45; cursor: not-allowed; }
+.cad-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 6px 14px rgba(179,38,30,.22); }
+.cad-btn.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+.cad-btn.danger { color: var(--status-danger); }
+.cad-btn input[type=file] { display: none; }
+.cad-error { color: var(--status-danger); background: var(--status-danger-bg); border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.cad-note { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+/* Toolbar + lot cards */
+.cad-listhead { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cad-listhead h2 { font-family: var(--font-display); font-size: 22px; margin: 0; font-weight: 600; }
+.cad-search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 44px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface); min-width: min(100%, 260px); }
+.cad-search input { border: 0; outline: 0; background: transparent; font-size: 14px; width: 100%; color: var(--ink); }
+.cad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+.cad-card { text-align: left; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 14px; cursor: pointer; box-shadow: var(--shadow-card); transition: transform .15s, box-shadow .15s, border-color .15s; font: inherit; color: inherit; }
+.cad-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); border-color: #c9bda2; }
+.cad-card:focus-visible { outline: 3px solid rgba(179,38,30,.28); outline-offset: 2px; }
+.cad-card-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.cad-card h3 { font-family: var(--font-display); font-size: 18px; margin: 0; font-weight: 600; line-height: 1.2; }
+.cad-card .cad-ref { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+.cad-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cad-kpi { background: var(--surface-muted); border-radius: 10px; padding: 10px 12px; }
+.cad-kpi span { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.cad-kpi strong { font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.cad-empty { text-align: center; padding: 48px 16px; border: 1px dashed var(--border-subtle); border-radius: 16px; color: var(--muted); }
+.cad-empty strong { display: block; font-family: var(--font-display); font-size: 18px; color: var(--ink); margin-bottom: 4px; }
+
+/* Panels (review + detail) */
+.cad-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.cad-panel { background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 20px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 14px; }
+.cad-panel h2 { font-family: var(--font-display); font-size: 18px; margin: 0; font-weight: 600; }
+.cad-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.cad-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.cad-field input { height: 44px; padding: 0 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface); font-size: 14px; color: var(--ink); font-weight: 400; min-width: 0; }
+.cad-field input:focus { outline: 3px solid rgba(179,38,30,.2); border-color: var(--accent); }
+.cad-field input.is-missing { border-color: var(--status-warning); background: var(--status-warning-bg); }
+.cad-field small { font-weight: 400; color: var(--muted); }
+.cad-req { color: var(--status-danger); }
+
+.cad-bornes { width: 100%; border-collapse: collapse; }
+.cad-bornes th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 8px; }
+.cad-bornes td { padding: 6px 8px; border-top: 1px solid var(--border-subtle); vertical-align: middle; }
+.cad-bornes input { height: 40px; width: 100%; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; background: var(--surface); box-sizing: border-box; }
+.cad-bornes tr.is-flagged td { background: var(--status-warning-bg); }
+.cad-flag { display: flex; gap: 6px; align-items: start; font-size: 12px; color: var(--status-warning); padding: 4px 8px 8px; }
+
+/* Summary rail */
+.cad-rail { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 14px; }
+.cad-check { display: flex; gap: 10px; align-items: start; font-size: 13px; line-height: 1.4; }
+.cad-check i { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 700; }
+.cad-check.ok i { background: var(--status-success-bg); color: var(--status-success); }
+.cad-check.todo i { background: var(--status-warning-bg); color: var(--status-warning); }
+
+/* Sticky action bar */
+.cad-actionbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: rgba(255,253,248,.94); backdrop-filter: blur(14px); border-top: 1px solid var(--border-subtle); }
+.cad-actionbar .cad-note { margin-right: auto; }
+
+.cad-map { width: 100%; height: clamp(300px, 52vh, 560px); border-radius: 16px; overflow: hidden; border: 1px solid var(--border-subtle); }
+.cad-figure { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border-subtle); font-size: 13px; }
+.cad-figure:first-of-type { border-top: 0; }
+.cad-figure strong { font-family: var(--font-display); font-size: 17px; }
+.cad-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .cad { padding: 16px 14px 104px; }
+  .cad-layout { grid-template-columns: 1fr; }
+  .cad-rail { position: static; order: -1; }
+  .cad-drop { grid-template-columns: 1fr; padding: 20px; }
+  .cad-drop-actions { min-width: 0; }
+  .cad-hero h1 { font-size: 24px; }
+}
+/* Borne table becomes stacked cards on phones */
+@media (max-width: 640px) {
+  .cad-bornes thead { display: none; }
+  .cad-bornes, .cad-bornes tbody, .cad-bornes tr, .cad-bornes td { display: block; width: 100%; box-sizing: border-box; }
+  .cad-bornes tr { border: 1px solid var(--border-subtle); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+  .cad-bornes td { border: 0; padding: 4px 0; }
+  .cad-bornes td[data-label]::before { content: attr(data-label); display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 2px; }
+  .cad-actionbar .cad-note { display: none; }
+  .cad-actionbar .cad-btn { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .cad-card, .cad-btn, .cad-drop { transition: none; } }

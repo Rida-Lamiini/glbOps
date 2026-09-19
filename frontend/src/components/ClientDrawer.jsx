@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import DrawerTabs from "./DrawerTabs";
 import { motion } from "framer-motion";
-import { X, Check, Pencil, Folder, AlertTriangle, Plus, Phone, Mail, MapPin, Briefcase, User, StickyNote } from "lucide-react";
+import { X, Check, Pencil, Folder, AlertTriangle, Plus, Phone, Mail, MapPin, Briefcase, User, StickyNote , FolderOpen } from "lucide-react";
 import { computeClientStats } from "../utils/stats";
 import { formatTimestamp } from "../utils/dates";
 import { notifySuccess, notifyError } from "../utils/notify";
@@ -19,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 export default function ClientDrawer({ client, projects, onClose, onOpenProjet, onNewProjetForClient, onEditClient, isOffice }) {
+  const [tab, setTab] = useState("infos");
   const [editing, setEditing] = useState(false);
   const [nomDraft, setNomDraft] = useState(client.nom);
   const [codeDraft, setCodeDraft] = useState(client.code);
@@ -114,7 +116,17 @@ export default function ClientDrawer({ client, projects, onClose, onOpenProjet, 
           {stats.lastActivity != null && <span className="gt-chip">Dernière activité : {formatTimestamp(stats.lastActivity)}</span>}
         </div>
 
-        <div className="gt-drawer-body">
+        <DrawerTabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: "infos", label: "Infos", icon: User },
+            { key: "projets", label: "Projets", icon: FolderOpen, count: stats.projects.length },
+          ]}
+        />
+
+        <div className="gt-drawer-body" role="tabpanel">
+          {tab === "infos" && (
           <section className="gt-section">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <h4 style={{ margin: 0 }}><User size={13} strokeWidth={2.2} /> Coordonnées</h4>
@@ -176,7 +188,9 @@ export default function ClientDrawer({ client, projects, onClose, onOpenProjet, 
               </div>
             )}
           </section>
+          )}
 
+          {tab === "projets" && (
           <section className="gt-section">
             <h4>Projets ({stats.projects.length})</h4>
             <Table>
@@ -213,7 +227,9 @@ export default function ClientDrawer({ client, projects, onClose, onOpenProjet, 
               </Button>
             )}
           </section>
+          )}
 
+          {tab === "infos" && (
           <section className="gt-section">
             <h4><StickyNote size={13} strokeWidth={2.2} /> Notes internes</h4>
             {isOffice ? (
@@ -239,6 +255,7 @@ export default function ClientDrawer({ client, projects, onClose, onOpenProjet, 
               <div className="gt-list-empty">Aucune note.</div>
             )}
           </section>
+          )}
         </div>
       </motion.div>
     </motion.div>

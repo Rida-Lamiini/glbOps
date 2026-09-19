@@ -13,16 +13,18 @@ import "./styles/app.css";
 
 import { fadeUpVariants, staggerContainer } from "./lib/motionVariants";
 import { STAGES } from "./constants";
-import { today, parseDateFR } from "./utils/dates";
+import { today, parseDateFR, frToISO } from "./utils/dates";
 import { visibleToUser, visibleTabsForRole } from "./utils/access";
 import { activeAgentsByRole } from "./utils/employees";
 import { buildNotifications } from "./utils/notifications";
 import { NAV_ITEMS_FLAT } from "./constants/nav";
 import { matchesMateriel, matchesVehicule } from "./utils/stats";
-import { nextMaterielId, nextVehiculeId, nextPrestationId, nextEmployeeId, nextCongeId } from "./utils/ids";
+import { nextMaterielId, nextVehiculeId, nextEmployeeId, nextCongeId } from "./utils/ids";
 import { downloadFile, buildGeoJSON, buildKML } from "./utils/geo";
 import { blankPrestation, blankResource, blankEmployee, blankClient } from "./data/seed";
-import { apiGet } from "./lib/api";
+import { apiGet, apiPost, apiPatch, apiDelete } from "./lib/api";
+import { reuseLot } from "./components/cadastre/api";
+import { notifyError } from "./utils/notify";
 import { adaptClient, adaptEmployee, adaptProjet, adaptResource } from "./lib/apiAdapters";
 
 import ProjetDrawer from "./components/ProjetDrawer";
@@ -49,6 +51,7 @@ import AgentControleApp from "./components/AgentControleApp";
 import FieldTopstrip from "./components/FieldTopstrip";
 import NotificationBell from "./components/NotificationBell";
 import CadastreTool from "./components/cadastre/CadastreTool";
+import AnalyticsView from "./components/AnalyticsView";
 import AppSidebar from "./components/AppSidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -59,6 +62,13 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/sonner";
+
+// Highest numeric suffix among ids like "PRJ-2026-008" / "CLI-0231" / "PRS-2026-107".
+const lastNumber = (ids) =>
+  ids.reduce((max, id) => {
+    const n = parseInt(String(id).split("-").pop(), 10);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, 0);
 
 export default function GlobetudesProjets({ authUser, onLogout }) {
   const [clients, setClients] = useState([]);
@@ -114,9 +124,9 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
         setVehicules(resourcesRaw.filter((r) => r.type === "vehicule").map(adaptResource));
         setProjets(adaptedProjets);
 
-        clientSeqRef.current = clientsRaw.length;
-        projetSeqRef.current = projetsRaw.length;
-        prestationSeqRef.current = parseInt(nextPrestationId(adaptedProjets).split("-").pop(), 10) - 1;
+        clientSeqRef.current = lastNumber(clientsRaw.map((c) => c.id));
+        projetSeqRef.current = lastNumber(projetsRaw.map((p) => p.id));
+        prestationSeqRef.current = lastNumber(projetsRaw.flatMap((p) => (p.prestations || []).map((x) => x.id)));
       } catch (err) {
         if (!cancelled) setDataError(err.message || "Impossible de charger les données");
       } finally {
@@ -136,16 +146,35 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
   // state directly is racy: two calls in the same tick both read the same stale state and can
   // mint the same id. A ref increments synchronously and independently of React's render/batching,
   // so concurrent calls always get distinct ids.
-  const clientSeqRef = useRef(clients.length);
-  const projetSeqRef = useRef(projets.length);
-  const prestationSeqRef = useRef(parseInt(nextPrestationId(projets).split("-").pop(), 10) - 1);
+  // Each ref holds the LAST number used, so the next id is always last + 1.
+  const clientSeqRef = useRef(0);
+  const projetSeqRef = useRef(0);
+  const prestationSeqRef = useRef(0);
+
+  // The counters above are seeded when the page loads, but other sessions (or earlier creations)
+  // keep adding rows afterwards. Re-reading the real maxima right before minting an id is what
+  // stops two creations from ever picking the same one (which the server rightly refuses).
+  const refreshSequences = async () => {
+    try {
+      const [projetsRaw, clientsRaw] = await Promise.all([apiGet("/projets/"), apiGet("/clients/")]);
+      projetSeqRef.current = Math.max(projetSeqRef.current, lastNumber(projetsRaw.map((p) => p.id)));
+      clientSeqRef.current = Math.max(clientSeqRef.current, lastNumber(clientsRaw.map((c) => c.id)));
+      prestationSeqRef.current = Math.max(
+        prestationSeqRef.current,
+        lastNumber(projetsRaw.flatMap((p) => (p.prestations || []).map((x) => x.id))),
+      );
+    } catch {
+      // Offline or API hiccup: fall back to the counters we already have.
+    }
+  };
 
   const getClient = (id) => clients.find((c) => c.id === id);
 
   const isPrestationArchived = (p) => p.stage === "livraison" && p.chemin && p.dateLivraison;
 
   const getProjetStage = (pr) => {
-    if (pr.prestations.length === 0) return null;
+    // A projet with no prestation yet is still at the very start of the pipeline: its Demande.
+    if (pr.prestations.length === 0) return STAGES[0].key;
     const active = pr.prestations.filter((p) => !isPrestationArchived(p));
     const pool = active.length > 0 ? active : pr.prestations;
     let earliest = pool[0].stage;
@@ -170,7 +199,75 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     if (!visibleTabsForRole(role).includes(view)) setView("projets");
   };
 
+  // Frontend prestation patch -> API payload (dates to ISO, agent names to employee ids).
+  const empId = (name) => employees.find((e) => e.nom === name)?.id || null;
+  const prestationPayload = (patch) => {
+    const out = {};
+    const map = {
+      natureDemandee: "nature_demandee", natureExecutee: "nature_executee",
+      dateDebutExec: "date_debut_exec", dateFinExec: "date_fin_exec",
+      cheminBureau: "chemin_bureau", ref: "ref", chemin: "chemin", cdN: "cd_n", disqueN: "disque_n",
+      stage: "stage", cycles: "cycles", reprogramme: "reprogramme", nonConformiteSource: "non_conformite_source",
+    };
+    const dates = {
+      dateDebutDemande: "date_debut_demande", dateFinDemande: "date_fin_demande",
+      dateDebutBureau: "date_debut_bureau", dateFinBureau: "date_fin_bureau",
+      dateDebutControle: "date_debut_controle", dateFinControle: "date_fin_controle",
+      dateLivraison: "date_livraison",
+    };
+    for (const [k, v] of Object.entries(patch)) {
+      if (map[k]) out[map[k]] = v ?? "";
+      else if (dates[k]) out[dates[k]] = frToISO(v);
+      else if (k === "agentChantier") out.agent_chantier = (v || []).map(empId).filter(Boolean);
+      else if (k === "agentBureau") out.agent_bureau = empId(v);
+      else if (k === "agentControle") out.agent_controle = empId(v);
+      else if (k === "materielIds") out.materiels = v || [];
+      else if (k === "vehiculeId") out.vehicule = v || null;
+    }
+    return out;
+  };
+
+  // One queue per prestation so quick successive edits reach the server in order.
+  const prestationQueueRef = useRef({});
+  const enqueue = (prestationId, job) => {
+    const prev = prestationQueueRef.current[prestationId] || Promise.resolve();
+    const next = prev.then(job, job);
+    prestationQueueRef.current[prestationId] = next.catch(() => {});
+    return next;
+  };
+
+  const persistPrestationPatch = (projetId, before, patch) => {
+    enqueue(before.id, async () => {
+      try {
+        const payload = prestationPayload(patch);
+        if (Object.keys(payload).length) await apiPatch(`/prestations/${before.id}/`, payload);
+        if (patch.history) {
+          for (const h of patch.history.slice((before.history || []).length)) {
+            await apiPost("/history/", { prestation: before.id, date: h.date, label: h.label, author: h.author || currentUser?.name || "" });
+          }
+        }
+        if (patch.taches) {
+          for (const t of before.taches || []) if (typeof t.id === "number") await apiDelete(`/taches/${t.id}/`);
+          const saved = [];
+          for (const t of patch.taches) {
+            const r = await apiPost("/taches/", { prestation: before.id, label: t.label, done: !!t.done, agents: (t.agents || []).map(empId).filter(Boolean) });
+            saved.push({ ...t, id: r.id });
+          }
+          setProjets((prev) =>
+            prev.map((pr) => pr.id !== projetId ? pr : { ...pr, prestations: pr.prestations.map((p) => (p.id === before.id ? { ...p, taches: saved } : p)) })
+          );
+        }
+      } catch {
+        setProjets((prev) =>
+          prev.map((pr) => pr.id !== projetId ? pr : { ...pr, prestations: pr.prestations.map((p) => (p.id === before.id ? before : p)) })
+        );
+        notifyError("La modification n'a pas pu être enregistrée.");
+      }
+    });
+  };
+
   const updatePrestation = (projetId, prestationId, patch) => {
+    const before = projets.find((pr) => pr.id === projetId)?.prestations.find((p) => p.id === prestationId);
     setProjets((prev) =>
       prev.map((pr) =>
         pr.id !== projetId
@@ -181,26 +278,68 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
             }
       )
     );
+    if (before) persistPrestationPatch(projetId, before, patch);
   };
 
   const findProjetOfPrestation = (prestationId) => projets.find((pr) => pr.prestations.some((p) => p.id === prestationId));
 
-  const addPrestation = (projetId, nature) => {
-    prestationSeqRef.current += 1;
-    const newId = `PRS-2026-0${prestationSeqRef.current}`;
-    setProjets((prev) =>
-      prev.map((pr) => {
-        if (pr.id !== projetId) return pr;
-        const newP = blankPrestation({ id: newId, natureDemandee: nature });
-        return { ...pr, prestations: [...pr.prestations, newP] };
-      })
-    );
+  // Writes go into local state first (the UI stays instant), then to the API. If the server
+  // refuses, the local change is rolled back and the user is told, so what is on screen never
+  // silently diverges from what is stored.
+  const savePrestation = async (projetId, prestation) => {
+    try {
+      await apiPost("/prestations/", {
+        id: prestation.id,
+        projet: projetId,
+        nature_demandee: prestation.natureDemandee || "",
+        date_debut_demande: frToISO(prestation.dateDebutDemande),
+        stage: prestation.stage,
+      });
+      for (const h of prestation.history || []) {
+        await apiPost("/history/", { prestation: prestation.id, date: h.date, label: h.label, author: h.author || currentUser?.name || "" });
+      }
+    } catch {
+      setProjets((prev) =>
+        prev.map((pr) => (pr.id === projetId ? { ...pr, prestations: pr.prestations.filter((p) => p.id !== prestation.id) } : pr))
+      );
+      notifyError("La prestation n'a pas pu être enregistrée.");
+    }
   };
 
+  const addPrestation = async (projetId, nature) => {
+    await refreshSequences();
+    prestationSeqRef.current += 1;
+    const newId = `PRS-2026-${prestationSeqRef.current}`;
+    const newP = blankPrestation({ id: newId, natureDemandee: nature, dateDebutDemande: today() });
+    setProjets((prev) =>
+      prev.map((pr) => (pr.id === projetId ? { ...pr, prestations: [...pr.prestations, newP] } : pr))
+    );
+    savePrestation(projetId, newP);
+  };
+
+  // A projet created with a brand-new client must wait for that client to exist server-side.
+  const clientSavesRef = useRef({});
+
   const createClient = ({ nom, code, ...rest }) => {
-    const id = `CLI-0${240 + clientSeqRef.current}`;
     clientSeqRef.current += 1;
-    setClients((prev) => [...prev, { id, nom, code: code || id, ...blankClient(rest) }]);
+    const id = `CLI-0${clientSeqRef.current}`;
+    const client = { id, nom, code: code || id, ...blankClient(rest) };
+    setClients((prev) => [...prev, client]);
+    const saving = apiPost("/clients/", {
+      id,
+      nom,
+      contact: client.contact || "",
+      telephone: client.telephone || "",
+      email: client.email || "",
+      adresse: client.adresse || "",
+      secteur: client.secteur || "",
+      notes: client.notes || "",
+    });
+    clientSavesRef.current[id] = saving;
+    saving.catch(() => {
+      setClients((prev) => prev.filter((c) => c.id !== id));
+      notifyError("Le client n'a pas pu être enregistré.");
+    });
     return id;
   };
 
@@ -294,35 +433,91 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     );
   };
 
-  const createProjet = ({ clientId, newClientNom, refFonciere, situation, nature, lat, lng }) => {
+  const createProjet = async ({ clientId, newClientNom, refFonciere, situation, nature, lat, lng, reuseLotIds = [] }) => {
+    await refreshSequences();
     let cid = clientId;
     if (!cid && newClientNom) cid = createClient({ nom: newClientNom });
-    const id = `PRJ-2026-0${20 + projetSeqRef.current}`;
     projetSeqRef.current += 1;
-    setProjets((prev) => [
-      {
-        id,
-        clientId: cid,
-        referenceFonciere: refFonciere,
-        situation,
-        lat: lat ?? null,
-        lng: lng ?? null,
-        naturePrestationProjet: nature,
-        dateDebut: today(),
-        notes: "",
-        attachments: [],
-        prestations: [],
-      },
-      ...prev,
-    ]);
+    const id = `PRJ-2026-${String(projetSeqRef.current).padStart(3, "0")}`;
+    // A projet always starts with its first prestation, at the "Demande" stage — that is the
+    // pipeline's entry point, so a projet is never left with "0 prestation".
+    prestationSeqRef.current += 1;
+    const firstPrestation = blankPrestation({
+      id: `PRS-2026-${prestationSeqRef.current}`,
+      natureDemandee: nature,
+      dateDebutDemande: today(),
+    });
+    const projet = {
+      id,
+      clientId: cid,
+      referenceFonciere: refFonciere,
+      situation,
+      lat: lat ?? null,
+      lng: lng ?? null,
+      naturePrestationProjet: nature,
+      dateDebut: today(),
+      notes: "",
+      attachments: [],
+      prestations: [firstPrestation],
+    };
+    setProjets((prev) => [projet, ...prev]);
+
+    (async () => {
+      try {
+        if (clientSavesRef.current[cid]) await clientSavesRef.current[cid];
+        await apiPost("/projets/", {
+          id,
+          client: cid,
+          reference_fonciere: refFonciere,
+          situation,
+          lat: lat ?? null,
+          lng: lng ?? null,
+          nature_prestation_projet: nature,
+          date_debut: frToISO(projet.dateDebut),
+          notes: "",
+        });
+      } catch {
+        setProjets((prev) => prev.filter((pr) => pr.id !== id));
+        notifyError("Le projet n'a pas pu être enregistré.");
+        return;
+      }
+      await savePrestation(id, firstPrestation);
+      // Earlier surveys the user chose to reuse: attached, or copied when they belong to another projet.
+      for (const lotId of reuseLotIds) {
+        try {
+          await reuseLot(lotId, id);
+        } catch {
+          notifyError("Un lot n'a pas pu être réutilisé sur ce projet.");
+        }
+      }
+    })();
+  };
+
+  const persistProjetPatch = async (projetId, patch) => {
+    const before = projets.find((pr) => pr.id === projetId);
+    const map = { referenceFonciere: "reference_fonciere", situation: "situation", lat: "lat", lng: "lng", naturePrestationProjet: "nature_prestation_projet", notes: "notes" };
+    const payload = {};
+    for (const [k, v] of Object.entries(patch)) if (map[k]) payload[map[k]] = v ?? (k === "lat" || k === "lng" ? null : "");
+    if ("clientId" in patch) payload.client = patch.clientId;
+    if ("dateDebut" in patch) payload.date_debut = frToISO(patch.dateDebut);
+    if (!before || !Object.keys(payload).length) return;
+    try {
+      await apiPatch(`/projets/${projetId}/`, payload);
+    } catch {
+      const restore = Object.fromEntries(Object.keys(patch).map((k) => [k, before[k]]));
+      setProjets((prev) => prev.map((pr) => (pr.id === projetId ? { ...pr, ...restore } : pr)));
+      notifyError("La modification du projet n'a pas pu être enregistrée.");
+    }
   };
 
   const editProjet = (projetId, patch) => {
     setProjets((prev) => prev.map((pr) => (pr.id === projetId ? { ...pr, ...patch } : pr)));
+    persistProjetPatch(projetId, patch);
   };
 
   const updateProjetNotes = (projetId, notes) => {
     setProjets((prev) => prev.map((pr) => (pr.id === projetId ? { ...pr, notes } : pr)));
+    persistProjetPatch(projetId, { notes });
   };
 
   const addProjetAttachments = (projetId, newAttachments) => {
@@ -361,7 +556,9 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     const from = dateFrom ? parseDateFR(dateFrom) : null;
     const to = dateTo ? parseDateFR(dateTo) : null;
     const filtered = filteredProjets.filter((pr) => {
-      if (filterStage !== "all" && !pr.prestations.some((p) => p.stage === filterStage)) return false;
+      if (filterStage === "nonconforme") {
+        if (!pr.prestations.some((p) => p.cycles > 0 && (p.stage !== "livraison" || !p.chemin))) return false;
+      } else if (filterStage !== "all" && !pr.prestations.some((p) => p.stage === filterStage)) return false;
       if (filterClient !== "all" && pr.clientId !== filterClient) return false;
       if (filterAgent !== "all" && !pr.prestations.some((p) => (p.agentChantier || []).includes(filterAgent))) return false;
       const debut = parseDateFR(pr.dateDebut);
@@ -590,7 +787,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
 
         <div className="gt-topbar-right">
           <NotificationBell notifications={officeNotifications} onOpen={handleOpenNotification} />
-          {view !== "overview" && view !== "cadastre" && (
+          {view !== "overview" && view !== "cadastre" && view !== "analytics" && (
             <div className="gt-search">
               <Search size={14} color="#9A9C92" />
               <input placeholder={searchPlaceholder} value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -639,7 +836,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
       </div>
 
       {(view === "projets" || view === "overview") && enRetardCount > 0 && (
-        <div style={{ padding: "16px 24px 0" }}>
+        <div className="gt-pagepad">
           <div className="gt-insight-card">
             <div className="gt-insight-icon"><AlertTriangle size={18} /></div>
             <div className="gt-insight-body">
@@ -713,6 +910,14 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
               onOpenEmployee={setOpenEmployeeId}
               onOpenClient={setOpenClientId}
               onOpenPrestation={setOpenPrestationId}
+              onGo={(v, filter) => {
+                if (v === "projets") {
+                  setBoardMode("list");
+                  setFilterStage(filter?.stage || "all");
+                }
+                setView(v);
+              }}
+              userName={currentUser.name}
             />
           </motion.div>
         )}
@@ -847,6 +1052,12 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
           </motion.div>
         )}
 
+        {view === "analytics" && (
+          <motion.div key="analytics" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
+            <AnalyticsView projets={projets} employees={employees} getClient={getClient} />
+          </motion.div>
+        )}
+
         {view === "cadastre" && (
           <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
             <CadastreTool />
@@ -884,6 +1095,10 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
             onOpenClient={isOffice ? (clientId) => {
               setOpenProjetId(null);
               setOpenClientId(clientId);
+            } : undefined}
+            onGoCadastre={isOffice ? () => {
+              setOpenProjetId(null);
+              setView("cadastre");
             } : undefined}
             onEditProjet={editProjet}
             onUpdateNotes={updateProjetNotes}

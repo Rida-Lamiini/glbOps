@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import ResponsiveTableCard from "./ResponsiveTableCard";
 import { AlertTriangle } from "lucide-react";
 import { computeResourceStats } from "../utils/stats";
 import { isPastDue } from "../utils/dates";
@@ -96,7 +97,7 @@ export default function ResourceListView({ codeLabel = "Code", nameLabel = "Nom"
         )}
       </div>
 
-      <div className="gt-table-card">
+      <ResponsiveTableCard>
         <Table>
           <TableHeader>
             <TableRow>
@@ -157,7 +158,7 @@ export default function ResourceListView({ codeLabel = "Code", nameLabel = "Nom"
           )}
         </TableBody>
         </Table>
-      </div>
+      </ResponsiveTableCard>
     </>
   );
 }

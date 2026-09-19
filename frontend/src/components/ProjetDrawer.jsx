@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   X,
@@ -16,11 +16,14 @@ import {
   Paperclip,
   FolderOpen,
   StickyNote,
+  FileScan,
+  LayoutDashboard,
+  ListChecks,
 } from "lucide-react";
 import { STAGES, STAGE_COLORS, NATURES } from "../constants";
 import { visibleToUser } from "../utils/access";
 import { parseDateFR, formatFileSize, fileExt, today } from "../utils/dates";
-import { notifySuccess } from "../utils/notify";
+import { notifySuccess, notifyError } from "../utils/notify";
 import { backdropVariants, drawerVariants } from "../lib/motionVariants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +34,11 @@ import { reverseGeocode } from "../utils/geocode";
 import { formatLambert } from "../utils/lambert";
 import LocationPicker from "./LocationPicker";
 import HistoriqueTimeline from "./HistoriqueTimeline";
+import { listCadastreLots, reuseLot } from "./cadastre/api";
+import LotSuggestions from "./cadastre/LotSuggestions";
+import { projetStatus } from "../utils/stats";
+import { STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
+import "./projet-drawer.css";
 
 export default function ProjetDrawer({
   projet,
@@ -41,6 +49,7 @@ export default function ProjetDrawer({
   onOpenPrestation,
   onAddPrestation,
   onOpenClient,
+  onGoCadastre,
   onEditProjet,
   onUpdateNotes,
   onAddAttachments,
@@ -61,6 +70,30 @@ export default function ProjetDrawer({
   const geocodeAbort = useRef(null);
   const [attachLabel, setAttachLabel] = useState("");
   const [attachChemin, setAttachChemin] = useState("");
+  const [tab, setTab] = useState("resume");
+  const [lots, setLots] = useState(null);
+  const [lotsVersion, setLotsVersion] = useState(0);
+  const [reusingId, setReusingId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listCadastreLots()
+      .then((all) => !cancelled && setLots(all.filter((l) => l.projet === projet.id)))
+      .catch(() => !cancelled && setLots([]));
+    return () => { cancelled = true; };
+  }, [projet.id, lotsVersion]);
+
+  const handleReuseLot = async (match) => {
+    setReusingId(match.id);
+    try {
+      await reuseLot(match.id, projet.id);
+      setLotsVersion((v) => v + 1);
+    } catch {
+      notifyError("Ce lot n'a pas pu être réutilisé.");
+    } finally {
+      setReusingId(null);
+    }
+  };
 
   const visiblePrestations = projet.prestations.filter((p) => visibleToUser(p, currentUser));
 
@@ -145,26 +178,43 @@ export default function ProjetDrawer({
   const agentsControle = [...new Set(projet.prestations.map((p) => p.agentControle).filter(Boolean))];
   const hasTeam = agentsChantier.length + materielNames.length + vehiculeNames.length + agentsBureau.length + agentsControle.length > 0;
 
+  const status = projetStatus(projet);
+  const livrees = projet.prestations.filter((p) => p.stage === "livraison" && p.chemin).length;
+  const nonConformes = projet.prestations.filter((p) => p.cycles > 0).length;
+  const enCours = Math.max(0, projet.prestations.length - livrees - nonConformes);
+
   const hasLocation = projet.lat != null && projet.lng != null;
   const attachments = projet.attachments || [];
 
   return (
     <motion.div className="gt-drawer-backdrop" onClick={onClose} variants={backdropVariants} initial="hidden" animate="visible" exit="exit">
       <motion.div className="gt-drawer" onClick={(e) => e.stopPropagation()} variants={drawerVariants} initial="hidden" animate="visible" exit="exit">
-        <div className="gt-drawer-head">
-          <div>
-            <div className="gt-mono gt-drawer-id">{projet.id}</div>
+        <div className="gt-drawer-head pd-head">
+          <div className="pd-head-main">
+            <div className="pd-head-top">
+              <span className="gt-mono gt-drawer-id">{projet.id}</span>
+              <span className={`gt-status-pill ${STATUS_PILL_KIND[status]}`}>
+                <span className="gt-status-pill-dot" />{STATUS_LABELS[status]}
+              </span>
+            </div>
             {onOpenClient && client ? (
-              <button className="gt-drawer-client gt-drawer-client-link" onClick={() => onOpenClient(client.id)}>
+              <button className="pd-client pd-client-link" onClick={() => onOpenClient(client.id)}>
                 {client.nom}
               </button>
             ) : (
-              <div className="gt-drawer-client">{client?.nom || "—"}</div>
+              <div className="pd-client">{client?.nom || "—"}</div>
             )}
           </div>
-          <button className="gt-iconbtn" onClick={onClose}>
+          <button className="gt-iconbtn" onClick={onClose} aria-label="Fermer">
             <X size={18} />
           </button>
+        </div>
+
+        <div className="pd-kpis">
+          <div className="pd-kpi"><strong>{projet.prestations.length}</strong><span>Prestations</span></div>
+          <div className="pd-kpi"><strong style={{ color: "var(--status-info)" }}>{enCours}</strong><span>En cours</span></div>
+          <div className="pd-kpi"><strong style={{ color: nonConformes ? "var(--status-danger)" : undefined }}>{nonConformes}</strong><span>Non conformes</span></div>
+          <div className="pd-kpi"><strong style={{ color: "var(--status-success)" }}>{livrees}</strong><span>Livrées</span></div>
         </div>
 
         {!editing ? (
@@ -217,7 +267,31 @@ export default function ProjetDrawer({
           </div>
         )}
 
-        <div className="gt-drawer-body">
+        <div className="pd-tabs" role="tablist" aria-label="Sections du projet">
+          {[
+            { key: "resume", label: "Résumé", icon: LayoutDashboard },
+            { key: "prestations", label: "Prestations", icon: ListChecks, count: visiblePrestations.length },
+            { key: "cadastre", label: "Cadastre", icon: FileScan, count: lots ? lots.length : undefined },
+            { key: "documents", label: "Documents", icon: Paperclip, count: attachments.length },
+            { key: "historique", label: "Historique", icon: Clock },
+          ].map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              className={`pd-tab ${tab === t.key ? "is-active" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              <t.icon size={14} />
+              <span>{t.label}</span>
+              {t.count > 0 && <span className="pd-tab-count">{t.count}</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="gt-drawer-body" role="tabpanel">
+          {tab === "resume" && (
           <section className="gt-section">
             <h4><MapPin size={13} strokeWidth={2.2} /> Localisation</h4>
             {hasLocation ? (
@@ -240,7 +314,9 @@ export default function ProjetDrawer({
               <div className="gt-list-empty">Coordonnées GPS non renseignées.</div>
             )}
           </section>
+          )}
 
+          {tab === "resume" && (
           <section className="gt-section">
             <h4><Users size={13} strokeWidth={2.2} /> Équipe & ressources mobilisées</h4>
             {hasTeam ? (
@@ -265,7 +341,9 @@ export default function ProjetDrawer({
               <div className="gt-list-empty">Aucune ressource affectée pour l'instant.</div>
             )}
           </section>
+          )}
 
+          {tab === "prestations" && (
           <section className="gt-section">
             <h4>Prestations ({visiblePrestations.length})</h4>
             <div className="gt-projet-prestations">
@@ -325,12 +403,64 @@ export default function ProjetDrawer({
               )
             )}
           </section>
+          )}
 
+          {tab === "cadastre" && (
+            <section className="gt-section">
+              <h4><FileScan size={13} strokeWidth={2.2} /> Lots cadastraux liés</h4>
+              {lots === null ? (
+                <div className="gt-attach-note">Chargement…</div>
+              ) : lots.length === 0 ? (
+                <div className="pd-empty">
+                  <strong>Aucun lot lié à ce projet</strong>
+                  <p>Importez le plan de bornage dans Cadastre et renseignez « Projet lié » : {projet.id}. Le lot apparaîtra ici et sur la carte.</p>
+                </div>
+              ) : (
+                <div className="pd-lots">
+                  {lots.map((l) => (
+                    <div className="pd-lot" key={l.id}>
+                      <div>
+                        <div className="pd-lot-name">{l.proprieteDite}</div>
+                        <div className="gt-mono pd-lot-ref">Titre {l.titreFoncier}</div>
+                      </div>
+                      <div className="pd-lot-right">
+                        <strong>{l.surfaceCalculeeM2.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} m²</strong>
+                        <span className={`gt-status-pill ${l.conforme ? "success" : "danger"}`}>
+                          <span className="gt-status-pill-dot" />{l.conforme ? "Conforme" : "Écart"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <h4 style={{ marginTop: 18 }}><MapPin size={13} strokeWidth={2.2} /> Lots voisins ou historiques</h4>
+              <LotSuggestions
+                key={lotsVersion}
+                titre={projet.referenceFonciere}
+                lat={projet.lat}
+                lng={projet.lng}
+                projetId={projet.id}
+                mode="action"
+                onReuse={handleReuseLot}
+                busyId={reusingId}
+              />
+              <div className="gt-attach-note" style={{ marginTop: 6 }}>Même titre foncier ou moins de 200 m du repère du projet.</div>
+              {onGoCadastre && (
+                <button className="gt-btn gt-btn-neutral" style={{ marginTop: 12 }} onClick={onGoCadastre}>
+                  <FileScan size={14} /> Ouvrir le module Cadastre
+                </button>
+              )}
+            </section>
+          )}
+
+          {tab === "historique" && (
           <section className="gt-section">
             <h4><Clock size={13} strokeWidth={2.2} /> Historique du projet</h4>
             <HistoriqueTimeline history={timelineHistory} emptyLabel="Aucun événement pour l'instant." />
           </section>
+          )}
 
+          {tab === "resume" && (
           <section className="gt-section">
             <h4><StickyNote size={13} strokeWidth={2.2} /> Notes internes</h4>
             {isOffice ? (
@@ -356,7 +486,9 @@ export default function ProjetDrawer({
               <div className="gt-list-empty">Aucune note.</div>
             )}
           </section>
+          )}
 
+          {tab === "documents" && (
           <section className="gt-section">
             <h4>
               <Paperclip size={13} strokeWidth={2.2} /> Pièces jointes du projet ({attachments.length})
@@ -426,6 +558,7 @@ export default function ProjetDrawer({
             </div>
             <div className="gt-attach-note">Démo — les fichiers ne sont pas réellement téléversés, seul le nom (ou le chemin) est conservé.</div>
           </section>
+          )}
         </div>
       </motion.div>
     </motion.div>

@@ -356,6 +356,9 @@ export default function AgentChantierApp({ currentUser, tasks, projects, materie
     return [...tasks].sort((a, b) => rank(a) - rank(b));
   }, [tasks]);
 
+  const todoTasks = sortedTasks.filter((t) => ACTIONABLE_STAGES.includes(t.stage));
+  const otherTasks = sortedTasks.filter((t) => !ACTIONABLE_STAGES.includes(t.stage));
+
   const openTask = openId ? tasks.find((t) => t.id === openId) : null;
   const todoCount = tasks.filter((t) => ACTIONABLE_STAGES.includes(t.stage)).length;
 
@@ -376,7 +379,14 @@ export default function AgentChantierApp({ currentUser, tasks, projects, materie
       <div className="ac-content">
         {tab === "taches" && (
           <div className="ac-tasklist">
-            {sortedTasks.map((t) => (
+            {todoTasks.length > 0 && <div className="ac-section-label ac-section-label-todo">À traiter <b>{todoTasks.length}</b></div>}
+            {todoTasks.map((t) => (
+              <TaskCard key={t.id} task={t} onOpen={setOpenId} />
+            ))}
+            {otherTasks.length > 0 && (
+              <div className="ac-section-label">{todoTasks.length > 0 ? "Autres missions" : "Missions"} <b>{otherTasks.length}</b></div>
+            )}
+            {otherTasks.map((t) => (
               <TaskCard key={t.id} task={t} onOpen={setOpenId} />
             ))}
             {sortedTasks.length === 0 && <div className="ac-empty">Aucune mission assignée.</div>}

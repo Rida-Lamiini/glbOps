@@ -26,6 +26,9 @@ import {
   Upload,
   Printer,
   FileScan,
+  List as ListIcon,
+  ChevronDown,
+  Crosshair,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import { projetStatus } from "../utils/stats";
@@ -50,6 +53,31 @@ function pinSVG(color) {
   `;
 }
 
+
+// No surveyed geometry yet for most projets: draw an approximate, irregular parcel around the
+// projet's location so it can be seen and clicked. Deterministic per projet id (stable shape
+// between renders) and flagged `approximate` so it can be told apart from a real boundary.
+function approximateBoundary(pr) {
+  let h = 2166136261;
+  for (const ch of String(pr.id)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const rand = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507) + 0x9e3779b9;
+    return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+  };
+  const baseM = 70 + rand() * 60;
+  const mPerDegLat = 111320;
+  const mPerDegLng = 111320 * Math.cos((pr.lat * Math.PI) / 180);
+  const n = 9;
+  const ring = [];
+  for (let i = 0; i < n; i++) {
+    const angle = (i / n) * 2 * Math.PI + (rand() - 0.5) * 0.35;
+    const r = baseM * (0.7 + rand() * 0.6);
+    ring.push([pr.lng + (Math.cos(angle) * r) / mPerDegLng, pr.lat + (Math.sin(angle) * r) / mPerDegLat]);
+  }
+  ring.push(ring[0]);
+  return { type: "Polygon", coordinates: [ring] };
+}
+
 function formatDistance(km) {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(2)} km`;
 }
@@ -62,6 +90,9 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef({});
+  const boundaryPopupRef = useRef(null);
+  const measureModeRef = useRef(null);
+  const boundaryClickRef = useRef(null);
   const measurePointsRef = useRef([]);
   const searchAbortRef = useRef(null);
   const searchMarkerRef = useRef(null);
@@ -74,6 +105,8 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const [attempt, setAttempt] = useState(0);
   const [activeStatuses, setActiveStatuses] = useState(() => new Set(Object.keys(STATUS_LABELS)));
   const [measureMode, setMeasureMode] = useState(null); // null | "distance" | "area"
+
+  measureModeRef.current = measureMode;
   const [measureTotal, setMeasureTotal] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -83,6 +116,9 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const [exportingPdf, setExportingPdf] = useState(false);
   const [cadastreGeojson, setCadastreGeojson] = useState(null);
   const [showCadastreLots, setShowCadastreLots] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth > 700));
+  const [activeId, setActiveId] = useState(null);
 
   const geolocated = projects.filter((p) => p.lat != null && p.lng != null);
   const visibleProjects = geolocated.filter((pr) => activeStatuses.has(projetStatus(pr)));
@@ -174,16 +210,14 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
 
     const boundaryGeojson = {
       type: "FeatureCollection",
-      features: visibleProjects
-        .filter((pr) => pr.boundary)
-        .map((pr) => ({
-          type: "Feature",
-          geometry: pr.boundary,
-          properties: { color: STATUS_COLORS[projetStatus(pr)] },
-        })),
+      features: visibleProjects.map((pr) => ({
+        type: "Feature",
+        geometry: pr.boundary || approximateBoundary(pr),
+        properties: { projetId: pr.id, color: STATUS_COLORS[projetStatus(pr)], approximate: !pr.boundary },
+      })),
     };
 
-    const openPopupFor = (pr) => {
+    const openPopupFor = (pr, offset = [0, -34]) => {
       const client = getClient(pr.clientId);
       const status = projetStatus(pr);
       const kind = STATUS_PILL_KIND[status];
@@ -199,13 +233,14 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         <div class="gt-map-popup-meta">${pr.naturePrestationProjet || "—"} · Réf. ${pr.referenceFonciere || "—"}</div>
         <div class="gt-map-popup-meta">${pr.prestations.length} prestation${pr.prestations.length > 1 ? "s" : ""}</div>
         <div class="gt-map-popup-meta gt-mono">Lambert : ${formatLambert(pr.lat, pr.lng)}</div>
+        ${pr.boundary ? "" : '<div class="gt-map-popup-meta"><em>Emprise indicative — géométrie exacte non renseignée</em></div>'}
       `;
       const btn = document.createElement("button");
       btn.className = "gt-map-popup-btn";
       btn.textContent = "Voir le projet →";
       btn.onclick = () => onOpenProjet(pr.id);
       popupNode.appendChild(btn);
-      return new MaplibrePopup({ offset: [0, -34], maxWidth: "260px" }).setDOMContent(popupNode);
+      return new MaplibrePopup({ offset, maxWidth: "260px" }).setDOMContent(popupNode);
     };
 
     const syncMarkers = () => {
@@ -245,22 +280,62 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
 
     const setupLayers = () => {
       if (!map.getSource(BOUNDARY_SOURCE_ID)) {
-        map.addSource(BOUNDARY_SOURCE_ID, { type: "geojson", data: boundaryGeojson });
+        map.addSource(BOUNDARY_SOURCE_ID, { type: "geojson", data: boundaryGeojson, promoteId: "projetId" });
         map.addLayer({
           id: "gt-boundary-fill",
           type: "fill",
           source: BOUNDARY_SOURCE_ID,
-          paint: { "fill-color": ["get", "color"], "fill-opacity": 0.15 },
+          paint: {
+            "fill-color": ["get", "color"],
+            "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.4, 0.18],
+          },
         });
+        // line-dasharray can't be data-driven, so approximate (dashed) and surveyed (solid) outlines are two layers.
         map.addLayer({
           id: "gt-boundary-line",
           type: "line",
           source: BOUNDARY_SOURCE_ID,
+          filter: ["!=", ["get", "approximate"], true],
           paint: { "line-color": ["get", "color"], "line-width": 2 },
+        });
+        map.addLayer({
+          id: "gt-boundary-line-approx",
+          type: "line",
+          source: BOUNDARY_SOURCE_ID,
+          filter: ["==", ["get", "approximate"], true],
+          paint: { "line-color": ["get", "color"], "line-width": 2, "line-dasharray": [2, 1.5] },
+        });
+
+        let hoveredId = null;
+        const setHover = (id, hover) => id != null && map.setFeatureState({ source: BOUNDARY_SOURCE_ID, id }, { hover });
+        map.on("mousemove", "gt-boundary-fill", (e) => {
+          const id = e.features[0]?.properties.projetId;
+          if (id === hoveredId) return;
+          setHover(hoveredId, false);
+          hoveredId = id;
+          setHover(hoveredId, true);
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "gt-boundary-fill", () => {
+          setHover(hoveredId, false);
+          hoveredId = null;
+          map.getCanvas().style.cursor = "";
         });
       } else {
         map.getSource(BOUNDARY_SOURCE_ID).setData(boundaryGeojson);
       }
+
+      // Re-bound on every run so the handler always sees the current projects (no stale closure).
+      if (boundaryClickRef.current) map.off("click", "gt-boundary-fill", boundaryClickRef.current);
+      boundaryClickRef.current = (e) => {
+        if (measureModeRef.current) return;
+        const id = e.features[0]?.properties.projetId;
+        const pr = visibleProjects.find((p) => p.id === id);
+        if (!pr) return;
+        boundaryPopupRef.current?.remove();
+        boundaryPopupRef.current = openPopupFor(pr, [0, 0]).setLngLat(e.lngLat).addTo(map);
+      };
+      map.on("click", "gt-boundary-fill", boundaryClickRef.current);
 
       if (!map.getSource(SOURCE_ID)) {
         map.addSource(SOURCE_ID, {
@@ -417,13 +492,13 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           id: "gt-cadastre-fill",
           type: "fill",
           source: CADASTRE_SOURCE_ID,
-          paint: { "fill-color": "#8B5CF6", "fill-opacity": 0.12 },
+          paint: { "fill-color": "#1f6f68", "fill-opacity": 0.12 },
         });
         map.addLayer({
           id: "gt-cadastre-line",
           type: "line",
           source: CADASTRE_SOURCE_ID,
-          paint: { "line-color": "#8B5CF6", "line-width": 1.5, "line-dasharray": [3, 2] },
+          paint: { "line-color": "#1f6f68", "line-width": 1.5, "line-dasharray": [3, 2] },
         });
         map.on("click", "gt-cadastre-fill", (e) => {
           const props = e.features[0].properties;
@@ -620,30 +695,34 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     searchMarkerRef.current = new MaplibreMarker({ element: el, anchor: "bottom" }).setLngLat([r.lng, r.lat]).addTo(map);
   };
 
+  // Recentre on a projet from the list, then open its popup once the marker has been (re)built.
+  const focusProject = (pr) => {
+    const map = mapRef.current;
+    if (!map) return;
+    setActiveId(pr.id);
+    map.flyTo({ center: [pr.lng, pr.lat], zoom: Math.max(map.getZoom(), 15), duration: 900 });
+    // Markers are (re)built asynchronously after the move (cluster -> individual pin), so wait for it.
+    map.once("moveend", () => {
+      let tries = 0;
+      const open = () => {
+        const marker = markersRef.current[pr.id];
+        if (marker) {
+          if (!marker.getPopup().isOpen()) marker.togglePopup();
+        } else if (tries++ < 15) {
+          setTimeout(open, 150);
+        }
+      };
+      open();
+    });
+  };
+
   return (
     <>
-      <div className="gt-stats">
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Projets géolocalisés</div>
-          <div className="gt-stat-num">{geolocated.length}</div>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">En cours</div>
-          <div className="gt-stat-num">{counts.encours}</div>
-          <span className="gt-status-pill info"><span className="gt-status-pill-dot" />En cours</span>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Non-conformité</div>
-          <div className="gt-stat-num">{counts.nonconforme}</div>
-          <span className={`gt-status-pill ${counts.nonconforme > 0 ? "danger" : "neutral"}`}>
-            <span className="gt-status-pill-dot" />{counts.nonconforme > 0 ? "À traiter" : "Aucune"}
-          </span>
-        </div>
-        <div className="gt-stat gt-card">
-          <div className="gt-stat-label">Livrés</div>
-          <div className="gt-stat-num">{counts.livre}</div>
-          <span className="gt-status-pill success"><span className="gt-status-pill-dot" />Conforme</span>
-        </div>
+      <div className="gt-map-kpis" role="list">
+        <div className="gt-map-kpi" role="listitem"><b>{geolocated.length}</b><span>projets géolocalisés</span></div>
+        <div className="gt-map-kpi" role="listitem"><i style={{ background: STATUS_COLORS.encours }} /><b>{counts.encours}</b><span>en cours</span></div>
+        <div className="gt-map-kpi" role="listitem"><i style={{ background: STATUS_COLORS.nonconforme }} /><b>{counts.nonconforme}</b><span>non-conformité{counts.nonconforme > 0 ? " · à traiter" : ""}</span></div>
+        <div className="gt-map-kpi" role="listitem"><i style={{ background: STATUS_COLORS.livre }} /><b>{counts.livre}</b><span>livrés</span></div>
       </div>
       <div className="gt-map-wrap">
         <div ref={containerRef} className="gt-map" />
@@ -662,30 +741,41 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           </div>
         )}
 
-        <div className="gt-map-toolbar">
-          <button className="gt-map-toolbtn" onClick={cycleBasemap} title="Changer de fond de carte">
-            {basemap === "street" && <><Satellite size={14} /> Satellite</>}
-            {basemap === "satellite" && <><Mountain size={14} /> Topographie</>}
-            {basemap === "topo" && <><MapIcon size={14} /> Plan</>}
+        <div className="gt-map-toolbar" role="toolbar" aria-label="Outils de la carte">
+          <button className="gt-map-toolbtn" onClick={cycleBasemap} title="Changer de fond de carte" aria-label="Changer de fond de carte">
+            {basemap === "street" && <><Satellite size={14} /> <span className="lbl">Satellite</span></>}
+            {basemap === "satellite" && <><Mountain size={14} /> <span className="lbl">Topographie</span></>}
+            {basemap === "topo" && <><MapIcon size={14} /> <span className="lbl">Plan</span></>}
           </button>
-          <button className={`gt-map-toolbtn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} title="Mesurer une distance">
-            <Ruler size={14} /> Distance
+          <span className="gt-map-toolsep" />
+          <button className={`gt-map-toolbtn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} title="Mesurer une distance" aria-label="Mesurer une distance">
+            <Ruler size={14} /> <span className="lbl">Distance</span>
           </button>
-          <button className={`gt-map-toolbtn ${measureMode === "area" ? "active" : ""}`} onClick={() => toggleMeasure("area")} title="Mesurer une surface">
-            <Shapes size={14} /> Surface
+          <button className={`gt-map-toolbtn ${measureMode === "area" ? "active" : ""}`} onClick={() => toggleMeasure("area")} title="Mesurer une surface" aria-label="Mesurer une surface">
+            <Shapes size={14} /> <span className="lbl">Surface</span>
           </button>
-          <button className="gt-map-toolbtn" onClick={() => fileInputRef.current?.click()} title="Importer des points GPX ou CSV">
-            <Upload size={14} /> Importer
+          <span className="gt-map-toolsep" />
+          <button className="gt-map-toolbtn" onClick={() => fileInputRef.current?.click()} title="Importer des points GPX ou CSV" aria-label="Importer des points GPX ou CSV">
+            <Upload size={14} /> <span className="lbl">Importer</span>
           </button>
           <button
             className={`gt-map-toolbtn ${showCadastreLots ? "active" : ""}`}
             onClick={() => setShowCadastreLots((v) => !v)}
-            title="Afficher/masquer les lots cadastraux enregistrés"
+            title="Afficher/masquer les lots cadastraux enregistrés" aria-label="Afficher/masquer les lots cadastraux enregistrés"
           >
-            <FileScan size={14} /> Lots cadastraux
+            <FileScan size={14} /> <span className="lbl">Lots cadastraux</span>
           </button>
-          <button className="gt-map-toolbtn" onClick={exportPdf} disabled={exportingPdf} title="Exporter la carte en PDF">
-            <Printer size={14} /> {exportingPdf ? "Export…" : "PDF"}
+          <button
+            className={`gt-map-toolbtn ${panelOpen ? "active" : ""}`}
+            onClick={() => setPanelOpen((v) => !v)}
+            aria-expanded={panelOpen}
+            title="Liste des projets affichés" aria-label="Liste des projets affichés"
+          >
+            <ListIcon size={14} /> <span className="lbl">Projets ({visibleProjects.length})</span>
+          </button>
+          <span className="gt-map-toolsep" />
+          <button className="gt-map-toolbtn" onClick={exportPdf} disabled={exportingPdf} title="Exporter la carte en PDF" aria-label="Exporter la carte en PDF">
+            <Printer size={14} /> <span className="lbl">{exportingPdf ? "Export…" : "PDF"}</span>
           </button>
           <input ref={fileInputRef} type="file" accept=".gpx,.csv,text/csv,application/gpx+xml" style={{ display: "none" }} onChange={handleImportFile} />
         </div>
@@ -732,19 +822,46 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           </div>
         )}
 
-        <div className="gt-map-legend">
-          <div className="gt-map-legend-title">Statut du projet</div>
-          {Object.keys(STATUS_LABELS).map((k) => (
+        <div className={`gt-map-legend ${legendOpen ? "" : "is-collapsed"}`}>
+          <button type="button" className="gt-map-legend-title" onClick={() => setLegendOpen((v) => !v)} aria-expanded={legendOpen}>
+            Statut du projet <ChevronDown size={12} className="gt-map-legend-chev" />
+          </button>
+          {legendOpen && Object.keys(STATUS_LABELS).map((k) => (
             <button
               key={k}
               className={`gt-map-legend-row ${activeStatuses.has(k) ? "" : "inactive"}`}
               onClick={() => toggleStatus(k)}
             >
               <span className="gt-map-legend-dot" style={{ background: STATUS_COLORS[k] }} />
-              {STATUS_LABELS[k]}
+              {STATUS_LABELS[k]} <span className="gt-map-legend-n">{counts[k]}</span>
             </button>
           ))}
         </div>
+
+        {panelOpen && (
+          <aside className="gt-map-panel" aria-label="Projets affichés sur la carte">
+            <div className="gt-map-panel-head">
+              <strong>Projets ({visibleProjects.length})</strong>
+              <button className="gt-iconbtn" onClick={() => setPanelOpen(false)} aria-label="Fermer la liste"><X size={15} /></button>
+            </div>
+            <div className="gt-map-panel-list">
+              {visibleProjects.map((pr) => {
+                const st = projetStatus(pr);
+                return (
+                  <button key={pr.id} type="button" className={`gt-map-panel-item ${activeId === pr.id ? "is-active" : ""}`} onClick={() => focusProject(pr)}>
+                    <span className="gt-map-legend-dot" style={{ background: STATUS_COLORS[st] }} />
+                    <span className="gt-map-panel-item-body">
+                      <span className="gt-map-panel-item-title">{getClient(pr.clientId)?.nom || "—"}</span>
+                      <span className="gt-map-panel-item-meta">{pr.id} · {pr.situation}</span>
+                    </span>
+                    <Crosshair size={14} className="gt-map-panel-item-go" />
+                  </button>
+                );
+              })}
+              {visibleProjects.length === 0 && <div className="gt-list-empty">Aucun projet avec ce filtre de statut.</div>}
+            </div>
+          </aside>
+        )}
         {geolocated.length < projects.length && (
           <div className="gt-map-note">
             {projects.length - geolocated.length} projet{projects.length - geolocated.length > 1 ? "s" : ""} sans coordonnées, non affiché{projects.length - geolocated.length > 1 ? "s" : ""}.

@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import ResponsiveTableCard from "./ResponsiveTableCard";
 import { Palmtree } from "lucide-react";
 import { computeEmployeeStats } from "../utils/stats";
 import { activeCongeOn, today } from "../utils/dates";
@@ -25,7 +26,7 @@ export default function EmployeeListView({ items, projects, query, onOpenItem })
   const todayKey = today();
 
   return (
-    <div className="gt-table-card" style={{ margin: "16px 24px" }}>
+    <ResponsiveTableCard>
       <Table>
         <TableHeader>
           <TableRow>
@@ -76,6 +77,6 @@ export default function EmployeeListView({ items, projects, query, onOpenItem })
           )}
         </TableBody>
       </Table>
-    </div>
+    </ResponsiveTableCard>
   );
 }
