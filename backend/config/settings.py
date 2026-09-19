@@ -118,7 +118,7 @@ DATABASES = {
         'NAME': os.getenv('POSTGRES_DB', 'glbops'),
         'USER': os.getenv('POSTGRES_USER', 'glbops'),
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'glbops'),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
         'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
@@ -169,7 +169,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # OCR microservice (backend/ocr-service) — see core/ocr.py
 
-OCR_SERVICE_URL = os.getenv('OCR_SERVICE_URL', 'http://localhost:8500')
+OCR_SERVICE_URL = os.getenv('OCR_SERVICE_URL', 'http://127.0.0.1:8500')
 
 
 # Email
