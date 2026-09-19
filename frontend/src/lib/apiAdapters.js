@@ -76,6 +76,19 @@ const adaptHistoryEntry = (h) => ({
   author: h.author || "",
 });
 
+// Server attachment -> the shape the drawers already render (name/size/author/date, or a network path).
+export const adaptAttachment = (a) => ({
+  id: a.id,
+  label: a.label || undefined,
+  type: a.type,
+  name: a.name || undefined,
+  size: a.size || 0,
+  chemin: a.chemin || undefined,
+  url: a.file || "",
+  author: a.author || "",
+  date: isoToFR((a.uploaded_at || "").slice(0, 10)),
+});
+
 export const adaptPrestation = (p, employeesById) => ({
   id: p.id,
   natureDemandee: p.nature_demandee || "",
@@ -104,7 +117,7 @@ export const adaptPrestation = (p, employeesById) => ({
   cycles: p.cycles || 0,
   reprogramme: p.reprogramme || false,
   nonConformiteSource: p.non_conformite_source || "",
-  attachments: [],
+  attachments: (p.attachments || []).map(adaptAttachment),
   history: (p.history || []).map(adaptHistoryEntry),
 });
 
@@ -118,6 +131,7 @@ export const adaptProjet = (pr, employeesById) => ({
   naturePrestationProjet: pr.nature_prestation_projet || "",
   dateDebut: isoToFR(pr.date_debut),
   notes: pr.notes || "",
-  attachments: [],
+  boundary: pr.boundary || null,
+  attachments: (pr.attachments || []).map(adaptAttachment),
   prestations: (pr.prestations || []).map((p) => adaptPrestation(p, employeesById)),
 });

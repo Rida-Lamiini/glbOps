@@ -17,7 +17,7 @@ function AttachmentItem({ a, onRemove, canRemove }) {
       </span>
       <span className="gt-attach-name">
         {a.label && <span className="gt-attach-label">{a.label}</span>}
-        {a.chemin ? <span className="gt-mono">{a.chemin}</span> : a.name}
+        {a.chemin ? <span className="gt-mono">{a.chemin}</span> : a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.name}</a> : a.name}
         {(a.author || a.date) && (
           <span className="gt-attach-author">{[a.author, a.date].filter(Boolean).join(" · ")}</span>
         )}
@@ -43,6 +43,7 @@ function UploadForm({ defaultType, allowedTypes, onAdd, currentUser, placeholder
       label: label.trim() || undefined,
       name: f.name,
       size: f.size,
+      file: f,
       type,
       author,
       date: today(),

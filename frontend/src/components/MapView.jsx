@@ -208,12 +208,20 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       })),
     };
 
+    // Real geometry wins over the indicative outline: a drawn boundary first, then a saved
+    // cadastral lot of that projet, and only then the approximation around the pin.
+    const lotGeometry = {};
+    (cadastreGeojson?.features || []).forEach((f) => {
+      const pid = f.properties?.projetId;
+      if (pid && !lotGeometry[pid]) lotGeometry[pid] = f.geometry;
+    });
+    const exactGeometry = (pr) => pr.boundary || lotGeometry[pr.id] || null;
     const boundaryGeojson = {
       type: "FeatureCollection",
       features: visibleProjects.map((pr) => ({
         type: "Feature",
-        geometry: pr.boundary || approximateBoundary(pr),
-        properties: { projetId: pr.id, color: STATUS_COLORS[projetStatus(pr)], approximate: !pr.boundary },
+        geometry: exactGeometry(pr) || approximateBoundary(pr),
+        properties: { projetId: pr.id, color: STATUS_COLORS[projetStatus(pr)], approximate: !exactGeometry(pr) },
       })),
     };
 
@@ -233,7 +241,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         <div class="gt-map-popup-meta">${pr.naturePrestationProjet || "—"} · Réf. ${pr.referenceFonciere || "—"}</div>
         <div class="gt-map-popup-meta">${pr.prestations.length} prestation${pr.prestations.length > 1 ? "s" : ""}</div>
         <div class="gt-map-popup-meta gt-mono">Lambert : ${formatLambert(pr.lat, pr.lng)}</div>
-        ${pr.boundary ? "" : '<div class="gt-map-popup-meta"><em>Emprise indicative — géométrie exacte non renseignée</em></div>'}
+        ${exactGeometry(pr) ? "" : '<div class="gt-map-popup-meta"><em>Emprise indicative — géométrie exacte non renseignée</em></div>'}
       `;
       const btn = document.createElement("button");
       btn.className = "gt-map-popup-btn";
@@ -400,7 +408,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     if (loaded) setupLayers();
     else map.once("load", setupLayers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projects, activeStatuses, style, attempt, loaded]);
+  }, [projects, activeStatuses, style, attempt, loaded, cadastreGeojson]);
 
   // Distance / area measurement tool
   useEffect(() => {

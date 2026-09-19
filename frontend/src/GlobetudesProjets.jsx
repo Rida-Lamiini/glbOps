@@ -24,6 +24,7 @@ import { downloadFile, buildGeoJSON, buildKML } from "./utils/geo";
 import { blankPrestation, blankResource, blankEmployee, blankClient } from "./data/seed";
 import { apiGet, apiPost, apiPatch, apiDelete } from "./lib/api";
 import { reuseLot } from "./components/cadastre/api";
+import { adaptAttachment } from "./lib/apiAdapters";
 import { notifyError } from "./utils/notify";
 import { adaptClient, adaptEmployee, adaptProjet, adaptResource } from "./lib/apiAdapters";
 
@@ -227,6 +228,40 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     return out;
   };
 
+  // Uploads one local attachment (a File, or a network path) and returns the server copy.
+  const uploadAttachment = async (kind, objectId, item) => {
+    const form = new FormData();
+    form.append("content_type_model_input", kind);
+    form.append("object_id", objectId);
+    form.append("type", item.type || "autre");
+    if (item.label) form.append("label", item.label);
+    if (item.file) form.append("file", item.file);
+    else form.append("chemin", item.chemin || "");
+    return adaptAttachment(await apiPost("/attachments/", form));
+  };
+
+  // Local items are swapped for their server copy by identity; a failed upload drops the item.
+  const replaceProjetAttachment = (projetId, item, saved) =>
+    setProjets((prev) =>
+      prev.map((pr) =>
+        pr.id !== projetId ? pr : { ...pr, attachments: (pr.attachments || []).flatMap((a) => (a === item ? (saved ? [saved] : []) : [a])) }
+      )
+    );
+
+  const replacePrestationAttachment = (projetId, prestationId, item, saved) =>
+    setProjets((prev) =>
+      prev.map((pr) =>
+        pr.id !== projetId
+          ? pr
+          : {
+              ...pr,
+              prestations: pr.prestations.map((p) =>
+                p.id !== prestationId ? p : { ...p, attachments: (p.attachments || []).flatMap((a) => (a === item ? (saved ? [saved] : []) : [a])) }
+              ),
+            }
+      )
+    );
+
   // One queue per prestation so quick successive edits reach the server in order.
   const prestationQueueRef = useRef({});
   const enqueue = (prestationId, job) => {
@@ -244,6 +279,18 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
         if (patch.history) {
           for (const h of patch.history.slice((before.history || []).length)) {
             await apiPost("/history/", { prestation: before.id, date: h.date, label: h.label, author: h.author || currentUser?.name || "" });
+          }
+        }
+        if (patch.attachments) {
+          const kept = new Set(patch.attachments.map((a) => a.id).filter(Boolean));
+          for (const gone of (before.attachments || []).filter((a) => a.id && !kept.has(a.id))) await apiDelete(`/attachments/${gone.id}/`);
+          for (const item of patch.attachments.filter((a) => !a.id)) {
+            try {
+              replacePrestationAttachment(projetId, before.id, item, await uploadAttachment("prestation", before.id, item));
+            } catch {
+              replacePrestationAttachment(projetId, before.id, item, null);
+              notifyError("Une pièce jointe n'a pas pu être téléversée.");
+            }
           }
         }
         if (patch.taches) {
@@ -495,9 +542,9 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
 
   const persistProjetPatch = async (projetId, patch) => {
     const before = projets.find((pr) => pr.id === projetId);
-    const map = { referenceFonciere: "reference_fonciere", situation: "situation", lat: "lat", lng: "lng", naturePrestationProjet: "nature_prestation_projet", notes: "notes" };
+    const map = { referenceFonciere: "reference_fonciere", situation: "situation", lat: "lat", lng: "lng", naturePrestationProjet: "nature_prestation_projet", notes: "notes", boundary: "boundary" };
     const payload = {};
-    for (const [k, v] of Object.entries(patch)) if (map[k]) payload[map[k]] = v ?? (k === "lat" || k === "lng" ? null : "");
+    for (const [k, v] of Object.entries(patch)) if (map[k]) payload[map[k]] = v ?? (k === "lat" || k === "lng" || k === "boundary" ? null : "");
     if ("clientId" in patch) payload.client = patch.clientId;
     if ("dateDebut" in patch) payload.date_debut = frToISO(patch.dateDebut);
     if (!before || !Object.keys(payload).length) return;
@@ -525,14 +572,24 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     setProjets((prev) =>
       prev.map((pr) => (pr.id === projetId ? { ...pr, attachments: [...(pr.attachments || []), ...newAttachments] } : pr))
     );
+    newAttachments.forEach(async (item) => {
+      try {
+        replaceProjetAttachment(projetId, item, await uploadAttachment("projet", projetId, item));
+      } catch {
+        replaceProjetAttachment(projetId, item, null);
+        notifyError("Une pièce jointe n'a pas pu être téléversée.");
+      }
+    });
   };
 
   const removeProjetAttachment = (projetId, index) => {
+    const removed = projets.find((pr) => pr.id === projetId)?.attachments?.[index];
     setProjets((prev) =>
       prev.map((pr) =>
         pr.id === projetId ? { ...pr, attachments: pr.attachments.filter((_, i) => i !== index) } : pr
       )
     );
+    if (removed?.id) apiDelete(`/attachments/${removed.id}/`).catch(() => notifyError("La pièce jointe n'a pas pu être supprimée."));
   };
 
   const filteredProjets = useMemo(() => {
@@ -1060,7 +1117,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
 
         {view === "cadastre" && (
           <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <CadastreTool />
+            <CadastreTool projets={projets} currentUser={currentUser} />
           </motion.div>
         )}
 

@@ -39,6 +39,11 @@ export const parseCadastrePdf = async (file) => {
 const toLotSummary = (lot) => ({
   id: lot.id,
   projet: lot.projet,
+  prestation: lot.prestation || "",
+  statut: lot.statut || "brouillon",
+  statutAt: lot.statut_at,
+  createdByName: lot.created_by_name || "",
+  statutParName: lot.statut_par_name || "",
   titreFoncier: lot.titre_foncier,
   proprieteDite: lot.propriete_dite,
   surfaceDocumentM2: Number(lot.surface_document_m2),
@@ -101,6 +106,7 @@ export const getAllCadastreLotsGeoJSON = () => apiGet("/cadastre/lots/geojson/")
 // edit never silently drops a lot's existing ones.
 const buildLotBody = (payload) => ({
   projet: payload.projet || null,
+  prestation: payload.prestation || null,
   titre_foncier: payload.titreFoncier,
   propriete_dite: payload.proprieteDite,
   lot_number: payload.lotNumber || "",
@@ -185,3 +191,6 @@ export const findLotMatches = async ({ titre, lat, lng, radius = 200, projet } =
 // Attaches an unowned lot to the projet, or copies one that belongs elsewhere
 // (the copy remembers its origin; the original survey is never modified).
 export const reuseLot = (lotId, projetId) => apiPost(`/cadastre/lots/${lotId}/reuse/`, { projet: projetId });
+
+// Review status: brouillon -> verifie (bureau) -> valide (contrôle). The server checks the role.
+export const setLotStatut = (id, statut) => apiPost(`/cadastre/lots/${id}/statut/`, { statut });

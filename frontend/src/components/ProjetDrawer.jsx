@@ -100,7 +100,7 @@ export default function ProjetDrawer({
   const handleAddFiles = (fileList) => {
     const label = attachLabel.trim();
     const author = currentUser.name || currentUser.role;
-    const newFiles = Array.from(fileList).map((f) => ({ label: label || undefined, name: f.name, size: f.size, author, date: today() }));
+    const newFiles = Array.from(fileList).map((f) => ({ label: label || undefined, name: f.name, size: f.size, file: f, type: "autre", author, date: today() }));
     if (newFiles.length === 0) return;
     onAddAttachments(projet.id, newFiles);
     setAttachLabel("");
@@ -421,10 +421,13 @@ export default function ProjetDrawer({
                     <div className="pd-lot" key={l.id}>
                       <div>
                         <div className="pd-lot-name">{l.proprieteDite}</div>
-                        <div className="gt-mono pd-lot-ref">Titre {l.titreFoncier}</div>
+                        <div className="gt-mono pd-lot-ref">Titre {l.titreFoncier}{l.prestation ? ` · ${l.prestation}` : ""}{l.createdByName ? ` · ${l.createdByName}` : ""}</div>
                       </div>
                       <div className="pd-lot-right">
                         <strong>{l.surfaceCalculeeM2.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} m²</strong>
+                        <span className={`gt-status-pill ${l.statut === "valide" ? "success" : l.statut === "verifie" ? "info" : "neutral"}`}>
+                          <span className="gt-status-pill-dot" />{l.statut === "valide" ? "Validé" : l.statut === "verifie" ? "Vérifié" : "Brouillon"}
+                        </span>
                         <span className={`gt-status-pill ${l.conforme ? "success" : "danger"}`}>
                           <span className="gt-status-pill-dot" />{l.conforme ? "Conforme" : "Écart"}
                         </span>
@@ -539,7 +542,7 @@ export default function ProjetDrawer({
                       <span className="gt-attach-ext">{fileExt(a.name)}</span>
                       <span className="gt-attach-name">
                         {a.label && <span className="gt-attach-label">{a.label}</span>}
-                        {a.name}
+                        {a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.name}</a> : a.name}
                       </span>
                       {(a.author || a.date) && (
                         <span className="gt-attach-author">{[a.author, a.date].filter(Boolean).join(" · ")}</span>
@@ -556,7 +559,7 @@ export default function ProjetDrawer({
               ))}
               {attachments.length === 0 && <div className="gt-list-empty">Aucune pièce jointe au niveau du projet.</div>}
             </div>
-            <div className="gt-attach-note">Démo — les fichiers ne sont pas réellement téléversés, seul le nom (ou le chemin) est conservé.</div>
+            <div className="gt-attach-note">Les fichiers sont téléversés sur le serveur ; un chemin réseau est simplement mémorisé.</div>
           </section>
           )}
         </div>

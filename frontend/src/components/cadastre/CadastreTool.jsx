@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
-  createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError,
+  createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
 } from "./api";
 import LotMap from "./LotMap";
 import "./cadastre.css";
@@ -17,6 +17,7 @@ const EMPTY_INITIAL = {
   surfaceDocumentM2: "",
   correctionLambertM2: 0,
   projetId: "",
+  prestationId: "",
   distanceChecks: [],
   referencePoints: [],
   lotId: null,
@@ -79,6 +80,21 @@ function ConformiteBadge({ conforme }) {
   );
 }
 
+const STATUT_INFO = {
+  brouillon: { label: "Brouillon", pill: "neutral" },
+  verifie: { label: "Vérifié", pill: "info" },
+  valide: { label: "Validé", pill: "success" },
+};
+
+function StatutBadge({ statut }) {
+  const s = STATUT_INFO[statut] || STATUT_INFO.brouillon;
+  return (
+    <span className={`gt-status-pill ${s.pill}`}>
+      <span className="gt-status-pill-dot" />{s.label}
+    </span>
+  );
+}
+
 // --- Home: import + lots ------------------------------------------------------
 
 function ImportZone({ onReview }) {
@@ -108,6 +124,7 @@ function ImportZone({ onReview }) {
         surfaceDocumentM2: parsed.header.contenanceAdopteeM2 ?? parsed.header.surfaceCorrigeeM2 ?? "",
         correctionLambertM2: parsed.header.correctionLambertM2 ?? 0,
         projetId: "",
+        prestationId: "",
         distanceChecks: [],
         referencePoints: [],
         lotId: null,
@@ -190,7 +207,10 @@ function LotsList({ reloadKey, onOpenLot }) {
                   <h3>{l.proprieteDite}</h3>
                   <span className="cad-ref">Titre {l.titreFoncier}</span>
                 </div>
-                <ConformiteBadge conforme={l.conforme} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                  <ConformiteBadge conforme={l.conforme} />
+                  <StatutBadge statut={l.statut} />
+                </div>
               </div>
               <div className="cad-kpis">
                 <div className="cad-kpi"><span>Calculée</span><strong>{fmt(l.surfaceCalculeeM2, 0)} m²</strong></div>
@@ -230,9 +250,29 @@ function Field({ label, required, hint, value, onChange, type = "text", missing 
   );
 }
 
-function ReviewScreen({ initial, onCancel, onSaved }) {
+function SelectField({ label, hint, value, onChange, children }) {
+  return (
+    <label className="cad-field">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
+      {hint && <small>{hint}</small>}
+    </label>
+  );
+}
+
+function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser }) {
   const [header, setHeader] = useState(initial.header);
   const [projetId, setProjetId] = useState(initial.projetId || "");
+  const [prestationId, setPrestationId] = useState(initial.prestationId || "");
+  const projetPrestations = useMemo(() => projets.find((p) => p.id === projetId)?.prestations || [], [projets, projetId]);
+  // Picking a projet suggests the prestation this survey most likely belongs to: the one assigned
+  // to the current user, else the one already at the bureau step, else the only one.
+  const changeProjet = (id) => {
+    setProjetId(id);
+    const list = projets.find((p) => p.id === id)?.prestations || [];
+    const guess = list.find((p) => p.agentBureau && p.agentBureau === currentUser?.name) || list.find((p) => p.stage === "bureau") || (list.length === 1 ? list[0] : null);
+    setPrestationId(guess ? guess.id : "");
+  };
   const [surfaceDocumentM2, setSurfaceDocumentM2] = useState(initial.surfaceDocumentM2);
   const [correctionLambertM2, setCorrectionLambertM2] = useState(initial.correctionLambertM2);
   const [bornes, setBornes] = useState(initial.bornes);
@@ -258,6 +298,7 @@ function ReviewScreen({ initial, onCancel, onSaved }) {
     setError(null);
     const payload = {
       projet: projetId.trim() || null,
+      prestation: projetId && prestationId ? prestationId : null,
       titreFoncier: header.titreFoncier,
       proprieteDite: header.proprieteDite,
       lotNumber: header.lot,
@@ -295,7 +336,15 @@ function ReviewScreen({ initial, onCancel, onSaved }) {
               <Field label="Géomètre" value={header.geometre} onChange={(v) => setHeader((h) => ({ ...h, geometre: v }))} />
               <Field label="Surface du document (m²)" type="number" value={surfaceDocumentM2} onChange={setSurfaceDocumentM2} />
               <Field label="Correction Lambert (m²)" type="number" value={correctionLambertM2} onChange={setCorrectionLambertM2} />
-              <Field label="Projet lié" hint="Optionnel, ex. PRJ-2026-001" value={projetId} onChange={setProjetId} />
+              <SelectField label="Projet lié" hint="Optionnel" value={projetId} onChange={changeProjet}>
+                <option value="">— aucun —</option>
+                {projets.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.situation}</option>)}
+                {projetId && !projets.some((p) => p.id === projetId) && <option value={projetId}>{projetId}</option>}
+              </SelectField>
+              <SelectField label="Prestation" hint="Pour quelle prestation ce calcul est fait" value={prestationId} onChange={setPrestationId}>
+                <option value="">— aucune —</option>
+                {projetPrestations.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.natureDemandee || p.stage}</option>)}
+              </SelectField>
             </div>
           </section>
 
@@ -384,6 +433,7 @@ function lotToReviewInitial(lot) {
     surfaceDocumentM2: lot.surfaceDocumentM2,
     correctionLambertM2: lot.correctionLambertM2,
     projetId: lot.projet || "",
+    prestationId: lot.prestation || "",
     distanceChecks: lot.distanceChecks.map((d) => ({ segmentLabel: d.segmentLabel, croquisM: d.croquisM })),
     referencePoints: lot.referencePoints.map((r) => ({ label: r.label, lat: r.lat, lng: r.lng })),
     lotId: lot.id,
@@ -392,6 +442,21 @@ function lotToReviewInitial(lot) {
 
 function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
   const [lot, setLot] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [statutBusy, setStatutBusy] = useState(false);
+
+  const changeStatut = async (statut) => {
+    setStatutBusy(true);
+    setActionError(null);
+    try {
+      const updated = await setLotStatut(lotId, statut);
+      setLot((l) => ({ ...l, statut: updated.statut, statutAt: updated.statut_at, statutParName: updated.statut_par_name || "" }));
+    } catch (e) {
+      setActionError(readApiError(e, "Changement de statut refusé."));
+    } finally {
+      setStatutBusy(false);
+    }
+  };
   const [geojson, setGeojson] = useState(null);
   const [error, setError] = useState(null);
   const [confirming, setConfirming] = useState(false);
@@ -445,7 +510,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
       {justSaved && <div className="cad-check ok" role="status"><i>✓</i>Lot enregistré. Il est désormais visible sur la carte générale (couche « Lots cadastraux »).</div>}
 
       <Hero eyebrow={`Titre foncier ${lot.titreFoncier}`} title={lot.proprieteDite}>
-        {[lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`].filter(Boolean).join(" · ")}
+        {[lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`, lot.prestation && `Prestation ${lot.prestation}`, lot.createdByName && `Saisi par ${lot.createdByName}`].filter(Boolean).join(" · ")}
       </Hero>
 
       <div className="cad-layout">
@@ -473,6 +538,19 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
 
         <aside className="cad-rail">
           <section className="cad-panel">
+            <div className="cad-top"><h2>Revue</h2><StatutBadge statut={lot.statut} /></div>
+            {lot.statut !== "brouillon" && (
+              <div className="cad-figure"><span>{STATUT_INFO[lot.statut].label} par</span><strong>{lot.statutParName || "—"}{lot.statutAt ? ` · ${new Date(lot.statutAt).toLocaleDateString("fr-FR")}` : ""}</strong></div>
+            )}
+            {actionError && <div className="cad-error" role="alert">{actionError}</div>}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              {lot.statut === "brouillon" && <button className="cad-btn" disabled={statutBusy} onClick={() => changeStatut("verifie")}>Marquer vérifié</button>}
+              {lot.statut === "verifie" && <button className="cad-btn primary" disabled={statutBusy} onClick={() => changeStatut("valide")}>Valider</button>}
+              {lot.statut !== "brouillon" && <button className="cad-btn" disabled={statutBusy} onClick={() => changeStatut("brouillon")}>Remettre en brouillon</button>}
+            </div>
+            <small style={{ color: "var(--muted)" }}>Le bureau vérifie ; le contrôle valide. Modifier un lot le remet en brouillon.</small>
+          </section>
+          <section className="cad-panel">
             <div className="cad-top"><h2>Surface</h2><ConformiteBadge conforme={lot.conforme} /></div>
             <div className="cad-figure"><span>Calculée (bornes)</span><strong>{fmt(lot.surfaceCalculeeM2)} m²</strong></div>
             <div className="cad-figure"><span>Document</span><strong>{fmt(lot.surfaceDocumentM2)} m²</strong></div>
@@ -496,7 +574,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
 // --- Entry point ---------------------------------------------------------------
 
 /** PDF → OCR → vérification → lot cadastral. Rendered by GlobetudesProjets for view === "cadastre". */
-export default function CadastreTool() {
+export default function CadastreTool({ projets = [], currentUser }) {
   const [screen, setScreen] = useState({ name: "list" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -504,6 +582,8 @@ export default function CadastreTool() {
     return (
       <ReviewScreen
         initial={screen.initial}
+        projets={projets}
+        currentUser={currentUser}
         onCancel={() => setScreen(screen.initial.lotId ? { name: "detail", id: screen.initial.lotId } : { name: "list" })}
         onSaved={(id) => { setReloadKey((k) => k + 1); setScreen({ name: "detail", id, justSaved: true }); }}
       />
