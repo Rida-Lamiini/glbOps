@@ -90,3 +90,37 @@ def list_all_lot_polygons_geojson() -> list[dict]:
         for row in rows
         if row[3]
     ]
+
+
+def find_lots_near(lat: float, lng: float, radius_m: float) -> list[dict]:
+    """Lots whose polygon lies within ``radius_m`` metres of a point, nearest first.
+
+    Uses ``geography`` casts so the radius is real metres, not degrees. Returns
+    ``[{"id", "distance_m"}]`` — callers load the rows they need through the ORM.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, ST_Distance(polygon::geography, pt.g) AS d
+            FROM cadastre_lots,
+                 (SELECT ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography AS g) AS pt
+            WHERE polygon IS NOT NULL
+              AND ST_DWithin(polygon::geography, pt.g, %s)
+            ORDER BY d
+            """,
+            [lng, lat, radius_m],
+        )
+        return [{"id": str(row[0]), "distance_m": round(float(row[1]), 1)} for row in cursor.fetchall()]
+
+
+def copy_lot_geometry(source_id, target_id) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE cadastre_lots AS t
+            SET polygon = s.polygon, centroid = s.centroid
+            FROM cadastre_lots AS s
+            WHERE s.id = %s AND t.id = %s
+            """,
+            [str(source_id), str(target_id)],
+        )

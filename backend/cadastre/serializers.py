@@ -32,6 +32,7 @@ class LotListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "projet",
+            "derive_de",
             "titre_foncier",
             "propriete_dite",
             "surface_document_m2",
@@ -108,16 +109,19 @@ class CreateLotSerializer(serializers.Serializer):
     distance_checks = DistanceCheckInputSerializer(many=True, required=False, default=list)
     reference_points = ReferencePointInputSerializer(many=True, required=False, default=list)
 
-    def validate_titre_foncier(self, value):
-        queryset = Lot.objects.filter(titre_foncier=value)
-        lot_id = self.context.get("lot_id")
-        if lot_id is not None:
-            # Updating a lot in place: its own unchanged titre_foncier must
-            # not collide with itself.
-            queryset = queryset.exclude(pk=lot_id)
-        if queryset.exists():
-            raise serializers.ValidationError("Un lot avec ce titre foncier existe déjà.")
-        return value
+    def _check_titre_unique_per_projet(self, attrs):
+        # A titre foncier may appear on several projets (a reused survey), but
+        # only once per projet.
+        projet = attrs.get("projet")
+        if projet is not None:
+            queryset = Lot.objects.filter(titre_foncier=attrs["titre_foncier"], projet=projet)
+            lot_id = self.context.get("lot_id")
+            if lot_id is not None:
+                queryset = queryset.exclude(pk=lot_id)
+            if queryset.exists():
+                raise serializers.ValidationError(
+                    {"titre_foncier": "Ce projet a déjà un lot avec ce titre foncier."}
+                )
 
     def validate_bornes(self, value):
         if len(value) < 3:
@@ -128,6 +132,7 @@ class CreateLotSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
+        self._check_titre_unique_per_projet(attrs)
         # A distance check names its two endpoints by borne name. If either name
         # isn't in the submitted table the distance is unmeasurable, so reject it
         # here rather than storing an unusable row that would silently read as a

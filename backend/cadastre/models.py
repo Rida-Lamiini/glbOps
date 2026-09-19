@@ -25,7 +25,14 @@ class Lot(models.Model):
         Projet, related_name="lots_cadastraux", null=True, blank=True, on_delete=models.SET_NULL,
     )
 
-    titre_foncier = models.CharField(max_length=100, unique=True)
+    # A lot the team already surveyed can be reused on a later projet for the
+    # same titre foncier: the copy keeps a pointer to where it came from, so
+    # titre_foncier is unique per projet rather than globally.
+    derive_de = models.ForeignKey(
+        "self", related_name="copies", null=True, blank=True, on_delete=models.SET_NULL,
+    )
+
+    titre_foncier = models.CharField(max_length=100, db_index=True)
     propriete_dite = models.CharField(max_length=300)
     lot_number = models.CharField(max_length=50, blank=True)
     affaire_ref = models.CharField(max_length=300, blank=True)
@@ -48,6 +55,13 @@ class Lot(models.Model):
     class Meta:
         db_table = "cadastre_lots"
         ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["titre_foncier", "projet"],
+                condition=models.Q(projet__isnull=False),
+                name="unique_titre_per_projet",
+            )
+        ]
 
     def __str__(self):
         return f"{self.titre_foncier} — {self.propriete_dite}"

@@ -7,7 +7,9 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .db.geometry import list_all_lot_polygons_geojson, set_lot_geometry
+from projets.models import Projet
+
+from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygons_geojson, set_lot_geometry
 from .db.lot_features import get_lot_feature_collection
 from .geo.build_lot import build_lot_geometry
 from .models import Borne, DistanceCheck, Lot, ReferencePoint
@@ -120,6 +122,102 @@ def lots(request):
     serializer.is_valid(raise_exception=True)
     lot = _save_lot(serializer.validated_data)
     return Response({"id": str(lot.id)}, status=status.HTTP_201_CREATED)
+
+
+def _lot_summary(lot, distance_m=None):
+    return {
+        "id": str(lot.id),
+        "titre_foncier": lot.titre_foncier,
+        "propriete_dite": lot.propriete_dite,
+        "projet": lot.projet_id,
+        "surface_document_m2": lot.surface_document_m2,
+        "nb_bornes": lot.bornes.count(),
+        "created_at": lot.created_at,
+        "distance_m": distance_m,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def lot_matches(request):
+    """Earlier lots worth reusing on a projet: same titre foncier, or close by.
+
+    Query: ``titre`` (optional), ``lat``/``lng`` (optional), ``radius`` metres
+    (default 200), ``projet`` (a projet whose own lots are left out).
+    """
+    projet = request.query_params.get("projet")
+    titre = (request.query_params.get("titre") or "").strip()
+    base = Lot.objects.prefetch_related("bornes")
+    if projet:
+        base = base.exclude(projet_id=projet)
+
+    same = [_lot_summary(lot) for lot in base.filter(titre_foncier__iexact=titre)] if titre else []
+
+    nearby = []
+    try:
+        lat = float(request.query_params["lat"])
+        lng = float(request.query_params["lng"])
+        radius = min(float(request.query_params.get("radius", 200)), 2000)
+    except (KeyError, ValueError):
+        lat = lng = None
+    if lat is not None:
+        same_ids = {row["id"] for row in same}
+        hits = [h for h in find_lots_near(lat, lng, radius) if h["id"] not in same_ids]
+        by_id = {str(lot.id): lot for lot in base.filter(pk__in=[h["id"] for h in hits])}
+        nearby = [_lot_summary(by_id[h["id"]], h["distance_m"]) for h in hits if h["id"] in by_id]
+
+    return Response({"same_titre": same, "nearby": nearby})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def lot_reuse(request, pk):
+    """Bring an earlier lot onto a projet.
+
+    A lot that belongs to no projet yet is simply attached. One that already
+    belongs to another projet is copied (bornes, distance checks, reference
+    points and polygon) and the copy remembers its origin in ``derive_de``, so
+    the original survey is never altered.
+    """
+    source = get_object_or_404(Lot.objects.prefetch_related("bornes", "distance_checks", "reference_points"), pk=pk)
+    projet = get_object_or_404(Projet, pk=request.data.get("projet"))
+
+    existing = Lot.objects.filter(titre_foncier=source.titre_foncier, projet=projet).first()
+    if existing:
+        return Response({"id": str(existing.id), "mode": "existing"})
+
+    if source.projet_id is None:
+        source.projet = projet
+        source.save(update_fields=["projet", "updated_at"])
+        return Response({"id": str(source.id), "mode": "attached"})
+
+    with transaction.atomic():
+        copy = Lot.objects.create(
+            projet=projet,
+            derive_de=source,
+            titre_foncier=source.titre_foncier,
+            propriete_dite=source.propriete_dite,
+            lot_number=source.lot_number,
+            affaire_ref=source.affaire_ref,
+            geometre=source.geometre,
+            date_leve=source.date_leve,
+            service_cadastre=source.service_cadastre,
+            surface_document_m2=source.surface_document_m2,
+            surface_calculee_m2=source.surface_calculee_m2,
+            correction_lambert_m2=source.correction_lambert_m2,
+            source_pdf_url=source.source_pdf_url,
+        )
+        Borne.objects.bulk_create(
+            [Borne(lot=copy, name=b.name, sequence=b.sequence, x_lambert=b.x_lambert, y_lambert=b.y_lambert, lat=b.lat, lng=b.lng) for b in source.bornes.all()]
+        )
+        DistanceCheck.objects.bulk_create(
+            [DistanceCheck(lot=copy, segment_label=d.segment_label, croquis_m=d.croquis_m, calcule_m=d.calcule_m, ecart_m=d.ecart_m) for d in source.distance_checks.all()]
+        )
+        ReferencePoint.objects.bulk_create(
+            [ReferencePoint(lot=copy, label=r.label, lat=r.lat, lng=r.lng, distance_m=r.distance_m, bearing_deg=r.bearing_deg) for r in source.reference_points.all()]
+        )
+        copy_lot_geometry(source.id, copy.id)
+    return Response({"id": str(copy.id), "mode": "copied"}, status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET", "PUT", "DELETE"])
