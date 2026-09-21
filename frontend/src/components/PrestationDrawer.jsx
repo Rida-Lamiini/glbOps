@@ -82,6 +82,7 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
   const [dateDebutControle, setDateDebutControle] = useState(prestation.dateDebutControle);
   const [dateFinControle, setDateFinControle] = useState(prestation.dateFinControle);
   const [motifNonConforme, setMotifNonConforme] = useState("");
+  const [pvBusy, setPvBusy] = useState(false);
   const [nonConformiteSource, setNonConformiteSource] = useState("");
 
   const [dateLivraison, setDateLivraison] = useState(prestation.dateLivraison);
@@ -239,9 +240,20 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
             <button
               className="gt-btn gt-btn-neutral"
               style={{ marginTop: 0 }}
-              onClick={() => generatePvPdf({ projet, client, prestation, materiels, vehicules })}
+              disabled={pvBusy}
+              onClick={async () => {
+                setPvBusy(true);
+                try {
+                  await generatePvPdf({ projet, client, prestation, materiels, vehicules });
+                  notifySuccess("PV généré");
+                } catch {
+                  notifyError("Le PV n'a pas pu être généré.");
+                } finally {
+                  setPvBusy(false);
+                }
+              }}
             >
-              <FileText size={14} /> Générer le PV
+              <FileText size={14} /> {pvBusy ? "Génération…" : "Générer le PV"}
             </button>
           </div>
         )}

@@ -5,6 +5,9 @@ import { parseDateFR, activeCongeOn, today } from "../utils/dates";
 import { listCadastreLots } from "./cadastre/api";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FileDown, Loader2 } from "lucide-react";
+import { generateMonthlyReport, monthLabelFR, reportMonths } from "../utils/reportMonthly";
+import { notifyError, notifySuccess } from "../utils/notify";
 
 const DAY = 86400000;
 const PERIODS = [
@@ -56,7 +59,9 @@ function Panel({ title, description, empty, children, className = "" }) {
   );
 }
 
-export default function AnalyticsView({ projets, employees, getClient }) {
+export default function AnalyticsView({ projets, employees, materiels = [], vehicules = [], getClient, author }) {
+  const [reportMonth, setReportMonth] = useState(() => reportMonths()[0]);
+  const [reporting, setReporting] = useState(false);
   const [period, setPeriod] = useState("6");
   const [clientId, setClientId] = useState("all");
   const [tab, setTab] = useState("activite");
@@ -67,6 +72,18 @@ export default function AnalyticsView({ projets, employees, getClient }) {
     listCadastreLots().then((l) => !cancelled && setLots(l)).catch(() => !cancelled && setLots([]));
     return () => { cancelled = true; };
   }, []);
+
+  const makeReport = async () => {
+    setReporting(true);
+    try {
+      await generateMonthlyReport({ monthKey: reportMonth, projets, employees, materiels, vehicules, lots, getClient, author });
+      notifySuccess("Rapport de direction généré");
+    } catch {
+      notifyError("Le rapport n'a pas pu être généré.");
+    } finally {
+      setReporting(false);
+    }
+  };
 
   const range = PERIODS.find((p) => p.value === period);
 
@@ -212,6 +229,14 @@ export default function AnalyticsView({ projets, employees, getClient }) {
               ))}
             </select>
           </label>
+          <div className="an-report">
+            <select value={reportMonth} onChange={(e) => setReportMonth(e.target.value)} aria-label="Mois du rapport">
+              {reportMonths().map((k) => <option key={k} value={k}>{monthLabelFR(k)}</option>)}
+            </select>
+            <button type="button" onClick={makeReport} disabled={reporting}>
+              {reporting ? <Loader2 size={14} className="gt-spin-icon" /> : <FileDown size={14} />} Rapport de direction
+            </button>
+          </div>
         </div>
       </header>
 

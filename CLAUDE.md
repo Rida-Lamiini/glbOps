@@ -80,3 +80,8 @@ backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, create
 - Search lots directly on the Carte (currently: Cadastre page search, or zoom with the lots layer on).
 - Persist resource attachments; per-lot history entry on the prestation; DELETE/reload of attachments not UI-tested.
 - Remove demo passwords before any deployment; schedule DB backups.
+
+## PDF reports
+
+`frontend/src/utils/reportKit.js` is the shared PDF layout (logo, running header, numbered footer, tables, KPI tiles, bars, lot plot, photo grid) built on jsPDF and WinAnsi-safe text (`safe()`). Three documents use it: `pv.js` (PV, now with the linked lot, field photos and the rejection history), `reportLot.js` (cadastral report, "Rapport PDF" on a lot) and `reportMonthly.js` (monthly management report, launched from Analytique). Everything runs in the browser; server-side generation is not done.
+To check a PDF visually: patch `URL.createObjectURL` to capture the blob and render it with pdf.js from cdnjs in the pane (a page reload is needed after editing a util module — HMR does not refresh it).

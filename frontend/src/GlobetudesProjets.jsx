@@ -1148,13 +1148,13 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
 
         {view === "analytics" && (
           <motion.div key="analytics" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <AnalyticsView projets={projets} employees={employees} getClient={getClient} />
+            <AnalyticsView projets={projets} employees={employees} materiels={materiels} vehicules={vehicules} getClient={getClient} author={currentUser.name} />
           </motion.div>
         )}
 
         {view === "cadastre" && (
           <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <CadastreTool projets={projets} currentUser={currentUser} />
+            <CadastreTool projets={projets} currentUser={currentUser} getClient={getClient} />
           </motion.div>
         )}
 

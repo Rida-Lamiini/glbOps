@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Upload, Loader2, ArrowLeft, Trash2, Plus, CheckCircle2, AlertTriangle, Pencil, FilePlus2,
-  Search, X,
+  Search, X, FileDown,
 } from "lucide-react";
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
 } from "./api";
 import LotMap from "./LotMap";
+import { generateLotReport } from "../../utils/reportLot";
+import { notifyError, notifySuccess } from "../../utils/notify";
 import "./cadastre.css";
 
 const EMPTY_INITIAL = {
@@ -440,10 +442,29 @@ function lotToReviewInitial(lot) {
   };
 }
 
-function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
+function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, projets = [], getClient }) {
   const [lot, setLot] = useState(null);
+  const [reporting, setReporting] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [statutBusy, setStatutBusy] = useState(false);
+
+  const makeReport = async () => {
+    setReporting(true);
+    try {
+      const projet = projets.find((p) => p.id === lot.projet);
+      await generateLotReport({
+        lot,
+        projet,
+        client: projet && getClient ? getClient(projet.clientId) : null,
+        prestation: projet?.prestations.find((p) => p.id === lot.prestation),
+      });
+      notifySuccess("Rapport cadastral généré");
+    } catch {
+      notifyError("Le rapport n'a pas pu être généré.");
+    } finally {
+      setReporting(false);
+    }
+  };
 
   const changeStatut = async (statut) => {
     setStatutBusy(true);
@@ -492,6 +513,9 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
       <div className="cad-top">
         <button className="cad-btn" onClick={onBack}><ArrowLeft size={16} /> Tous les lots</button>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="cad-btn primary" disabled={reporting} onClick={makeReport}>
+            {reporting ? <Loader2 size={16} className="gt-spin-icon" /> : <FileDown size={16} />} Rapport PDF
+          </button>
           <button className="cad-btn" onClick={() => onEdit(lotToReviewInitial(lot))}><Pencil size={16} /> Modifier</button>
           {confirming ? (
             <>
@@ -574,7 +598,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted }) {
 // --- Entry point ---------------------------------------------------------------
 
 /** PDF → OCR → vérification → lot cadastral. Rendered by GlobetudesProjets for view === "cadastre". */
-export default function CadastreTool({ projets = [], currentUser }) {
+export default function CadastreTool({ projets = [], currentUser, getClient }) {
   const [screen, setScreen] = useState({ name: "list" });
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -593,6 +617,8 @@ export default function CadastreTool({ projets = [], currentUser }) {
     return (
       <LotDetail
         lotId={screen.id}
+        projets={projets}
+        getClient={getClient}
         justSaved={screen.justSaved}
         onBack={() => setScreen({ name: "list" })}
         onEdit={(initial) => setScreen({ name: "review", initial })}
