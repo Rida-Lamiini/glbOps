@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 TYPE_CHOICES = [
@@ -77,3 +78,28 @@ class MaintenanceLogEntry(models.Model):
 
     def __str__(self):
         return f"{self.resource} — {self.label}"
+
+
+MOVEMENT_KIND_CHOICES = [
+    ("sortie", "Sortie"),
+    ("retour", "Retour"),
+]
+
+
+class ResourceMovement(models.Model):
+    """A check-out ("sortie") or check-in ("retour") of a piece of equipment or a vehicle, usually
+    recorded by scanning the QR label stuck on it. The latest movement tells who has it now."""
+
+    resource = models.ForeignKey(Resource, related_name="mouvements", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=10, choices=MOVEMENT_KIND_CHOICES)
+    at = models.DateTimeField(auto_now_add=True)
+    par = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="+", null=True, blank=True, on_delete=models.SET_NULL)
+    par_nom = models.CharField(max_length=200, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+    kilometrage = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]
+
+    def __str__(self):
+        return f"{self.resource} — {self.kind} — {self.par_nom}"

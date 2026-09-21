@@ -63,3 +63,64 @@ class VehiculePapiersTests(TestCase):
         res = self.client.post("/api/maintenance-log/", {"resource": "VEH-900", "date": "2026-09-01", "label": "Vidange"}, format="json")
         self.assertEqual(res.status_code, 201, res.content)
         self.assertEqual(len(self.client.get("/api/resources/VEH-900/").json()["maintenance_log"]), 1)
+
+
+class SortieRetourTests(TestCase):
+    def setUp(self):
+        self.api = APIClient()
+        self.user = User.objects.create_user("agent", password="x")
+        self.employee = Employee.objects.create(id="EMP-901", nom="Sara Test", role="Agent Chantier", user=self.user)
+        self.api.force_authenticate(self.user)
+        Resource.objects.create(id="VEH-910", nom="4x4", type="vehicule", kilometrage=1000)
+        Resource.objects.create(id="MAT-910", nom="Station", type="station_totale")
+        Resource.objects.create(id="MAT-911", nom="Drone", type="drone", status="maintenance")
+
+    def post(self, rid, payload):
+        return self.api.post(f"/api/resources/{rid}/movements/", payload, format="json")
+
+    def test_sortie_then_retour(self):
+        res = self.post("MAT-910", {"kind": "sortie", "note": "Chantier Salé"})
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(res.json()["sortie_courante"]["par_nom"], "Sara Test")
+        listed = self.api.get("/api/resources/MAT-910/").json()
+        self.assertEqual(listed["sortie_courante"]["note"], "Chantier Salé")
+        self.assertEqual(self.post("MAT-910", {"kind": "retour"}).status_code, 201)
+        self.assertIsNone(self.api.get("/api/resources/MAT-910/").json()["sortie_courante"])
+
+    def test_cannot_check_out_twice(self):
+        self.post("MAT-910", {"kind": "sortie"})
+        res = self.post("MAT-910", {"kind": "sortie"})
+        self.assertEqual(res.status_code, 409)
+        self.assertIn("Sara Test", res.json()["detail"])
+
+    def test_cannot_return_what_is_not_out(self):
+        self.assertEqual(self.post("MAT-910", {"kind": "retour"}).status_code, 400)
+
+    def test_resource_in_maintenance_cannot_go_out(self):
+        res = self.post("MAT-911", {"kind": "sortie"})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("maintenance", res.json()["detail"].lower())
+
+    def test_vehicle_mileage_is_updated_on_return(self):
+        self.post("VEH-910", {"kind": "sortie", "kilometrage": 1000})
+        res = self.post("VEH-910", {"kind": "retour", "kilometrage": 1180})
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(res.json()["kilometrage"], 1180)
+        self.assertEqual(Resource.objects.get(id="VEH-910").kilometrage, 1180)
+
+    def test_equipment_ignores_mileage(self):
+        self.post("MAT-910", {"kind": "sortie", "kilometrage": 55})
+        self.assertIsNone(Resource.objects.get(id="MAT-910").kilometrage)
+
+    def test_history_lists_newest_first(self):
+        self.post("MAT-910", {"kind": "sortie"})
+        self.post("MAT-910", {"kind": "retour"})
+        rows = self.api.get("/api/resources/MAT-910/movements/").json()
+        self.assertEqual([r["kind"] for r in rows], ["retour", "sortie"])
+
+    def test_anonymous_cannot_record(self):
+        res = APIClient().post("/api/resources/MAT-910/movements/", {"kind": "sortie"}, format="json")
+        self.assertIn(res.status_code, (401, 403))
+
+    def test_unknown_kind_is_rejected(self):
+        self.assertEqual(self.post("MAT-910", {"kind": "vol"}).status_code, 400)
