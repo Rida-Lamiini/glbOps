@@ -1470,3 +1470,47 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
 .gt-map-legend-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 3px; }
 .gt-map-legend-subtitle { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--status-neutral); margin-bottom: 2px; }
 @media (max-width: 720px) { .gt-map-legend-section { width: 100%; flex-direction: row; flex-wrap: wrap; gap: 4px 12px; } .gt-map-legend-subtitle { width: 100%; } }
+
+/* ---------- Fiche détail projet (page pleine, carte + informations) ---------- */
+.gt-fiche { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--canvas); }
+
+.gt-fiche-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.gt-fiche-head-main { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 1px; }
+.gt-fiche-id { font-size: 11px; color: var(--muted); }
+.gt-fiche-title { font-size: 17px; font-weight: 600; color: var(--ink); text-align: left; }
+.gt-fiche-title-link { border: none; background: none; padding: 0; cursor: pointer; font-family: inherit; }
+.gt-fiche-title-link:hover { color: var(--accent); text-decoration: underline; }
+.gt-fiche-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.gt-fiche-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 24px 0; }
+
+.gt-fiche-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 14px 24px 20px; }
+.gt-fiche-mapside,
+.gt-fiche-infoside { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; }
+.gt-fiche-mapcard { display: flex; flex-direction: column; }
+
+.gt-fiche-map { position: relative; flex-shrink: 0; height: clamp(320px, 52vh, 560px); border-radius: var(--radius-card); overflow: hidden; box-shadow: var(--shadow-card); background: var(--surface-muted); }
+/* maplibre-gl.css forces `position: relative` on the element it takes over, which would
+   cancel an inset-based fill — size the host explicitly instead. */
+.gt-fiche-map-canvas { width: 100%; height: 100%; }
+.gt-fiche-map-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 13px; text-align: center; padding: 20px; }
+.gt-fiche-map-empty-sub { font-size: 11.5px; }
+
+.gt-fiche-map-switch { position: absolute; top: 10px; left: 10px; z-index: 2; display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow-card); }
+.gt-fiche-map-switch button { border: none; background: transparent; padding: 5px 11px; font-size: 11.5px; font-family: inherit; color: var(--muted); cursor: pointer; }
+.gt-fiche-map-switch button + button { border-left: 1px solid var(--line); }
+.gt-fiche-map-switch button.is-active { background: var(--accent); color: #fff; }
+
+.gt-fiche-coords { display: flex; flex-direction: column; }
+.gt-fiche-coordrow { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+.gt-fiche-coordrow:first-child { border-top: none; }
+.gt-fiche-coordlabel { color: var(--muted); flex-shrink: 0; }
+.gt-fiche-coordrow > span:last-child { text-align: right; word-break: break-word; }
+
+.gt-fiche-tabs { display: flex; gap: 4px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 4px; flex-shrink: 0; }
+.gt-fiche-tabs button { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; padding: 7px 12px; border-radius: 6px; font-size: 12.5px; font-family: inherit; color: var(--muted); cursor: pointer; }
+.gt-fiche-tabs button:hover { background: var(--surface-muted); color: var(--ink); }
+.gt-fiche-tabs button.is-active { background: var(--accent); color: #fff; }
+.gt-fiche-tabcount { font-size: 10.5px; padding: 1px 6px; border-radius: var(--radius-pill); background: rgba(0, 0, 0, 0.08); }
+.gt-fiche-tabs button.is-active .gt-fiche-tabcount { background: rgba(255, 255, 255, 0.25); }
+
