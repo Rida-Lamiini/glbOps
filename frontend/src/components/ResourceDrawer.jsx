@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import DrawerTabs from "./DrawerTabs";
 import { motion } from "framer-motion";
-import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins, Clock, ListChecks, ShieldCheck } from "lucide-react";
+import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins, Clock, ListChecks, ShieldCheck, ArrowLeftRight, QrCode, Printer } from "lucide-react";
 import { STAGES, STAGE_COLORS, RESOURCE_STATUSES, RESOURCE_TYPES } from "../constants";
 import { computeResourceStats } from "../utils/stats";
 import { formatFileSize, fileExt, today, isPastDue } from "../utils/dates";
@@ -14,6 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { DatePicker } from "@/components/ui/date-picker";
 import ResourceTypeIcon from "./ResourceTypeIcon";
 import VehiculePapiers from "./VehiculePapiers";
+import ResourceMovements from "./ResourceMovements";
+import { generateLabelSheet, qrPreview } from "../utils/labels";
+import { resourceUrl } from "../utils/resourceLink";
 import { vehiculeAlerts } from "../utils/vehicule";
 
 export default function ResourceDrawer({
@@ -29,6 +32,7 @@ export default function ResourceDrawer({
   onAddMaintenance,
   onAddAttachments,
   onRemoveAttachment,
+  onServerPatch,
   currentUser,
   isOffice,
 }) {
@@ -51,6 +55,21 @@ export default function ResourceDrawer({
   const [maintenanceLabel, setMaintenanceLabel] = useState("");
   const [attachLabel, setAttachLabel] = useState("");
   const [attachChemin, setAttachChemin] = useState("");
+  const [qr, setQr] = useState("");
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    qrPreview(item.id).then((u) => !cancelled && setQr(u)).catch(() => {});
+    return () => { cancelled = true; };
+  }, [item.id]);
+  const printLabel = async () => {
+    setPrinting(true);
+    try {
+      await generateLabelSheet([item], `etiquette-${item.id}.pdf`);
+    } finally {
+      setPrinting(false);
+    }
+  };
   const stats = computeResourceStats(item, projects, matches);
   const isMateriel = typeLabel === "Matériel";
   const isVehicule = typeLabel === "Véhicule";
@@ -194,6 +213,7 @@ export default function ResourceDrawer({
             { key: "fiche", label: "Fiche", icon: Wrench },
             ...(isVehicule ? [{ key: "papiers", label: "Papiers", icon: ShieldCheck, count: alerts.length || undefined }] : []),
             { key: "affectations", label: "Affectations", icon: ListChecks, count: stats.assignments.length },
+            { key: "sorties", label: "Sorties & QR", icon: ArrowLeftRight },
             { key: "maintenance", label: "Maintenance", icon: Clock, count: maintenanceLog.length },
             { key: "documents", label: "Documents", icon: Paperclip, count: attachments.length },
           ]}
@@ -312,6 +332,27 @@ export default function ResourceDrawer({
 
           {tab === "papiers" && isVehicule && (
             <VehiculePapiers item={item} employees={employees} isOffice={isOffice} onEdit={onEditItem} />
+          )}
+
+          {tab === "sorties" && (
+            <section className="gt-section">
+              <h4><ArrowLeftRight size={13} strokeWidth={2.2} /> Sorties et retours</h4>
+              <ResourceMovements resource={item} onChange={(patch) => onServerPatch?.(item.id, patch)} />
+
+              <h4 style={{ marginTop: 22 }}><QrCode size={13} strokeWidth={2.2} /> Étiquette QR</h4>
+              <div className="rm-qr">
+                {qr ? <img src={qr} alt={`QR code de ${item.id}`} /> : <div className="rm-qr-placeholder" />}
+                <div>
+                  <p>Collez cette étiquette sur l'appareil. En la scannant avec un téléphone, on ouvre sa fiche pour noter la sortie ou le retour.</p>
+                  <code>{resourceUrl(item.id)}</code>
+                  {isOffice && (
+                    <button type="button" className="gt-btn gt-btn-neutral" disabled={printing} onClick={printLabel}>
+                      <Printer size={14} /> {printing ? "Génération…" : "Imprimer l'étiquette (PDF)"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
           )}
 
           {tab === "affectations" && (

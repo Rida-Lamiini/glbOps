@@ -68,6 +68,9 @@ export const adaptResource = (r, employeesById = {}) => ({
   carburant: r.carburant || "",
   carteCarburant: r.carte_carburant || "",
   conducteur: r.conducteur ? employeesById[r.conducteur]?.nom || "" : "",
+  sortieCourante: r.sortie_courante
+    ? { parNom: r.sortie_courante.par_nom, at: r.sortie_courante.at, note: r.sortie_courante.note || "", kilometrage: r.sortie_courante.kilometrage }
+    : null,
   maintenanceLog: (r.maintenance_log || []).map((m) => ({
     id: m.id,
     date: isoToFR(m.date),

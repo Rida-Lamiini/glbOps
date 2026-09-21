@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, MapPin, Radio, UserRound, Gauge } from "lucide-react";
+import { AlertTriangle, MapPin, Radio, UserRound, Gauge, QrCode, LogOut } from "lucide-react";
 import { computeResourceStats } from "../utils/stats";
 import { isPastDue, parseDateFR } from "../utils/dates";
 import { RESOURCE_STATUSES, RESOURCE_TYPES } from "../constants";
 import ResourceTypeIcon from "./ResourceTypeIcon";
 import { vehiculePapers, vehiculeAlerts } from "../utils/vehicule";
+import { generateLabelSheet } from "../utils/labels";
+import { notifyError } from "../utils/notify";
 
 const DAY_MS = 86400000;
 const SOON_DAYS = 60;
@@ -77,6 +79,18 @@ export default function ResourceListView({ items, projects, matches, query, onOp
     };
   }, [items]);
 
+  const [printing, setPrinting] = useState(false);
+  const printLabels = async () => {
+    setPrinting(true);
+    try {
+      await generateLabelSheet(rows.map((r) => r.item), isFleet ? "etiquettes-vehicules.pdf" : "etiquettes-materiel.pdf");
+    } catch {
+      notifyError("Les étiquettes n'ont pas pu être générées.");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const hasActiveFilters = filterStatus !== "all" || filterType !== "all" || overdueOnly;
 
   return (
@@ -122,6 +136,9 @@ export default function ResourceListView({ items, projects, matches, query, onOp
               <AlertTriangle size={13} /> {isFleet ? "Papiers à renouveler" : "Étalonnage en retard"}
             </button>
           )}
+          <button type="button" className="rg-chip-toggle" disabled={printing || rows.length === 0} onClick={printLabels} title="Planche A4 d'étiquettes QR pour les éléments affichés">
+            <QrCode size={13} /> {printing ? "Génération…" : `Étiquettes QR (${rows.length})`}
+          </button>
           <label className="rg-sort">
             <span>Trier</span>
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
@@ -198,6 +215,11 @@ export default function ResourceListView({ items, projects, matches, query, onOp
                 <MapPin size={12} /> {item.emplacement || "Emplacement non renseigné"}
               </span>
               <span className="rg-usage">
+                {item.sortieCourante && (
+                  <span className="rg-out" title={`Sorti depuis le ${new Date(item.sortieCourante.at).toLocaleDateString("fr-FR")}`}>
+                    <LogOut size={12} /> Sorti · {item.sortieCourante.parNom || "—"}
+                  </span>
+                )}
                 {stats.enCours > 0 && (
                   <span className="rg-live"><Radio size={12} /> {stats.enCours} en mission</span>
                 )}

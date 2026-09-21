@@ -71,7 +71,7 @@ const lastNumber = (ids) =>
     return Number.isFinite(n) && n > max ? n : max;
   }, 0);
 
-export default function GlobetudesProjets({ authUser, onLogout }) {
+export default function GlobetudesProjets({ authUser, onLogout, initialResource = null }) {
   const [clients, setClients] = useState([]);
   const [materiels, setMateriels] = useState([]);
   const [vehicules, setVehicules] = useState([]);
@@ -168,6 +168,21 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
       // Offline or API hiccup: fall back to the counters we already have.
     }
   };
+
+  // Coming from a QR scan ("Ouvrir la fiche complète"): jump to that resource once the data is in.
+  const initialResourceDone = useRef(false);
+  useEffect(() => {
+    if (!initialResource || dataLoading || initialResourceDone.current) return;
+    initialResourceDone.current = true;
+    if (!["Dispatcher", "Directrice"].includes(authUser.role)) return;
+    if (vehicules.some((v) => v.id === initialResource)) {
+      setView("vehicules");
+      setOpenVehiculeId(initialResource);
+    } else if (materiels.some((m) => m.id === initialResource)) {
+      setView("materiels");
+      setOpenMaterielId(initialResource);
+    }
+  }, [initialResource, dataLoading, vehicules, materiels, authUser.role]);
 
   const getClient = (id) => clients.find((c) => c.id === id);
 
@@ -454,6 +469,12 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
       setList((prev) => prev.map((r) => (r.id === id ? { ...r, maintenanceLog: (r.maintenanceLog || []).filter((e) => e !== entry) } : r)));
       notifyError("L'intervention n'a pas pu être enregistrée.");
     });
+  };
+
+  // Check-outs are saved by the scan / Sorties panel itself; this only mirrors the result in local state.
+  const applyServerPatch = (kind, id, patch) => {
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    setList((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   };
 
   const createMateriel = (nom) => createResource("materiel", nom);
@@ -1270,6 +1291,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
             onAddMaintenance={addMaterielMaintenance}
             onAddAttachments={addMaterielAttachments}
             onRemoveAttachment={removeMaterielAttachment}
+            onServerPatch={(id, patch) => applyServerPatch("materiel", id, patch)}
             currentUser={currentUser}
             isOffice={isOffice}
           />
@@ -1295,6 +1317,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
             onAddMaintenance={addVehiculeMaintenance}
             onAddAttachments={addVehiculeAttachments}
             onRemoveAttachment={removeVehiculeAttachment}
+            onServerPatch={(id, patch) => applyServerPatch("vehicule", id, patch)}
             currentUser={currentUser}
             isOffice={isOffice}
           />

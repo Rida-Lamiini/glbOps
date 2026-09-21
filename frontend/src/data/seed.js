@@ -154,6 +154,7 @@ export const blankResource = (overrides = {}) => ({
   carburant: "",
   carteCarburant: "",
   conducteur: "",
+  sortieCourante: null,
   maintenanceLog: [],
   attachments: [],
   ...overrides,

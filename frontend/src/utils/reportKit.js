@@ -101,7 +101,7 @@ export async function fetchImage(url, maxSize = 900) {
 
 export class Report {
   constructor({ title, eyebrow = "", subtitle = "", ref = "", logo = null }) {
-    this.doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    this.doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
     this.title = title;
     this.ref = ref;
     this.logo = logo;

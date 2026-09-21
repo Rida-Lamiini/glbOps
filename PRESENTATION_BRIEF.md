@@ -119,6 +119,7 @@ Une prestation traverse 7 statuts. Chacun a un responsable, une action et une tr
 | Calendrier | Vues Mois, Semaine, Agents ; couleurs par étape ; nombre de jours en conflit ; filtres agent et étape | Charge et disponibilités lisibles |
 | Fiches employés | Profil, poste, contact, statut actif/inactif, congés (paiement, maladie, sans solde…) à approuver ou refuser, liste des affectations | Suivi RH terrain simple ; un agent inactif n'est plus proposé |
 | Fiches matériel et véhicules | Marque, modèle, n° de série, emplacement, achat, valeur, fournisseur, statut (opérationnel / maintenance / hors service), dates d'étalonnage, journal de maintenance, affectations | Parc maîtrisé, étalonnages non oubliés |
+| **Étiquettes QR, sorties et retours** | Chaque matériel ou véhicule a une étiquette QR imprimable (planche A4). En la scannant avec un téléphone, on note la sortie ou le retour (qui, quand, note, kilométrage pour un véhicule) ; le bureau voit qui a quoi | On sait où est chaque appareil et qui l'a pris ; le kilométrage des véhicules se met à jour tout seul |
 | Alerte d'étalonnage en retard | Notification au bureau | Conformité des instruments |
 | Fiches clients | Contact, secteur, adresse, notes, projets liés | Mémoire commerciale |
 
@@ -276,7 +277,7 @@ Connexion par identifiant et mot de passe ; interface entièrement en français 
 | **Numérotation** | Les numéros `PRJ-2026-…` et `PRS-2026-…` contiennent l'année 2026 en dur | Ne fonctionnera pas correctement en 2027 |
 | **Rôles fixes** | Les 5 rôles et les 7 étapes sont figés dans le code | Toute adaptation passe par le développement |
 | **Coordonnées de bornes de la démo** | Les coordonnées de « SAPINO 533 » sont **illustratives** (seules les totaux viennent d'un vrai document) | Ne pas les présenter comme un vrai levé |
-| **Tests** | 25 tests automatiques réussis, tous côté serveur ; aucun test sur l'interface | Couverture limitée |
+| **Tests** | 34 tests automatiques réussis, tous côté serveur ; aucun test sur l'interface | Couverture limitée |
 
 ### 11.2 À confirmer avec Globetudes
 - Le parcours en 7 étapes correspond-il à leur processus réel (mêmes étapes, mêmes noms, mêmes responsables) ?
@@ -332,7 +333,7 @@ Connexion par identifiant et mot de passe ; interface entièrement en français 
 | Santé du serveur (`/api/health/`) | ✅ `ok` |
 | Connexion `dispatcher` / `password123` | ✅ OK |
 | Interface (`http://localhost:5173`) | ✅ Affiche la Vue d'ensemble, la Carte et l'Analytique |
-| Tests automatiques du serveur | ✅ 25 sur 25 |
+| Tests automatiques du serveur | ✅ 34 sur 34 |
 | Construction de production de l'interface | ✅ OK (avertissement de taille de fichier uniquement) |
 | Lecture d'un PDF cadastral réel / scan | ❌ Non testé (aucun PDF dans le projet) |
 | Affichage sur téléphone réel, mode production complet | ❌ Non testé |
