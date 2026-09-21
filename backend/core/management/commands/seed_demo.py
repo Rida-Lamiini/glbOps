@@ -40,40 +40,40 @@ class Command(BaseCommand):
             return user
 
         self.stdout.write("Seeding office accounts (dispatcher/directrice)...")
-        make_user("dispatcher", is_staff=True)
-        make_user("directrice", is_staff=True, is_superuser=True)
+        make_user("dispatcher", is_staff=True, first_name="Yassine", last_name="Berrada")
+        make_user("directrice", is_staff=True, is_superuser=True, first_name="Leila", last_name="Amrani")
 
         self.stdout.write("Seeding employees...")
         employees = {
             "EMP-001": Employee.objects.create(
                 id="EMP-001", nom="Pierre Lefèvre", role="Agent Chantier", poste="Chef d'équipe",
-                telephone="06 61 20 30 40", email="p.lefevre@globetudes.ma", date_embauche=d("03/01/2019"),
-                user=make_user("emp-001"),
+                telephone="06 61 20 30 40", email="p.lefevre@exemple.ma", date_embauche=d("03/01/2019"),
+                user=make_user("emp-001", first_name="Pierre", last_name="Lefèvre"),
             ),
             "EMP-002": Employee.objects.create(
                 id="EMP-002", nom="Marc Lambert", role="Agent Bureau", poste="Agent bureau",
-                telephone="06 68 27 37 47", email="m.lambert@globetudes.ma", date_embauche=d("12/01/2019"),
-                user=make_user("emp-002"),
+                telephone="06 68 27 37 47", email="m.lambert@exemple.ma", date_embauche=d("12/01/2019"),
+                user=make_user("emp-002", first_name="Marc", last_name="Lambert"),
             ),
             "EMP-003": Employee.objects.create(
                 id="EMP-003", nom="Julien Faure", role="Agent Contrôle", poste="Agent contrôle",
-                telephone="06 71 30 40 50", email="j.faure@globetudes.ma", date_embauche=d("16/05/2020"),
-                user=make_user("emp-003"),
+                telephone="06 71 30 40 50", email="j.faure@exemple.ma", date_embauche=d("16/05/2020"),
+                user=make_user("emp-003", first_name="Julien", last_name="Faure"),
             ),
             "EMP-004": Employee.objects.create(
                 id="EMP-004", nom="Sara Benjelloun", role="Agent Chantier", poste="Topographe terrain",
-                telephone="06 54 18 22 09", email="s.benjelloun@globetudes.ma", date_embauche=d("07/09/2021"),
-                user=make_user("emp-004"),
+                telephone="06 54 18 22 09", email="s.benjelloun@exemple.ma", date_embauche=d("07/09/2021"),
+                user=make_user("emp-004", first_name="Sara", last_name="Benjelloun"),
             ),
             "EMP-005": Employee.objects.create(
                 id="EMP-005", nom="Nadia Chraibi", role="Agent Bureau", poste="Dessinatrice-projeteuse",
-                telephone="06 45 33 12 87", email="n.chraibi@globetudes.ma", date_embauche=d("20/02/2022"),
-                user=make_user("emp-005"),
+                telephone="06 45 33 12 87", email="n.chraibi@exemple.ma", date_embauche=d("20/02/2022"),
+                user=make_user("emp-005", first_name="Nadia", last_name="Chraibi"),
             ),
             "EMP-006": Employee.objects.create(
                 id="EMP-006", nom="Omar Idrissi", role="Agent Contrôle", poste="Contrôleur qualité",
-                telephone="06 77 41 09 33", email="o.idrissi@globetudes.ma", date_embauche=d("11/11/2020"),
-                status="inactif", user=make_user("emp-006"),
+                telephone="06 77 41 09 33", email="o.idrissi@exemple.ma", date_embauche=d("11/11/2020"),
+                status="inactif", user=make_user("emp-006", first_name="Omar", last_name="Idrissi"),
             ),
         }
 
@@ -85,23 +85,23 @@ class Command(BaseCommand):
         self.stdout.write("Seeding clients...")
         clients = {
             "CLI-0231": Client.objects.create(
-                id="CLI-0231", nom="SOMADIR Immobilier", contact="Rania El Fassi",
-                telephone="05 37 71 20 10", email="r.elfassi@somadir.ma",
+                id="CLI-0231", nom="Atlas Immobilier", contact="Rania El Amrani",
+                telephone="05 37 71 20 10", email="r.elamrani@atlas-immo.ma",
                 adresse="12 Avenue Annakhil, Hay Riad, Rabat", secteur="Promotion immobilière",
             ),
             "CLI-0232": Client.objects.create(
-                id="CLI-0232", nom="Groupe Alliances", contact="Yassine Kabbaj",
-                telephone="05 22 95 40 18", email="y.kabbaj@alliances.ma",
+                id="CLI-0232", nom="Groupe Meridia", contact="Yassine Kadiri",
+                telephone="05 22 95 40 18", email="y.kadiri@meridia.ma",
                 adresse="Twin Center, Boulevard Zerktouni, Casablanca", secteur="Promotion immobilière",
             ),
             "CLI-0233": Client.objects.create(
-                id="CLI-0233", nom="Al Omrane Rabat", contact="Khadija Bennis",
-                telephone="05 37 68 12 44", email="k.bennis@alomrane.ma",
+                id="CLI-0233", nom="Riad Aménagement", contact="Khadija Bennani",
+                telephone="05 37 68 12 44", email="k.bennani@riad-amenagement.ma",
                 adresse="Avenue Al Alaouiyine, Agdal, Rabat", secteur="Aménagement urbain",
             ),
             "CLI-0234": Client.objects.create(
-                id="CLI-0234", nom="ONEE — Branche Eau", contact="Hicham Radi",
-                telephone="05 37 65 91 22", email="h.radi@onee.ma",
+                id="CLI-0234", nom="Office Régional des Eaux", contact="Hicham Radouani",
+                telephone="05 37 65 91 22", email="h.radouani@ore-eau.ma",
                 adresse="Station de traitement, Route de Zaër, Rabat", secteur="Infrastructure publique",
             ),
         }
@@ -148,12 +148,26 @@ class Command(BaseCommand):
                 numero_serie="12345-A-6", status="operationnel",
                 emplacement="Parking — Agence Rabat", date_achat=d("03/02/2022"),
                 valeur="320 000 MAD", fournisseur="Toyota du Maroc",
+                assurance_compagnie="Wafa Assurance", assurance_police="P-2025-40817", assurance_debut=d("12/10/2025"),
+                assurance_echeance=d("12/10/2026"), assurance_prime="7 200 MAD",
+                visite_technique_derniere=d("04/03/2026"), visite_technique_prochaine=d("04/03/2027"),
+                vignette_paiement=d("20/01/2026"), vignette_echeance=d("31/01/2027"),
+                kilometrage=84200, kilometrage_date=d("18/09/2026"),
+                entretien_prochain_date=d("15/11/2026"), entretien_prochain_km=90000,
+                carburant="diesel", carte_carburant="CC-4471", conducteur=employees["EMP-001"],
             ),
             "VEH-002": Resource.objects.create(
-                id="VEH-002", nom="Citadine — 33210-A-6", type="vehicule", marque="Dacia", modele="Duster",
+                id="VEH-002", nom="Dacia Duster — 33210-A-6", type="vehicule", marque="Dacia", modele="Duster",
                 numero_serie="33210-A-6", status="maintenance",
                 emplacement="Garage — Agence Rabat", date_achat=d("19/05/2023"),
                 valeur="180 000 MAD", fournisseur="Renault Maroc",
+                assurance_compagnie="AXA Assurance Maroc", assurance_police="A-2025-11902", assurance_debut=d("01/09/2025"),
+                assurance_echeance=d("01/09/2026"), assurance_prime="4 900 MAD",
+                visite_technique_derniere=d("22/12/2025"), visite_technique_prochaine=d("22/12/2026"),
+                vignette_paiement=d("25/01/2026"), vignette_echeance=d("31/01/2027"),
+                kilometrage=61350, kilometrage_date=d("02/09/2026"),
+                entretien_prochain_date=d("10/10/2026"), entretien_prochain_km=65000,
+                carburant="essence", carte_carburant="CC-5120", conducteur=employees["EMP-004"],
             ),
         }
 

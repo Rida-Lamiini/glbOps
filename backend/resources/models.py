@@ -17,6 +17,14 @@ STATUS_CHOICES = [
 ]
 
 
+CARBURANT_CHOICES = [
+    ("diesel", "Diesel"),
+    ("essence", "Essence"),
+    ("hybride", "Hybride"),
+    ("electrique", "Électrique"),
+]
+
+
 class Resource(models.Model):
     id = models.CharField(max_length=20, primary_key=True)
     nom = models.CharField(max_length=200)
@@ -31,6 +39,26 @@ class Resource(models.Model):
     date_achat = models.DateField(null=True, blank=True)
     valeur = models.CharField(max_length=50, blank=True)
     fournisseur = models.CharField(max_length=200, blank=True)
+
+    # Administrative papers and upkeep — only meaningful for vehicles, left empty for equipment.
+    assurance_compagnie = models.CharField(max_length=150, blank=True)
+    assurance_police = models.CharField(max_length=100, blank=True)
+    assurance_debut = models.DateField(null=True, blank=True)
+    assurance_echeance = models.DateField(null=True, blank=True)
+    assurance_prime = models.CharField(max_length=50, blank=True)
+    visite_technique_derniere = models.DateField(null=True, blank=True)
+    visite_technique_prochaine = models.DateField(null=True, blank=True)
+    vignette_paiement = models.DateField(null=True, blank=True)
+    vignette_echeance = models.DateField(null=True, blank=True)
+    kilometrage = models.PositiveIntegerField(null=True, blank=True)
+    kilometrage_date = models.DateField(null=True, blank=True)
+    entretien_prochain_date = models.DateField(null=True, blank=True)
+    entretien_prochain_km = models.PositiveIntegerField(null=True, blank=True)
+    carburant = models.CharField(max_length=20, choices=CARBURANT_CHOICES, blank=True)
+    carte_carburant = models.CharField(max_length=60, blank=True)
+    conducteur = models.ForeignKey(
+        "employees.Employee", related_name="vehicules_habituels", null=True, blank=True, on_delete=models.SET_NULL,
+    )
 
     class Meta:
         ordering = ["nom"]
