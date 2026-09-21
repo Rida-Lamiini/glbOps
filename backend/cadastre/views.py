@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.http import HttpResponse
 from django.utils import timezone
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -12,6 +13,7 @@ from projets.models import Projet
 
 from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygons_geojson, set_lot_geometry
 from .db.lot_features import get_lot_feature_collection
+from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_template, parse_lots_workbook
 from .geo.build_lot import build_lot_geometry
 from .models import Borne, DistanceCheck, Lot, ReferencePoint
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
@@ -316,6 +318,39 @@ def lots_geojson(request):
             )
         features.append({"type": "Feature", "geometry": row["polygon"], "properties": props})
     return Response({"type": "FeatureCollection", "features": features})
+
+
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser])
+def parse_excel(request):
+    """Read an Excel workbook of lots (sheets "Lots" and "Bornes"). Reads only — nothing is saved."""
+    uploaded = request.FILES.get("file")
+    if uploaded is None:
+        return Response({"error": "Aucun fichier Excel fourni."}, status=status.HTTP_400_BAD_REQUEST)
+    if not uploaded.name.lower().endswith(".xlsx"):
+        return Response({"error": "Le fichier doit être un classeur Excel (.xlsx)."}, status=status.HTTP_400_BAD_REQUEST)
+    if uploaded.size > MAX_XLSX_BYTES:
+        return Response(
+            {"error": f"Le fichier dépasse la taille maximale ({MAX_XLSX_BYTES // (1024 * 1024)} Mo)."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        return Response(parse_lots_workbook(uploaded.read()))
+    except ValueError as error:
+        return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def excel_template(request):
+    """The blank workbook to fill in, with two example lots and the instructions."""
+    response = HttpResponse(build_template(), content_type=XLSX_CONTENT_TYPE)
+    response["Content-Disposition"] = 'attachment; filename="modele-import-lots.xlsx"'
+    return response
 
 
 @api_view(["POST"])

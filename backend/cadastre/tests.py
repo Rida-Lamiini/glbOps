@@ -242,3 +242,173 @@ class AttachmentAndBoundaryTests(TestCase):
         ring = {"type": "Polygon", "coordinates": [[[-6.8, 33.9], [-6.79, 33.9], [-6.79, 33.91], [-6.8, 33.9]]]}
         self.assertEqual(self.api.patch("/api/projets/PRJ-T-5/", {"boundary": ring}, format="json").status_code, 200)
         self.assertEqual(self.api.get("/api/projets/PRJ-T-5/").json()["boundary"], ring)
+
+
+class ExcelImportTests(TestCase):
+    """Import of lots from an Excel workbook: reading, validation, the template."""
+
+    @classmethod
+    def setUpTestData(cls):
+        client = Client.objects.create(id="CLI-X1", nom="Client Excel")
+        cls.projet = Projet.objects.create(id="PRJ-X-1", client=client, reference_fonciere="TF/9/R")
+        cls.user = User.objects.create_user("xl", password="x")
+
+    def setUp(self):
+        self.api = APIClient(SERVER_NAME="localhost")
+        self.api.force_authenticate(self.user)
+
+    @staticmethod
+    def _xlsx(lots, bornes, lot_header=None, borne_header=None):
+        from io import BytesIO
+
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Lots"
+        ws.append(lot_header or ["Titre foncier", "Propriété dite", "Projet", "Surface du document (m²)", "Correction Lambert (m²)"])
+        for row in lots:
+            ws.append(row)
+        wb_b = wb.create_sheet("Bornes")
+        wb_b.append(borne_header or ["Titre foncier", "Borne", "X Lambert (m)", "Y Lambert (m)"])
+        for row in bornes:
+            wb_b.append(row)
+        buf = BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    RECT = [("B1", 371000, 385000), ("B2", 371100, 385000), ("B3", 371100, 385050), ("B4", 371000, 385050)]
+
+    def _bornes(self, titre, pts=None):
+        return [[titre, n, x, y] for n, x, y in (pts or self.RECT)]
+
+    def test_template_reads_back_without_errors(self):
+        from .excel_import import build_template, parse_lots_workbook
+
+        result = parse_lots_workbook(build_template())
+        self.assertEqual([l["titre_foncier"] for l in result["lots"]], ["TF/12345/R", "TF/67890/C"])
+        for lot in result["lots"]:
+            self.assertEqual(lot["errors"], [], lot)
+            self.assertTrue(lot["conforme"])
+        self.assertEqual(result["lots"][0]["surface_calculee_m2"], 5000.0)
+        self.assertEqual(result["lots"][1]["surface_calculee_m2"], 4800.0)
+
+    def test_reads_a_lot_and_recomputes_the_surface(self):
+        from .excel_import import parse_lots_workbook
+
+        data = self._xlsx([["TF/1/R", "Terrain A", "", 5000, 0]], self._bornes("TF/1/R"))
+        lot = parse_lots_workbook(data)["lots"][0]
+        self.assertEqual((lot["errors"], lot["surface_calculee_m2"], lot["ecart_m2"], lot["conforme"]), ([], 5000.0, 0.0, True))
+        self.assertEqual([b["name"] for b in lot["bornes"]], ["B1", "B2", "B3", "B4"])
+        self.assertEqual([b["sequence"] for b in lot["bornes"]], [0, 1, 2, 3])
+
+    def test_surface_gap_is_a_warning_not_an_error(self):
+        from .excel_import import parse_lots_workbook
+
+        lot = parse_lots_workbook(self._xlsx([["TF/1/R", "Terrain A", "", 5100, 0]], self._bornes("TF/1/R")))["lots"][0]
+        self.assertEqual(lot["errors"], [])
+        self.assertFalse(lot["conforme"])
+        self.assertTrue(any("Écart de surface" in w for w in lot["warnings"]))
+
+    def test_accepts_text_numbers_with_comma_and_spaces(self):
+        from .excel_import import parse_lots_workbook
+
+        bornes = [["TF/1/R", n, f"{x:,}".replace(",", " ") + ",0", str(y)] for n, x, y in self.RECT]
+        lot = parse_lots_workbook(self._xlsx([["TF/1/R", "Terrain A", "", "5 000,00", ""]], bornes))["lots"][0]
+        self.assertEqual(lot["errors"], [])
+        self.assertEqual(lot["surface_document_m2"], 5000.0)
+        self.assertEqual(lot["bornes"][0]["x"], 371000.0)
+
+    def test_header_spelling_is_forgiving(self):
+        from .excel_import import parse_lots_workbook
+
+        data = self._xlsx(
+            [["TF/1/R", "Terrain A", 5000]], [["TF/1/R", n, x, y] for n, x, y in self.RECT],
+            lot_header=["TITRE  foncier *", "propriete dite", "Contenance adoptée"],
+            borne_header=["titre", "Nom", "X", "Y"],
+        )
+        self.assertEqual(parse_lots_workbook(data)["lots"][0]["errors"], [])
+
+    def test_bad_rows_are_reported_per_lot(self):
+        from .excel_import import parse_lots_workbook
+
+        lots = [
+            ["TF/2/R", "Deux bornes", "", 100, 0],
+            ["TF/3/R", "Projet inconnu", "PRJ-NOPE", 5000, 0],
+            ["TF/4/R", "", "", 5000, 0],
+            ["TF/5/R", "Surface absente", "", None, 0],
+            ["TF/6/R", "Lat lng", "", 5000, 0],
+        ]
+        bornes = (
+            self._bornes("TF/2/R", self.RECT[:2]) + self._bornes("TF/3/R") + self._bornes("TF/4/R") + self._bornes("TF/5/R")
+            + [["TF/6/R", "B1", 33.9, -6.8], ["TF/6/R", "B2", 33.91, -6.8], ["TF/6/R", "B3", 33.91, -6.79]]
+        )
+        by_titre = {l["titre_foncier"]: l for l in parse_lots_workbook(self._xlsx(lots, bornes))["lots"]}
+        self.assertTrue(any("3 bornes" in e for e in by_titre["TF/2/R"]["errors"]))
+        self.assertTrue(any("introuvable" in e for e in by_titre["TF/3/R"]["errors"]))
+        self.assertTrue(any("Propriété" in e for e in by_titre["TF/4/R"]["errors"]))
+        self.assertTrue(any("Surface" in e for e in by_titre["TF/5/R"]["errors"]))
+        self.assertTrue(any("géographiques" in e for e in by_titre["TF/6/R"]["errors"]))
+
+    def test_duplicate_titre_in_the_file_and_in_the_projet(self):
+        from .excel_import import parse_lots_workbook
+
+        payload = _payload(self.projet.id)
+        payload["titre_foncier"] = "TF/EXIST/R"
+        self.assertEqual(self.api.post("/api/cadastre/lots/", payload, format="json").status_code, 201)
+        lots = [
+            ["TF/EXIST/R", "Déjà là", self.projet.id, 5000, 0],
+            ["TF/7/R", "Premier", "", 5000, 0],
+            ["TF/7/R", "Second", "", 5000, 0],
+        ]
+        bornes = self._bornes("TF/EXIST/R") + self._bornes("TF/7/R")
+        result = parse_lots_workbook(self._xlsx(lots, bornes))["lots"]
+        self.assertTrue(any("déjà un lot" in e for e in result[0]["errors"]))
+        self.assertEqual(result[1]["errors"], [])
+        self.assertTrue(any("Doublon" in e for e in result[2]["errors"]))
+
+    def test_bornes_without_a_lot_are_reported(self):
+        from .excel_import import parse_lots_workbook
+
+        data = self._xlsx([["TF/1/R", "A", "", 5000, 0]], self._bornes("TF/1/R") + self._bornes("TF/ORPHELIN"))
+        self.assertTrue(any("TF/ORPHELIN" in w for w in parse_lots_workbook(data)["warnings"]))
+
+    def test_unreadable_or_incomplete_workbooks_are_refused(self):
+        from .excel_import import parse_lots_workbook
+
+        with self.assertRaises(ValueError):
+            parse_lots_workbook(b"not an excel file")
+        with self.assertRaises(ValueError):
+            parse_lots_workbook(self._xlsx([], []))
+
+    def test_endpoint_parses_and_the_reviewed_lot_can_then_be_created(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        data = self._xlsx([["TF/API/R", "Via l'API", self.projet.id, 5000, 0]], self._bornes("TF/API/R"))
+        upload = SimpleUploadedFile("lots.xlsx", data, content_type="application/octet-stream")
+        res = self.api.post("/api/cadastre/lots/parse-excel/", {"file": upload}, format="multipart")
+        self.assertEqual(res.status_code, 200, res.content)
+        lot = res.json()["lots"][0]
+        self.assertEqual(lot["errors"], [])
+        created = self.api.post("/api/cadastre/lots/", {
+            "projet": lot["projet"], "titre_foncier": lot["titre_foncier"], "propriete_dite": lot["propriete_dite"],
+            "surface_document_m2": lot["surface_document_m2"], "correction_lambert_m2": lot["correction_lambert_m2"],
+            "bornes": [{"name": b["name"], "sequence": b["sequence"], "x_lambert": b["x"], "y_lambert": b["y"]} for b in lot["bornes"]],
+        }, format="json")
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(Lot.objects.get(pk=created.json()["id"]).statut, "brouillon")
+
+    def test_endpoint_refuses_other_file_types_and_anonymous_users(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        bad = SimpleUploadedFile("lots.csv", b"a,b", content_type="text/csv")
+        self.assertEqual(self.api.post("/api/cadastre/lots/parse-excel/", {"file": bad}, format="multipart").status_code, 400)
+        self.assertEqual(self.api.post("/api/cadastre/lots/parse-excel/", {}, format="multipart").status_code, 400)
+        anon = APIClient(SERVER_NAME="localhost")
+        self.assertIn(anon.get("/api/cadastre/lots/excel-template/").status_code, (401, 403))
+
+    def test_template_download(self):
+        res = self.api.get("/api/cadastre/lots/excel-template/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("spreadsheetml", res["Content-Type"])
+        self.assertIn("modele-import-lots.xlsx", res["Content-Disposition"])

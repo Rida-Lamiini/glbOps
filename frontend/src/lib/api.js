@@ -79,6 +79,22 @@ export async function apiFetch(path, options = {}, { retry = true } = {}) {
   return res.json();
 }
 
+// Same as apiFetch (bearer token, one silent refresh on 401) but returns the raw response body: for file downloads.
+export async function apiBlob(path, options = {}, { retry = true } = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  if (res.status === 401 && retry) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) return apiBlob(path, options, { retry: false });
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`${options.method || "GET"} ${path} failed (${res.status}): ${body}`);
+  }
+  return res.blob();
+}
+
 export const apiGet = (path) => apiFetch(path);
 
 export const apiPost = (path, data) =>

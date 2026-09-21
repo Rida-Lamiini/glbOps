@@ -105,3 +105,16 @@
 @media (prefers-reduced-motion: reduce) { .cad-card, .cad-btn, .cad-drop { transition: none; } }
 
 .cad-field select { min-height: 44px; padding: 0 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface); font: inherit; color: var(--ink); }
+
+/* ---- Import Excel des lots ---- */
+.xl-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.xl-scroll { overflow-x: auto; margin-top: 12px; }
+.xl-table th, .xl-table td { vertical-align: top; }
+.xl-table tr.is-error { background: color-mix(in srgb, var(--status-danger) 5%, transparent); }
+.xl-table input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); }
+.xl-msg { margin-top: 5px; font-size: 12px; line-height: 1.35; max-width: 340px; }
+.xl-msg.is-error { color: var(--status-danger); }
+.xl-msg.is-warn { color: var(--status-warning); }
+.xl-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.xl-progress { height: 8px; border-radius: 8px; background: var(--surface-muted); overflow: hidden; margin: 12px 0 6px; }
+.xl-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .25s; }

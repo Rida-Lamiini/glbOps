@@ -1,4 +1,5 @@
-import { apiDelete, apiFetch, apiGet, apiPost } from "../../lib/api";
+import { apiBlob, apiDelete, apiFetch, apiGet, apiPost } from "../../lib/api";
+import { saveBlob } from "../../utils/saveBlob";
 
 // The cadastre endpoints speak snake_case like the rest of the Django API; the
 // components below are written in the app's camelCase house style, so the
@@ -35,6 +36,38 @@ export const parseCadastrePdf = async (file) => {
     })),
   };
 };
+
+// Excel import: the workbook is only read here; the reviewed lots are saved one by one with createCadastreLot.
+export const parseExcelLots = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  const data = await apiPost("/cadastre/lots/parse-excel/", formData);
+  return {
+    warnings: data.warnings || [],
+    lots: data.lots.map((l) => ({
+      row: l.row,
+      titre: l.titre_foncier,
+      propriete: l.propriete_dite,
+      lotNumber: l.lot_number,
+      affaireRef: l.affaire_ref,
+      geometre: l.geometre,
+      dateLeve: l.date_leve,
+      serviceCadastre: l.service_cadastre,
+      projet: l.projet,
+      prestation: l.prestation,
+      surfaceDocumentM2: l.surface_document_m2,
+      correctionLambertM2: l.correction_lambert_m2,
+      surfaceCalculeeM2: l.surface_calculee_m2,
+      ecartM2: l.ecart_m2,
+      conforme: l.conforme,
+      bornes: l.bornes,
+      errors: l.errors,
+      warnings: l.warnings,
+    })),
+  };
+};
+
+export const downloadExcelTemplate = async () => saveBlob(await apiBlob("/cadastre/lots/excel-template/"), "modele-import-lots.xlsx");
 
 const toLotSummary = (lot) => ({
   id: lot.id,

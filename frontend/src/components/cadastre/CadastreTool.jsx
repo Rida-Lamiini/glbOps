@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Upload, Loader2, ArrowLeft, Trash2, Plus, CheckCircle2, AlertTriangle, Pencil, FilePlus2,
-  Search, X, FileDown, MapPin,
+  Search, X, FileDown, MapPin, FileSpreadsheet,
 } from "lucide-react";
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
 } from "./api";
 import LotMap from "./LotMap";
+import ExcelImportScreen from "./ExcelImport";
 import { generateLotReport } from "../../utils/reportLot";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import "./cadastre.css";
@@ -99,7 +100,7 @@ function StatutBadge({ statut }) {
 
 // --- Home: import + lots ------------------------------------------------------
 
-function ImportZone({ onReview }) {
+function ImportZone({ onReview, onExcel }) {
   const [loading, setLoading] = useState(false);
   const [over, setOver] = useState(false);
   const [error, setError] = useState(null);
@@ -162,6 +163,9 @@ function ImportZone({ onReview }) {
         </label>
         <button className="cad-btn" disabled={loading} onClick={() => onReview(EMPTY_INITIAL)}>
           <FilePlus2 size={16} /> Saisir manuellement
+        </button>
+        <button className="cad-btn" disabled={loading} onClick={onExcel}>
+          <FileSpreadsheet size={16} /> Importer un fichier Excel
         </button>
       </div>
     </section>
@@ -226,7 +230,7 @@ function LotsList({ reloadKey, onOpenLot }) {
   );
 }
 
-function HomeScreen({ reloadKey, onReview, onOpenLot }) {
+function HomeScreen({ reloadKey, onReview, onOpenLot, onExcel }) {
   return (
     <div className="cad">
       <Hero title="Cadastre">
@@ -234,7 +238,7 @@ function HomeScreen({ reloadKey, onReview, onOpenLot }) {
         générale pour réutiliser l'existant sur vos nouveaux projets.
       </Hero>
       <Stepper step={0} />
-      <ImportZone onReview={onReview} />
+      <ImportZone onReview={onReview} onExcel={onExcel} />
       <LotsList reloadKey={reloadKey} onOpenLot={onOpenLot} />
     </div>
   );
@@ -630,5 +634,20 @@ export default function CadastreTool({ projets = [], currentUser, getClient, ini
       />
     );
   }
-  return <HomeScreen reloadKey={reloadKey} onReview={(initial) => setScreen({ name: "review", initial })} onOpenLot={(id) => setScreen({ name: "detail", id })} />;
+  if (screen.name === "excel") {
+    return (
+      <ExcelImportScreen
+        onBack={() => setScreen({ name: "list" })}
+        onDone={() => { setReloadKey((k) => k + 1); setScreen({ name: "list" }); }}
+      />
+    );
+  }
+  return (
+    <HomeScreen
+      reloadKey={reloadKey}
+      onReview={(initial) => setScreen({ name: "review", initial })}
+      onOpenLot={(id) => setScreen({ name: "detail", id })}
+      onExcel={() => setScreen({ name: "excel" })}
+    />
+  );
 }
