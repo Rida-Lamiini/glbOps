@@ -608,7 +608,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         const pageH = doc.internal.pageSize.getHeight();
 
         doc.setFontSize(14);
-        doc.text("Globétudes — Carte des projets", 10, 12);
+        doc.text("Globetudes — Carte des projets", 10, 12);
         doc.setFontSize(9);
         doc.setTextColor(120);
         doc.text(new Date().toLocaleDateString("fr-FR"), pageW - 10, 12, { align: "right" });

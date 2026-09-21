@@ -6,6 +6,7 @@ import { parseDateFR, nowMs } from "../utils/dates";
 import { STAGES, STAGE_COLORS, RESOURCE_STATUSES } from "../constants";
 import HistoriqueTimeline from "./HistoriqueTimeline";
 import ResourceTypeIcon from "./ResourceTypeIcon";
+import { vehiculeAlerts } from "../utils/vehicule";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
@@ -129,8 +130,6 @@ export default function OverviewDashboard({
   }, [allPrestationsFlat]);
   const funnelTotal = funnel.reduce((s, f) => s + f.count, 0);
   const funnelMax = Math.max(1, ...funnel.map((f) => f.count));
-  const funnelActive = funnel.filter((f) => f.count > 0);
-  const funnelEmpty = funnel.filter((f) => f.count === 0);
 
   const prevRange = useMemo(() => previousRange(rangeMode), [rangeMode]);
   const livreesPrev = useMemo(
@@ -182,11 +181,12 @@ export default function OverviewDashboard({
   const resourceAlerts = useMemo(() => {
     const all = [
       ...materiels.map((m) => ({ ...m, kindLabel: "Matériel", onOpen: onOpenMateriel })),
-      ...vehicules.map((v) => ({ ...v, kindLabel: "Véhicule", onOpen: onOpenVehicule })),
+      ...vehicules.map((v) => ({ ...v, kindLabel: "Véhicule", onOpen: onOpenVehicule, papers: vehiculeAlerts(v) })),
     ];
+    const urgency = (r) => (r.status === "hors_service" ? 0 : r.status === "maintenance" ? 1 : r.papers?.[0]?.level === "late" ? 2 : 3);
     return all
-      .filter((r) => (r.status || "operationnel") !== "operationnel")
-      .sort((a, b) => (a.status === "hors_service" ? 0 : 1) - (b.status === "hors_service" ? 0 : 1));
+      .filter((r) => (r.status || "operationnel") !== "operationnel" || (r.papers && r.papers.length > 0))
+      .sort((a, b) => urgency(a) - urgency(b));
   }, [materiels, vehicules, onOpenMateriel, onOpenVehicule]);
 
   const pendingConges = useMemo(() => {
@@ -229,12 +229,16 @@ export default function OverviewDashboard({
       return {
         title: `${enRetardCount} prestation${enRetardCount > 1 ? "s" : ""} en retard cette semaine`,
         sub: "Visite terrain prévue non démarrée — affectation à revoir",
+        cta: "Voir le calendrier",
+        view: ["calendrier"],
       };
     }
     if (nonConfActuel > 0) {
       return {
         title: `${nonConfActuel} prestation${nonConfActuel > 1 ? "s" : ""} non conforme${nonConfActuel > 1 ? "s" : ""} en attente de reprise`,
         sub: "Retour de non-conformité — reprise à planifier",
+        cta: "Voir les dossiers",
+        view: ["projets", { stage: "nonconforme" }],
       };
     }
     const curr = nonConfRateForMonth(allPrestationsFlat, 0);
@@ -243,6 +247,8 @@ export default function OverviewDashboard({
       return {
         title: `Taux de non-conformité : ${Math.round(curr.rate * 100)}% ce mois`,
         sub: prev ? `vs ${Math.round(prev.rate * 100)}% le mois précédent` : "Sur les prestations démarrées ce mois-ci",
+        cta: "Voir l'analytique",
+        view: ["analytics"],
       };
     }
     return null;
@@ -253,7 +259,7 @@ export default function OverviewDashboard({
       <header className="gt-dash-hero">
         <div>
           <div className="gt-dash-hero-date">{todayLabel}</div>
-          <h1>{userName ? `Bonjour, ${userName}` : "Tableau de bord"}</h1>
+          <h1>{userName ? `Bonjour, ${userName.charAt(0).toUpperCase()}${userName.slice(1)}` : "Tableau de bord"}</h1>
           <p>L'essentiel de l'activité : ce qui avance, ce qui bloque, et qui est mobilisé.</p>
         </div>
         {onGo && (
@@ -267,10 +273,10 @@ export default function OverviewDashboard({
 
       <div className="gt-dash-rangebar">
         <span className="gt-projtoolbar-label">Période</span>
-        <div className="gt-viewtoggle">
-          <button type="button" className={rangeMode === "week" ? "active" : ""} onClick={() => setRangeMode("week")}>Cette semaine</button>
-          <button type="button" className={rangeMode === "month" ? "active" : ""} onClick={() => setRangeMode("month")}>Ce mois</button>
-          <button type="button" className={rangeMode === "custom" ? "active" : ""} onClick={() => setRangeMode("custom")}>Personnalisé</button>
+        <div className="rg-seg" role="group" aria-label="Période">
+          <button type="button" className={rangeMode === "week" ? "is-on" : ""} onClick={() => setRangeMode("week")}>Cette semaine</button>
+          <button type="button" className={rangeMode === "month" ? "is-on" : ""} onClick={() => setRangeMode("month")}>Ce mois</button>
+          <button type="button" className={rangeMode === "custom" ? "is-on" : ""} onClick={() => setRangeMode("custom")}>Personnalisé</button>
         </div>
         {rangeMode === "custom" && (
           <div className="gt-dash-rangebar-custom">
@@ -283,41 +289,42 @@ export default function OverviewDashboard({
       </div>
 
       {insight && (
-        <div className="gt-insight-card">
-          <div className="gt-insight-icon"><AlertTriangle size={18} /></div>
-          <div className="gt-insight-body">
-            <div className="gt-insight-title">{insight.title}</div>
-            <div className="gt-insight-sub">{insight.sub}</div>
+        <div className="gt-dash-bulletin" role="status">
+          <span className="gt-dash-bulletin-icon"><AlertTriangle size={17} /></span>
+          <div className="gt-dash-bulletin-body">
+            <strong>{insight.title}</strong>
+            <span>{insight.sub}</span>
           </div>
+          {onGo && insight.view && (
+            <button type="button" className="gt-dash-link" onClick={() => onGo(...insight.view)}>
+              {insight.cta} <ArrowRight size={13} />
+            </button>
+          )}
         </div>
       )}
 
-      <div className="gt-stats">
-        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("projets")}>
-          <div className="gt-stat-label">Prestations actives</div>
-          <div className={`gt-stat-num ${prestationsActives === 0 ? "is-zero" : ""}`}>{prestationsActives}</div>
-          <span className="gt-stat-sub">en cours de traitement</span>
+      <div className="rg-ledger gt-dash-ledger" role="group" aria-label="Indicateurs clés">
+        <button type="button" className="rg-ledger-cell" onClick={() => go("projets")}>
+          <span>Prestations actives</span>
+          <strong className={prestationsActives === 0 ? "is-zero" : ""}>{prestationsActives}</strong>
+          <small>en cours de traitement</small>
         </button>
-        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("projets", { stage: "nonconforme" })}>
-          <div className="gt-stat-label">Non conformes</div>
-          <div className={`gt-stat-num ${nonConfActuel === 0 ? "is-zero" : ""}`}>{nonConfActuel}</div>
-          <span className={`gt-status-pill ${nonConfActuel > 0 ? "danger" : "neutral"}`}>
-            <span className="gt-status-pill-dot" />{nonConfActuel > 0 ? "À traiter" : "Aucune"}
-          </span>
+        <button type="button" className={`rg-ledger-cell ${nonConfActuel > 0 ? "is-bad" : ""}`} onClick={() => go("projets", { stage: "nonconforme" })}>
+          <span>Non conformes</span>
+          <strong className={nonConfActuel === 0 ? "is-zero" : ""}>{nonConfActuel}</strong>
+          <small>{nonConfActuel > 0 ? "à reprendre" : "aucune en attente"}</small>
         </button>
-        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("projets", { stage: "livraison" })}>
-          <div className="gt-stat-label">Livrées ({range.label})</div>
-          <div className={`gt-stat-num ${livreesPeriode === 0 ? "is-zero" : ""}`}>{livreesPeriode}</div>
-          <span className="gt-stat-sub">
+        <button type="button" className="rg-ledger-cell is-ok" onClick={() => go("projets", { stage: "livraison" })}>
+          <span>Livrées ({range.label})</span>
+          <strong className={livreesPeriode === 0 ? "is-zero" : ""}>{livreesPeriode}</strong>
+          <small>
             {livreesPrev == null ? "sur la période choisie" : `${livreesPrev} ${prevRange.label}${livreesPeriode !== livreesPrev ? ` (${livreesPeriode > livreesPrev ? "▲" : "▼"} ${Math.abs(livreesPeriode - livreesPrev)})` : ""}`}
-          </span>
+          </small>
         </button>
-        <button type="button" className="gt-stat gt-card gt-stat-link" onClick={() => go("calendrier")}>
-          <div className="gt-stat-label">En retard</div>
-          <div className={`gt-stat-num ${enRetardCount === 0 ? "is-zero" : ""}`}>{enRetardCount}</div>
-          <span className={`gt-status-pill ${enRetardCount > 0 ? "warning" : "neutral"}`}>
-            <span className="gt-status-pill-dot" />{enRetardCount > 0 ? "À revoir" : "À l'heure"}
-          </span>
+        <button type="button" className={`rg-ledger-cell ${enRetardCount > 0 ? "is-warn" : ""}`} onClick={() => go("calendrier")}>
+          <span>En retard</span>
+          <strong className={enRetardCount === 0 ? "is-zero" : ""}>{enRetardCount}</strong>
+          <small>{enRetardCount > 0 ? "visite terrain à revoir" : "tout est à l'heure"}</small>
         </button>
       </div>
 
@@ -333,10 +340,11 @@ export default function OverviewDashboard({
           ) : (
             <TooltipProvider>
               <div className="gt-dash-funnel">
-                {funnelActive.map((s) => (
+                {funnel.map((s, i) => (
                   <Tooltip key={s.key}>
                     <TooltipTrigger asChild>
-                      <button type="button" className="gt-dash-funnel-row is-link" onClick={() => go("projets", { stage: s.key })}>
+                      <button type="button" className={`gt-dash-funnel-row is-link ${s.count === 0 ? "is-empty" : ""}`} onClick={() => go("projets", { stage: s.key })}>
+                        <span className="gt-dash-funnel-idx">{String(i + 1).padStart(2, "0")}</span>
                         <span className="gt-dash-funnel-label">{s.label}</span>
                         <div className="gt-dash-funnel-bar">
                           <div className="gt-dash-funnel-fill" style={{ width: `${(s.count / funnelMax) * 100}%`, background: STAGE_COLORS[s.key] }} />
@@ -344,13 +352,10 @@ export default function OverviewDashboard({
                         <span className="gt-dash-funnel-count">{s.count}</span>
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="right">{s.count} prestation{s.count > 1 ? "s" : ""} · {s.pct}% — voir dans Projets</TooltipContent>
+                    <TooltipContent side="right">{s.count === 0 ? "Aucune prestation à cette étape" : `${s.count} prestation${s.count > 1 ? "s" : ""} · ${s.pct}% — voir dans Projets`}</TooltipContent>
                   </Tooltip>
                 ))}
               </div>
-              {funnelEmpty.length > 0 && (
-                <div className="gt-dash-funnel-empty">Aucune pour : {funnelEmpty.map((f) => f.label).join(", ")}</div>
-              )}
             </TooltipProvider>
           )}
         </div>
@@ -386,8 +391,13 @@ export default function OverviewDashboard({
               <div key={w.employee.id} className="gt-dash-workload-row">
                 <div className="gt-dash-workload-head">
                   <span className="gt-dash-workload-name">
-                    {w.employee.nom}
-                    <span className="gt-dash-workload-role">{w.employee.poste || w.employee.role}</span>
+                    <span className="rg-mono gt-dash-mono" aria-hidden="true">
+                      {w.employee.nom.split(/\s+/).filter((x) => /^\p{L}/u.test(x)).slice(0, 2).map((x) => x[0]).join("").toUpperCase()}
+                    </span>
+                    <span className="rg-celltext">
+                      {w.employee.nom}
+                      <span className="gt-dash-workload-role">{w.employee.poste || w.employee.role}</span>
+                    </span>
                   </span>
                   <span className="gt-dash-workload-total">{w.total}</span>
                 </div>
@@ -448,18 +458,26 @@ export default function OverviewDashboard({
                     const st = RESOURCE_STATUSES.find((s) => s.key === (r.status || "operationnel"));
                     return (
                       <div key={r.id} className="gt-dash-alertrow" onClick={() => r.onOpen(r.id)}>
-                        <div className={`gt-dash-alerticon ${st?.pill || "neutral"}`}>
+                        <div className={`gt-dash-alerticon ${st && st.key !== "operationnel" ? st.pill : r.papers?.[0]?.level === "late" ? "danger" : "warning"}`}>
                           <ResourceTypeIcon type={r.type} size={14} />
                         </div>
                         <div className="gt-dash-alertbody">
                           <div className="gt-dash-alertname">{r.nom}</div>
-                          <div className="gt-dash-alertmeta">{r.kindLabel}{r.emplacement ? ` · ${r.emplacement}` : ""}</div>
+                          <div className="gt-dash-alertmeta">
+                            {r.papers?.length
+                              ? r.papers.map((a) => `${a.label} ${a.level === "late" ? "expirée" : "à renouveler"}`).join(" · ")
+                              : `${r.kindLabel}${r.emplacement ? ` · ${r.emplacement}` : ""}`}
+                          </div>
                         </div>
-                        {st && (
+                        {st && st.key !== "operationnel" ? (
                           <span className={`gt-status-pill ${st.pill}`}>
                             <span className="gt-status-pill-dot" />{st.label}
                           </span>
-                        )}
+                        ) : r.papers?.length ? (
+                          <span className={`gt-status-pill ${r.papers[0].level === "late" ? "danger" : "warning"}`}>
+                            <span className="gt-status-pill-dot" />{r.papers[0].level === "late" ? "Expiré" : "À renouveler"}
+                          </span>
+                        ) : null}
                       </div>
                     );
                   })}

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import DrawerTabs from "./DrawerTabs";
 import { motion } from "framer-motion";
-import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins , Clock, ListChecks } from "lucide-react";
+import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins, Clock, ListChecks, ShieldCheck } from "lucide-react";
 import { STAGES, STAGE_COLORS, RESOURCE_STATUSES, RESOURCE_TYPES } from "../constants";
 import { computeResourceStats } from "../utils/stats";
 import { formatFileSize, fileExt, today, isPastDue } from "../utils/dates";
@@ -13,10 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { DatePicker } from "@/components/ui/date-picker";
 import ResourceTypeIcon from "./ResourceTypeIcon";
+import VehiculePapiers from "./VehiculePapiers";
+import { vehiculeAlerts } from "../utils/vehicule";
 
 export default function ResourceDrawer({
   item,
   projects,
+  employees = [],
   matches,
   typeLabel,
   onClose,
@@ -50,6 +53,8 @@ export default function ResourceDrawer({
   const [attachChemin, setAttachChemin] = useState("");
   const stats = computeResourceStats(item, projects, matches);
   const isMateriel = typeLabel === "Matériel";
+  const isVehicule = typeLabel === "Véhicule";
+  const alerts = isVehicule ? vehiculeAlerts(item) : [];
 
   const submitRename = () => {
     if (nomDraft.trim()) {
@@ -175,6 +180,11 @@ export default function ResourceDrawer({
               <AlertTriangle size={11} /> Étalonnage en retard
             </Badge>
           )}
+          {alerts.map((a) => (
+            <Badge key={a.key} variant="outline" style={a.level === "late" ? { borderColor: "var(--bad)", color: "var(--bad)" } : { borderColor: "var(--amber)", color: "var(--amber)" }}>
+              <AlertTriangle size={11} /> {a.label} {a.level === "late" ? "expirée" : "à renouveler"}
+            </Badge>
+          ))}
         </div>
 
         <DrawerTabs
@@ -182,6 +192,7 @@ export default function ResourceDrawer({
           onChange={setTab}
           tabs={[
             { key: "fiche", label: "Fiche", icon: Wrench },
+            ...(isVehicule ? [{ key: "papiers", label: "Papiers", icon: ShieldCheck, count: alerts.length || undefined }] : []),
             { key: "affectations", label: "Affectations", icon: ListChecks, count: stats.assignments.length },
             { key: "maintenance", label: "Maintenance", icon: Clock, count: maintenanceLog.length },
             { key: "documents", label: "Documents", icon: Paperclip, count: attachments.length },
@@ -297,6 +308,10 @@ export default function ResourceDrawer({
               </div>
             )}
           </section>
+          )}
+
+          {tab === "papiers" && isVehicule && (
+            <VehiculePapiers item={item} employees={employees} isOffice={isOffice} onEdit={onEditItem} />
           )}
 
           {tab === "affectations" && (

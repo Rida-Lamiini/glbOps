@@ -219,7 +219,7 @@ export function generatePvPdf({ projet, client, prestation, materiels, vehicules
   doc.setFontSize(9);
   doc.setTextColor(20, 24, 31);
   doc.text("Agent chantier", MARGIN, sigY);
-  doc.text("Responsable Globétudes", pageW / 2 + 5, sigY);
+  doc.text("Responsable Globetudes", pageW / 2 + 5, sigY);
   doc.setDrawColor(160, 160, 160);
   doc.setLineWidth(0.2);
   doc.rect(MARGIN, sigY + 4, pageW / 2 - MARGIN - 10, 22);

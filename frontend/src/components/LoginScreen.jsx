@@ -29,7 +29,7 @@ export default function LoginScreen({ onLogin }) {
         style={{ display: "flex", flexDirection: "column", gap: 16, width: 320, padding: 32, borderRadius: 12, border: "1px solid var(--border)", background: "var(--card)" }}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <img src="/logo.png" alt="Globétudes" style={{ height: 40 }} />
+          <img src="/logo.png" alt="Globetudes" style={{ height: 40 }} />
           <div style={{ fontSize: 15, fontWeight: 600 }}>Connexion</div>
         </div>
 

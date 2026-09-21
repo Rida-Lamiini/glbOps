@@ -1,4 +1,5 @@
 import { isPastDue } from "./dates";
+import { vehiculeAlerts } from "./vehicule";
 
 const REJECT_PREFIXES = ["Non conforme", "Données insuffisantes"];
 
@@ -18,7 +19,7 @@ const clientLabel = (p, getClient) => getClient(p.projet.clientId)?.nom || p.pro
 // Notifications are always derived from current state — no separate log to keep in sync, no
 // read/unread bookkeeping. Each item carries whichever *Id lets the header wire an onOpen
 // callback back to the right drawer.
-export function buildNotifications(currentUser, { tasks = [], employees = [], materiels = [], getClient }) {
+export function buildNotifications(currentUser, { tasks = [], employees = [], materiels = [], vehicules = [], getClient }) {
   const office = currentUser.role === "Dispatcher" || currentUser.role === "Directrice";
   const notes = [];
 
@@ -38,6 +39,17 @@ export function buildNotifications(currentUser, { tasks = [], employees = [], ma
       if (isPastDue(m.prochaineCalibration)) {
         notes.push({ id: `cal-${m.id}`, kind: "warn", label: `Étalonnage en retard — ${m.nom}`, detail: m.prochaineCalibration, materielId: m.id });
       }
+    });
+    vehicules.forEach((v) => {
+      vehiculeAlerts(v).forEach((a) => {
+        notes.push({
+          id: `veh-${v.id}-${a.key}`,
+          kind: a.level === "late" ? "bad" : "warn",
+          label: `${a.label} ${a.level === "late" ? "expirée" : "à renouveler"} — ${v.nom}`,
+          detail: a.due ? `${a.text} (${a.due})` : a.text,
+          vehiculeId: v.id,
+        });
+      });
     });
     return notes;
   }

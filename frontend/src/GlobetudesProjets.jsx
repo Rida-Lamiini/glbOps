@@ -121,8 +121,8 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
 
         setEmployees(employeesRaw.map(adaptEmployee));
         setClients(clientsRaw.map(adaptClient));
-        setMateriels(resourcesRaw.filter((r) => r.type !== "vehicule").map(adaptResource));
-        setVehicules(resourcesRaw.filter((r) => r.type === "vehicule").map(adaptResource));
+        setMateriels(resourcesRaw.filter((r) => r.type !== "vehicule").map((r) => adaptResource(r, employeesById)));
+        setVehicules(resourcesRaw.filter((r) => r.type === "vehicule").map((r) => adaptResource(r, employeesById)));
         setProjets(adaptedProjets);
 
         clientSeqRef.current = lastNumber(clientsRaw.map((c) => c.id));
@@ -394,21 +394,72 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, ...patch } : c)));
   };
 
-  const createMateriel = (nom) => {
-    setMateriels((prev) => [...prev, { id: nextMaterielId(prev), nom, ...blankResource() }]);
+  // Equipment and vehicles share one API resource. Like projets, edits show instantly and are
+  // rolled back (with a message) if the server refuses them.
+  const resourcePayload = (patch) => {
+    const out = {};
+    const plain = {
+      nom: "nom", type: "type", marque: "marque", modele: "modele", numeroSerie: "numero_serie", status: "status",
+      emplacement: "emplacement", valeur: "valeur", fournisseur: "fournisseur",
+      assuranceCompagnie: "assurance_compagnie", assurancePolice: "assurance_police", assurancePrime: "assurance_prime",
+      carburant: "carburant", carteCarburant: "carte_carburant",
+    };
+    const dates = {
+      derniereCalibration: "derniere_calibration", prochaineCalibration: "prochaine_calibration", dateAchat: "date_achat",
+      assuranceDebut: "assurance_debut", assuranceEcheance: "assurance_echeance",
+      visiteTechniqueDerniere: "visite_technique_derniere", visiteTechniqueProchaine: "visite_technique_prochaine",
+      vignettePaiement: "vignette_paiement", vignetteEcheance: "vignette_echeance",
+      kilometrageDate: "kilometrage_date", entretienProchainDate: "entretien_prochain_date",
+    };
+    const numbers = { kilometrage: "kilometrage", entretienProchainKm: "entretien_prochain_km" };
+    for (const [k, v] of Object.entries(patch)) {
+      if (plain[k]) out[plain[k]] = v ?? "";
+      else if (dates[k]) out[dates[k]] = frToISO(v);
+      else if (numbers[k]) out[numbers[k]] = v === "" || v == null ? null : Number(v);
+      else if (k === "conducteur") out.conducteur = empId(v);
+    }
+    return out;
   };
 
-  const renameMateriel = (id, nom) => {
-    setMateriels((prev) => prev.map((m) => (m.id === id ? { ...m, nom } : m)));
+  const saveResource = (kind, id, patch) => {
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    const list = kind === "vehicule" ? vehicules : materiels;
+    const before = list.find((r) => r.id === id);
+    setList((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    const payload = resourcePayload(patch);
+    if (!before || !Object.keys(payload).length) return;
+    apiPatch(`/resources/${id}/`, payload).catch(() => {
+      const restore = Object.fromEntries(Object.keys(patch).map((k) => [k, before[k]]));
+      setList((prev) => prev.map((r) => (r.id === id ? { ...r, ...restore } : r)));
+      notifyError("La modification n'a pas pu être enregistrée.");
+    });
   };
 
-  const editMateriel = (id, patch) => {
-    setMateriels((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const createResource = (kind, nom) => {
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    const list = kind === "vehicule" ? vehicules : materiels;
+    const id = kind === "vehicule" ? nextVehiculeId(list) : nextMaterielId(list);
+    const type = kind === "vehicule" ? "vehicule" : "autre";
+    setList((prev) => [...prev, { id, nom, ...blankResource({ type }) }]);
+    apiPost("/resources/", { id, nom, type }).catch(() => {
+      setList((prev) => prev.filter((r) => r.id !== id));
+      notifyError("La ressource n'a pas pu être enregistrée.");
+    });
   };
 
-  const addMaterielMaintenance = (id, entry) => {
-    setMateriels((prev) => prev.map((m) => (m.id === id ? { ...m, maintenanceLog: [...(m.maintenanceLog || []), entry] } : m)));
+  const addMaintenance = (kind, id, entry) => {
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    setList((prev) => prev.map((r) => (r.id === id ? { ...r, maintenanceLog: [...(r.maintenanceLog || []), entry] } : r)));
+    apiPost("/maintenance-log/", { resource: id, date: frToISO(entry.date), label: entry.label }).catch(() => {
+      setList((prev) => prev.map((r) => (r.id === id ? { ...r, maintenanceLog: (r.maintenanceLog || []).filter((e) => e !== entry) } : r)));
+      notifyError("L'intervention n'a pas pu être enregistrée.");
+    });
   };
+
+  const createMateriel = (nom) => createResource("materiel", nom);
+  const renameMateriel = (id, nom) => saveResource("materiel", id, { nom });
+  const editMateriel = (id, patch) => saveResource("materiel", id, patch);
+  const addMaterielMaintenance = (id, entry) => addMaintenance("materiel", id, entry);
 
   const addMaterielAttachments = (id, newAttachments) => {
     if (newAttachments.length === 0) return;
@@ -419,21 +470,10 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
     setMateriels((prev) => prev.map((m) => (m.id === id ? { ...m, attachments: m.attachments.filter((_, i) => i !== index) } : m)));
   };
 
-  const createVehicule = (nom) => {
-    setVehicules((prev) => [...prev, { id: nextVehiculeId(prev), nom, ...blankResource({ type: "vehicule" }) }]);
-  };
-
-  const renameVehicule = (id, nom) => {
-    setVehicules((prev) => prev.map((v) => (v.id === id ? { ...v, nom } : v)));
-  };
-
-  const editVehicule = (id, patch) => {
-    setVehicules((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)));
-  };
-
-  const addVehiculeMaintenance = (id, entry) => {
-    setVehicules((prev) => prev.map((v) => (v.id === id ? { ...v, maintenanceLog: [...(v.maintenanceLog || []), entry] } : v)));
-  };
+  const createVehicule = (nom) => createResource("vehicule", nom);
+  const renameVehicule = (id, nom) => saveResource("vehicule", id, { nom });
+  const editVehicule = (id, patch) => saveResource("vehicule", id, patch);
+  const addVehiculeMaintenance = (id, entry) => addMaintenance("vehicule", id, entry);
 
   const addVehiculeAttachments = (id, newAttachments) => {
     if (newAttachments.length === 0) return;
@@ -698,14 +738,15 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
   }, [allPrestationsFlat]);
 
   const officeNotifications = useMemo(
-    () => buildNotifications(currentUser, { tasks: allPrestationsFlat, employees, materiels, getClient }),
-    [currentUser, allPrestationsFlat, employees, materiels, clients]
+    () => buildNotifications(currentUser, { tasks: allPrestationsFlat, employees, materiels, vehicules, getClient }),
+    [currentUser, allPrestationsFlat, employees, materiels, vehicules, clients]
   );
 
   const handleOpenNotification = (n) => {
     if (n.prestationId) setOpenPrestationId(n.prestationId);
     else if (n.employeeId) setOpenEmployeeId(n.employeeId);
     else if (n.materielId) setOpenMaterielId(n.materielId);
+    else if (n.vehiculeId) setOpenVehiculeId(n.vehiculeId);
   };
 
   const searchPlaceholder = {
@@ -892,7 +933,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
         </div>
       </div>
 
-      {(view === "projets" || view === "overview") && enRetardCount > 0 && (
+      {view === "projets" && enRetardCount > 0 && (
         <div className="gt-pagepad">
           <div className="gt-insight-card">
             <div className="gt-insight-icon"><AlertTriangle size={18} /></div>
@@ -1049,8 +1090,6 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
         {view === "materiels" && (
           <motion.div className="gt-listpage" key="materiels" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
             <ResourceListView
-              codeLabel="Code matériel"
-              nameLabel="Désignation"
               items={materiels}
               projects={filteredProjets}
               matches={matchesMateriel}
@@ -1064,8 +1103,6 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
         {view === "vehicules" && (
           <motion.div className="gt-listpage" key="vehicules" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
             <ResourceListView
-              codeLabel="Code véhicule"
-              nameLabel="Véhicule"
               items={vehicules}
               projects={filteredProjets}
               matches={matchesVehicule}
@@ -1245,6 +1282,7 @@ export default function GlobetudesProjets({ authUser, onLogout }) {
             key={openVehicule.id}
             item={openVehicule}
             projects={projets}
+            employees={employees}
             matches={matchesVehicule}
             typeLabel="Véhicule"
             onClose={() => setOpenVehiculeId(null)}

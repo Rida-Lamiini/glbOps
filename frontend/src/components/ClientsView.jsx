@@ -12,6 +12,8 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
+const initials = (nom) => nom.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
 export default function ClientsView({ clients, projects, query, onOpenClient, isOffice }) {
   const [filterSecteur, setFilterSecteur] = useState("all");
   const [nonConfOnly, setNonConfOnly] = useState(false);
@@ -21,6 +23,16 @@ export default function ClientsView({ clients, projects, query, onOpenClient, is
     () => [...new Set(clients.map((c) => c.secteur).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     [clients]
   );
+
+  const summary = useMemo(() => {
+    const stats = clients.map((c) => computeClientStats(c, projects));
+    return {
+      clients: stats.filter((st) => st.nbProjects > 0 || isOffice).length,
+      projets: stats.reduce((n, st) => n + st.nbProjects, 0),
+      enCours: stats.reduce((n, st) => n + st.enCours, 0),
+      nonConf: stats.filter((st) => st.nonConf > 0).length,
+    };
+  }, [clients, projects, isOffice]);
 
   const rows = useMemo(() => {
     const filtered = clients
@@ -45,96 +57,97 @@ export default function ClientsView({ clients, projects, query, onOpenClient, is
 
   return (
     <>
-      <div className="gt-projtoolbar" style={{ borderBottom: "none", paddingBottom: 0 }}>
-        <div className="gt-projtoolbar-group">
-          <span className="gt-projtoolbar-label">Secteur</span>
-          <select value={filterSecteur} onChange={(e) => setFilterSecteur(e.target.value)}>
-            <option value="all">Tous</option>
-            {secteurs.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="gt-projtoolbar-group">
-          <span className="gt-projtoolbar-label">Trier par</span>
-          <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-            <option value="projets">Nb. projets</option>
-            <option value="nom">Nom (A→Z)</option>
-            <option value="activite">Activité récente</option>
-            <option value="nonconf">Non-conformités</option>
-          </select>
-        </div>
-
-        <div className="gt-viewtoggle" style={{ alignSelf: "flex-end" }}>
-          <button type="button" className={nonConfOnly ? "active" : ""} onClick={() => setNonConfOnly((v) => !v)}>
-            <AlertTriangle size={12} /> Avec non-conformité
-          </button>
-        </div>
-
-        {hasActiveFilters && (
-          <button
-            className="gt-btn gt-btn-neutral gt-projtoolbar-reset"
-            style={{ marginTop: 0 }}
-            onClick={() => { setFilterSecteur("all"); setNonConfOnly(false); }}
-          >
-            Réinitialiser
-          </button>
-        )}
+      <div className="rg-ledger" role="group" aria-label="Synthèse">
+        <div className="rg-ledger-cell"><span>Clients</span><strong>{summary.clients}</strong></div>
+        <div className="rg-ledger-cell"><span>Projets</span><strong>{summary.projets}</strong></div>
+        <div className="rg-ledger-cell"><span>Prestations en cours</span><strong>{summary.enCours}</strong></div>
+        <button type="button" className={`rg-ledger-cell ${summary.nonConf ? "is-bad" : ""} ${nonConfOnly ? "is-on" : ""}`} onClick={() => setNonConfOnly((v) => !v)}>
+          <span>Avec non-conformité</span><strong>{summary.nonConf}</strong>
+        </button>
       </div>
 
-      <ResponsiveTableCard>
+      <div className="rg-filters">
+        {secteurs.length > 0 && (
+          <div className="rg-seg" role="group" aria-label="Secteur">
+            {[{ key: "all", label: "Tous", n: clients.length }, ...secteurs.map((sc) => ({ key: sc, label: sc, n: clients.filter((c) => c.secteur === sc).length }))].map((o) => (
+              <button key={o.key} type="button" className={filterSecteur === o.key ? "is-on" : ""} onClick={() => setFilterSecteur(o.key)}>
+                {o.label}<i>{o.n}</i>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="rg-filters-end">
+          <button type="button" className={`rg-chip-toggle ${nonConfOnly ? "is-on" : ""}`} onClick={() => setNonConfOnly((v) => !v)}>
+            <AlertTriangle size={13} /> Avec non-conformité
+          </button>
+          <label className="rg-sort">
+            <span>Trier</span>
+            <select value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+              <option value="projets">Nb. projets</option>
+              <option value="nom">Nom (A→Z)</option>
+              <option value="activite">Activité récente</option>
+              <option value="nonconf">Non-conformités</option>
+            </select>
+          </label>
+          {hasActiveFilters && (
+            <button type="button" className="rg-reset" onClick={() => { setFilterSecteur("all"); setNonConfOnly(false); }}>Réinitialiser</button>
+          )}
+        </div>
+      </div>
+
+      <ResponsiveTableCard className="rg-table" minBreakpoint={520} pxPerColumn={90}>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Code</TableHead>
               <TableHead>Client</TableHead>
               <TableHead className="hide-mobile">Secteur</TableHead>
-              <TableHead>Projets</TableHead>
-              <TableHead className="hide-mobile">Prestations</TableHead>
-              <TableHead>En cours</TableHead>
+              <TableHead className="rg-num">Projets</TableHead>
+              <TableHead className="rg-num hide-mobile">Prestations</TableHead>
+              <TableHead className="rg-num">En cours</TableHead>
               <TableHead>Non-conformité</TableHead>
               <TableHead className="hide-mobile">Dernière activité</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-          {rows.map(({ client, stats }) => (
-            <TableRow key={client.id} className="cursor-pointer" onClick={() => onOpenClient(client.id)}>
-              <TableCell className="font-mono">{client.code}</TableCell>
-              <TableCell>
-                <span className="font-semibold">{client.nom}</span>
-                {stats.nbProjects > 1 && (
-                  <span className="gt-status-pill warning" style={{ display: "inline-flex", marginLeft: 8 }}>
-                    {stats.nbProjects} projets liés
+            {rows.map(({ client, stats }) => (
+              <TableRow key={client.id} className="cursor-pointer" onClick={() => onOpenClient(client.id)}>
+                <TableCell>
+                  <span className="rg-cellmain">
+                    <span className="rg-mono" aria-hidden="true">{initials(client.nom)}</span>
+                    <span className="rg-celltext">
+                      <span className="rg-cellname">{client.nom}</span>
+                      <span className="rg-cellsub"><span className="gt-mono">{client.code}</span>{client.contact ? ` · ${client.contact}` : ""}</span>
+                    </span>
                   </span>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground hide-mobile">{client.secteur || "—"}</TableCell>
-              <TableCell>{stats.nbProjects}</TableCell>
-              <TableCell className="hide-mobile">{stats.nbPrestations}</TableCell>
-              <TableCell>{stats.enCours}</TableCell>
-              <TableCell>
-                {stats.nonConf > 0 ? (
-                  <span className="gt-status-pill danger" style={{ display: "inline-flex" }}>
-                    <AlertTriangle size={11} /> {stats.nonConf}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </TableCell>
-              <TableCell className="text-muted-foreground hide-mobile">
-                {stats.lastActivity != null ? formatTimestamp(stats.lastActivity) : "—"}
-              </TableCell>
-            </TableRow>
-          ))}
-          {rows.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={8} className="text-muted-foreground text-center">
-                Aucun client ne correspond.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
+                </TableCell>
+                <TableCell className="hide-mobile">
+                  {client.secteur ? <span className="rg-role">{client.secteur}</span> : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className={`rg-num ${stats.nbProjects ? "" : "is-zero"}`}>{stats.nbProjects}</TableCell>
+                <TableCell className={`rg-num hide-mobile ${stats.nbPrestations ? "" : "is-zero"}`}>{stats.nbPrestations}</TableCell>
+                <TableCell className={`rg-num ${stats.enCours ? "" : "is-zero"}`}>{stats.enCours}</TableCell>
+                <TableCell>
+                  {stats.nonConf > 0 ? (
+                    <span className="gt-status-pill danger">
+                      <AlertTriangle size={11} /> {stats.nonConf}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted-foreground hide-mobile">
+                  {stats.lastActivity != null ? formatTimestamp(stats.lastActivity) : "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-muted-foreground text-center">
+                  Aucun client ne correspond.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
         </Table>
       </ResponsiveTableCard>
     </>

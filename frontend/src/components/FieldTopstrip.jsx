@@ -8,8 +8,8 @@ export default function FieldTopstrip({ currentUser, nameOptions, onRoleChange, 
   return (
     <div className="ac-topstrip">
       <div className="ac-topstrip-brand">
-        <img src="/logo.png" alt="Globétudes" className="ac-topstrip-mark" />
-        <span>Globétudes</span>
+        <img src="/logo.png" alt="Globetudes" className="ac-topstrip-mark" />
+        <span>Globetudes</span>
       </div>
       <div className="gt-userswitch">
         <select className="gt-userselect" value={currentUser.role} onChange={(e) => onRoleChange(e.target.value)}>

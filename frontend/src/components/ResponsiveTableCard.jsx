@@ -10,7 +10,7 @@ const MIN_BREAKPOINT_PX = 760;
  * card layout (see .gt-table-card.is-cards in app.css) when the container is too narrow for the
  * table — so list views never need a horizontal scrollbar.
  */
-export default function ResponsiveTableCard({ children }) {
+export default function ResponsiveTableCard({ children, className = "", minBreakpoint = MIN_BREAKPOINT_PX, pxPerColumn = PX_PER_COLUMN }) {
   const ref = useRef(null);
   const [cards, setCards] = useState(false);
 
@@ -19,7 +19,7 @@ export default function ResponsiveTableCard({ children }) {
     if (!el) return undefined;
     const measure = () => {
       const columns = el.querySelectorAll("thead th").length || 6;
-      setCards(el.getBoundingClientRect().width < Math.max(MIN_BREAKPOINT_PX, columns * PX_PER_COLUMN));
+      setCards(el.getBoundingClientRect().width < Math.max(minBreakpoint, columns * pxPerColumn));
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -41,7 +41,7 @@ export default function ResponsiveTableCard({ children }) {
   });
 
   return (
-    <div ref={ref} className={`gt-table-card ${cards ? "is-cards" : ""}`}>
+    <div ref={ref} className={`gt-table-card ${className} ${cards ? "is-cards" : ""}`}>
       {children}
     </div>
   );

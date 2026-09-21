@@ -23,6 +23,7 @@ import { canAct } from "../utils/access";
 import { bookingsFromProjets, findDraftConflicts } from "../utils/bookings";
 import { selectableAgentsByRole } from "../utils/employees";
 import { generatePvPdf } from "../utils/pv";
+import { vehiculeBlockers } from "../utils/vehicule";
 import { notifySuccess, notifyError } from "../utils/notify";
 import PipelineStepper from "./PipelineStepper";
 import HistoriqueTimeline from "./HistoriqueTimeline";
@@ -174,11 +175,12 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
     const items = [];
     materielSel.forEach((id) => {
       const m = materiels.find((x) => x.id === id);
-      if (m && m.status && m.status !== "operationnel") items.push({ nom: m.nom, status: m.status });
+      if (m && m.status && m.status !== "operationnel") items.push({ nom: m.nom, label: resourceStatusLabel(m.status) });
     });
     if (vehiculeId) {
       const v = vehicules.find((x) => x.id === vehiculeId);
-      if (v && v.status && v.status !== "operationnel") items.push({ nom: v.nom, status: v.status });
+      if (v && v.status && v.status !== "operationnel") items.push({ nom: v.nom, label: resourceStatusLabel(v.status) });
+      vehiculeBlockers(v).forEach((p) => items.push({ nom: v.nom, label: `${p.label} expirée (${p.due})` }));
     }
     return items;
   }, [materielSel, vehiculeId, materiels, vehicules]);
@@ -378,11 +380,11 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                   {nonOperationalSelections.length > 0 && (
                     <div className="gt-conflict-warning">
                       <div className="gt-conflict-title">
-                        <AlertTriangle size={13} /> Ressource{nonOperationalSelections.length > 1 ? "s" : ""} non opérationnelle{nonOperationalSelections.length > 1 ? "s" : ""} sélectionnée{nonOperationalSelections.length > 1 ? "s" : ""}
+                        <AlertTriangle size={13} /> Ressource{nonOperationalSelections.length > 1 ? "s" : ""} à vérifier avant l'affectation
                       </div>
                       <ul className="gt-conflict-list">
                         {nonOperationalSelections.map((r, i) => (
-                          <li key={i}>{r.nom} — {resourceStatusLabel(r.status)}</li>
+                          <li key={i}>{r.nom} — {r.label}</li>
                         ))}
                       </ul>
                     </div>

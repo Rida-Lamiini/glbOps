@@ -59,7 +59,7 @@ export const buildKML = (projects, getClient) => {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
-    <name>Globétudes — Projets</name>${placemarks}
+    <name>Globetudes — Projets</name>${placemarks}
   </Document>
 </kml>`;
 };

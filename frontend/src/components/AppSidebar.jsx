@@ -27,7 +27,13 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
     <Sidebar variant="sidebar" collapsible="icon" className="border-sidebar-border">
       <SidebarHeader>
         <div className="gt-sidebar-brand">
-          <img src="/logo.png" alt="Globétudes" className="gt-sidebar-brand-mark" />
+          <span className="gt-sidebar-brand-plate">
+            <img src="/logo.png" alt="Globetudes" className="gt-sidebar-brand-mark" />
+          </span>
+          <span className="gt-sidebar-wordmark">
+            <strong>Globetudes</strong>
+            <em>glbOps · Opérations</em>
+          </span>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -57,9 +63,11 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
       </SidebarContent>
       <SidebarFooter>
         <div className="gt-sidebar-footer">
-          <div className="gt-sidebar-footer-avatar">{(currentUser.name || "?").slice(0, 1)}</div>
+          <div className="gt-sidebar-footer-avatar">
+            {(currentUser.name || "?").split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
+          </div>
           <div className="gt-sidebar-footer-text">
-            <div className="gt-sidebar-footer-name">{currentUser.name}</div>
+            <div className="gt-sidebar-footer-name">{(currentUser.name || "").charAt(0).toUpperCase() + (currentUser.name || "").slice(1)}</div>
             <select
               className="gt-sidebar-roleselect"
               value={currentUser.role}

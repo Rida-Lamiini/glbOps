@@ -36,7 +36,9 @@ export const adaptEmployee = (e) => ({
   })),
 });
 
-export const adaptResource = (r) => ({
+const numOrEmpty = (v) => (v == null ? "" : v);
+
+export const adaptResource = (r, employeesById = {}) => ({
   id: r.id,
   nom: r.nom,
   type: r.type,
@@ -50,6 +52,22 @@ export const adaptResource = (r) => ({
   dateAchat: isoToFR(r.date_achat),
   valeur: r.valeur || "",
   fournisseur: r.fournisseur || "",
+  assuranceCompagnie: r.assurance_compagnie || "",
+  assurancePolice: r.assurance_police || "",
+  assuranceDebut: isoToFR(r.assurance_debut),
+  assuranceEcheance: isoToFR(r.assurance_echeance),
+  assurancePrime: r.assurance_prime || "",
+  visiteTechniqueDerniere: isoToFR(r.visite_technique_derniere),
+  visiteTechniqueProchaine: isoToFR(r.visite_technique_prochaine),
+  vignettePaiement: isoToFR(r.vignette_paiement),
+  vignetteEcheance: isoToFR(r.vignette_echeance),
+  kilometrage: numOrEmpty(r.kilometrage),
+  kilometrageDate: isoToFR(r.kilometrage_date),
+  entretienProchainDate: isoToFR(r.entretien_prochain_date),
+  entretienProchainKm: numOrEmpty(r.entretien_prochain_km),
+  carburant: r.carburant || "",
+  carteCarburant: r.carte_carburant || "",
+  conducteur: r.conducteur ? employeesById[r.conducteur]?.nom || "" : "",
   maintenanceLog: (r.maintenance_log || []).map((m) => ({
     id: m.id,
     date: isoToFR(m.date),
