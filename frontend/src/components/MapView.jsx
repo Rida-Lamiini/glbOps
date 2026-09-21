@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Map as MaplibreMap,
   Marker as MaplibreMarker,
@@ -43,6 +43,30 @@ const SOURCE_ID = "gt-projects";
 const BOUNDARY_SOURCE_ID = "gt-boundaries";
 const MEASURE_SOURCE_ID = "gt-measure";
 const CADASTRE_SOURCE_ID = "gt-cadastre-lots";
+const LOT_COLORS = { valide: "#1f7a55", verifie: "#2f6690", brouillon: "#b7791f" };
+const LOT_STATUT_LABEL = { valide: "Validé", verifie: "Vérifié", brouillon: "Brouillon" };
+const LOT_LABEL_ZOOM = 13;
+
+// First ring of a (Multi)Polygon: its centre (average of the vertices) and bounding box.
+function lotShape(geometry) {
+  const ring = geometry?.type === "MultiPolygon" ? geometry.coordinates?.[0]?.[0] : geometry?.coordinates?.[0];
+  if (!ring || ring.length === 0) return null;
+  const lngs = ring.map((c) => c[0]);
+  const lats = ring.map((c) => c[1]);
+  const pts = ring.length > 1 ? ring.slice(0, -1) : ring; // the last vertex repeats the first
+  return {
+    center: [pts.reduce((a, c) => a + c[0], 0) / pts.length, pts.reduce((a, c) => a + c[1], 0) / pts.length],
+    bounds: [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+  };
+}
+
+const el = (tag, className, text) => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+};
+const fmtM2 = (n) => `${Number(n).toLocaleString("fr-FR", { maximumFractionDigits: 0 })} m²`;
 
 function pinSVG(color) {
   return `
@@ -86,7 +110,7 @@ function formatArea(m2) {
   return m2 < 10000 ? `${Math.round(m2)} m²` : `${(m2 / 10000).toFixed(2)} ha`;
 }
 
-export default function MapView({ projects, getClient, onOpenProjet, onCreateProjetAt }) {
+export default function MapView({ projects, getClient, onOpenProjet, onCreateProjetAt, onOpenLot, focusLotId, onFocusHandled }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef({});
@@ -97,6 +121,10 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const searchAbortRef = useRef(null);
   const searchMarkerRef = useRef(null);
   const importMarkersRef = useRef([]);
+  const lotMarkersRef = useRef([]);
+  const lotPopupRef = useRef(null);
+  const focusedLotRef = useRef(null);
+  const lotsRef = useRef([]);
   const fileInputRef = useRef(null);
   const [loaded, setLoaded] = useState(false);
   const [mapError, setMapError] = useState(null);
@@ -117,6 +145,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const [cadastreGeojson, setCadastreGeojson] = useState(null);
   const [showCadastreLots, setShowCadastreLots] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState("projets");
   const [legendOpen, setLegendOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth > 700));
   const [activeId, setActiveId] = useState(null);
 
@@ -489,33 +518,107 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     getAllCadastreLotsGeoJSON().then(setCadastreGeojson).catch(() => {});
   }, []);
 
+  // One entry per lot: what the pins, the search and the list need (centre, bounds, status…).
+  const lots = useMemo(
+    () =>
+      (cadastreGeojson?.features || [])
+        .map((f) => {
+          const shape = lotShape(f.geometry);
+          const p = f.properties || {};
+          if (!shape) return null;
+          return {
+            id: p.id,
+            titre: p.titreFoncier || "—",
+            propriete: p.proprieteDite || "Lot cadastral",
+            projetId: p.projetId || "",
+            statut: p.statut || "brouillon",
+            conforme: p.conforme !== false,
+            surfaceCalculee: p.surfaceCalculeeM2,
+            surfaceDocument: p.surfaceDocumentM2,
+            ...shape,
+          };
+        })
+        .filter(Boolean),
+    [cadastreGeojson],
+  );
+  lotsRef.current = lots;
+
+  const applyLotFocus = (map) => {
+    if (!map.getLayer("gt-cadastre-focus")) return;
+    map.setFilter("gt-cadastre-focus", ["==", ["get", "id"], focusedLotRef.current || ""]);
+  };
+
+  // Popup card for a lot, with links to the lot sheet and its projet.
+  const openLotPopup = (lot, lngLat) => {
+    const map = mapRef.current;
+    if (!map || !lot) return;
+    lotPopupRef.current?.remove();
+    const box = el("div", "gt-lot-popup");
+    box.appendChild(el("div", "gt-lot-popup-eyebrow", `Lot cadastral · Titre ${lot.titre}`));
+    box.appendChild(el("strong", "gt-lot-popup-title", lot.propriete));
+    const badges = el("div", "gt-lot-popup-badges");
+    badges.appendChild(el("span", `gt-lot-chip is-${lot.statut}`, LOT_STATUT_LABEL[lot.statut] || lot.statut));
+    badges.appendChild(el("span", `gt-lot-chip ${lot.conforme ? "is-ok" : "is-bad"}`, lot.conforme ? "Surface conforme" : "Écart de surface"));
+    box.appendChild(badges);
+    if (lot.surfaceCalculee != null) {
+      box.appendChild(el("div", "gt-lot-popup-meta", `Calculée ${fmtM2(lot.surfaceCalculee)} · document ${fmtM2(lot.surfaceDocument)}`));
+    }
+    const actions = el("div", "gt-lot-popup-actions");
+    if (onOpenLot) {
+      const b = el("button", "gt-lot-popup-btn is-primary", "Ouvrir le lot");
+      b.onclick = () => onOpenLot(lot.id);
+      actions.appendChild(b);
+    }
+    if (lot.projetId && onOpenProjet) {
+      const b = el("button", "gt-lot-popup-btn", `Projet ${lot.projetId}`);
+      b.onclick = () => onOpenProjet(lot.projetId);
+      actions.appendChild(b);
+    }
+    if (actions.childNodes.length) box.appendChild(actions);
+    lotPopupRef.current = new MaplibrePopup({ closeButton: true, maxWidth: "300px", offset: 8 })
+      .setLngLat(lngLat || lot.center)
+      .setDOMContent(box)
+      .addTo(map);
+  };
+
+  // Zoom on a lot, outline it strongly and open its card.
+  const focusLot = (lot) => {
+    const map = mapRef.current;
+    if (!map || !lot) return;
+    setShowCadastreLots(true);
+    focusedLotRef.current = lot.id;
+    applyLotFocus(map);
+    map.fitBounds(lot.bounds, { padding: { top: 90, bottom: 170, left: 70, right: 70 }, maxZoom: 18, duration: 800 });
+    map.once("moveend", () => openLotPopup(lot, lot.center));
+  };
+
+  // Click on a lot polygon: outline it and open its card where the click happened.
+  const openLotFromMap = (id, lngLat) => {
+    const lot = lotsRef.current.find((l) => l.id === id);
+    if (!lot || !mapRef.current) return;
+    focusedLotRef.current = lot.id;
+    applyLotFocus(mapRef.current);
+    openLotPopup(lot, lngLat);
+  };
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !cadastreGeojson) return;
 
     const setup = () => {
+      const colorByStatut = ["match", ["get", "statut"], "valide", LOT_COLORS.valide, "verifie", LOT_COLORS.verifie, LOT_COLORS.brouillon];
       if (!map.getSource(CADASTRE_SOURCE_ID)) {
         map.addSource(CADASTRE_SOURCE_ID, { type: "geojson", data: cadastreGeojson });
-        map.addLayer({
-          id: "gt-cadastre-fill",
-          type: "fill",
-          source: CADASTRE_SOURCE_ID,
-          paint: { "fill-color": "#1f6f68", "fill-opacity": 0.12 },
-        });
-        map.addLayer({
-          id: "gt-cadastre-line",
-          type: "line",
-          source: CADASTRE_SOURCE_ID,
-          paint: { "line-color": "#1f6f68", "line-width": 1.5, "line-dasharray": [3, 2] },
-        });
+        // white halo so the outline reads on satellite and on busy street maps alike
+        map.addLayer({ id: "gt-cadastre-halo", type: "line", source: CADASTRE_SOURCE_ID, paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.85 } });
+        map.addLayer({ id: "gt-cadastre-fill", type: "fill", source: CADASTRE_SOURCE_ID, paint: { "fill-color": colorByStatut, "fill-opacity": 0.32 } });
+        map.addLayer({ id: "gt-cadastre-line", type: "line", source: CADASTRE_SOURCE_ID, paint: { "line-color": colorByStatut, "line-width": 2.6 } });
+        // surface gap: dashed red outline on top
+        map.addLayer({ id: "gt-cadastre-ecart", type: "line", source: CADASTRE_SOURCE_ID, filter: ["==", ["get", "conforme"], false], paint: { "line-color": "#b3261e", "line-width": 2.6, "line-dasharray": [2, 1.5] } });
+        map.addLayer({ id: "gt-cadastre-focus", type: "line", source: CADASTRE_SOURCE_ID, filter: ["==", ["get", "id"], ""], paint: { "line-color": "#1d1b18", "line-width": 5 } });
         map.on("click", "gt-cadastre-fill", (e) => {
-          const props = e.features[0].properties;
-          new MaplibrePopup({ closeButton: true })
-            .setLngLat(e.lngLat)
-            .setHTML(
-              `<strong>${props.proprieteDite || "Lot cadastral"}</strong><br/>Titre foncier ${props.titreFoncier || "—"}`,
-            )
-            .addTo(map);
+          if (measureModeRef.current) return;
+          openLotFromMap(e.features[0].properties.id, e.lngLat);
         });
         map.on("mouseenter", "gt-cadastre-fill", () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "gt-cadastre-fill", () => { map.getCanvas().style.cursor = ""; });
@@ -523,13 +626,49 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         map.getSource(CADASTRE_SOURCE_ID).setData(cadastreGeojson);
       }
       const visibility = showCadastreLots ? "visible" : "none";
-      map.setLayoutProperty("gt-cadastre-fill", "visibility", visibility);
-      map.setLayoutProperty("gt-cadastre-line", "visibility", visibility);
+      ["gt-cadastre-halo", "gt-cadastre-fill", "gt-cadastre-line", "gt-cadastre-ecart", "gt-cadastre-focus"].forEach((id) => map.setLayoutProperty(id, "visibility", visibility));
+      applyLotFocus(map);
     };
 
     if (loaded) setup();
     else map.once("load", setup);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cadastreGeojson, showCadastreLots, style, attempt, loaded]);
+
+  // Pins at each lot's centre: a lot of 100 m is invisible at city zoom, so the pin is what you spot.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !showCadastreLots) return undefined;
+    const pins = lots.map((lot) => {
+      const pin = el("button", `gt-lot-pin is-${lot.statut}${lot.conforme ? "" : " is-gap"}`);
+      pin.type = "button";
+      pin.title = `${lot.propriete} — Titre ${lot.titre}`;
+      pin.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg>';
+      pin.appendChild(el("span", "gt-lot-pin-label", lot.titre));
+      pin.onclick = (e) => { e.stopPropagation(); focusLot(lot); };
+      return new MaplibreMarker({ element: pin, anchor: "center" }).setLngLat(lot.center).addTo(map);
+    });
+    lotMarkersRef.current = pins;
+    const container = map.getContainer();
+    const sync = () => container.classList.toggle("gt-lots-labeled", map.getZoom() >= LOT_LABEL_ZOOM);
+    sync();
+    map.on("zoom", sync);
+    return () => {
+      map.off("zoom", sync);
+      pins.forEach((m) => m.remove());
+      lotMarkersRef.current = [];
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lots, showCadastreLots, loaded]);
+
+  // Arriving from a lot sheet ("Voir sur la carte"): zoom on that lot once it is loaded.
+  useEffect(() => {
+    if (!focusLotId || !loaded || lots.length === 0) return;
+    const lot = lots.find((l) => l.id === focusLotId);
+    if (lot) focusLot(lot);
+    onFocusHandled?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusLotId, loaded, lots]);
 
   // Imported GPX/CSV points
   useEffect(() => {
@@ -690,6 +829,12 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       .finally(() => setSearching(false));
   };
 
+  const lotMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return lots.filter((l) => l.titre.toLowerCase().includes(q) || l.propriete.toLowerCase().includes(q) || l.projetId.toLowerCase().includes(q)).slice(0, 5);
+  }, [lots, searchQuery]);
+
   const selectSearchResult = (r) => {
     const map = mapRef.current;
     setSearchResults([]);
@@ -771,7 +916,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
             onClick={() => setShowCadastreLots((v) => !v)}
             title="Afficher/masquer les lots cadastraux enregistrés" aria-label="Afficher/masquer les lots cadastraux enregistrés"
           >
-            <FileScan size={14} /> <span className="lbl">Lots cadastraux</span>
+            <FileScan size={14} /> <span className="lbl">Lots cadastraux{lots.length ? ` (${lots.length})` : ""}</span>
           </button>
           <button
             className={`gt-map-toolbtn ${panelOpen ? "active" : ""}`}
@@ -800,7 +945,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         <div className="gt-map-search">
           <Search size={13} color="#9A9C92" />
           <input
-            placeholder="Rechercher une adresse..."
+            placeholder="Adresse, titre foncier ou lot…"
             value={searchQuery}
             onChange={(e) => runSearch(e.target.value)}
           />
@@ -809,8 +954,16 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
               <X size={13} />
             </button>
           )}
-          {(searching || searchResults.length > 0) && (
+          {(searching || searchResults.length > 0 || lotMatches.length > 0) && (
             <div className="gt-map-search-results">
+              {lotMatches.length > 0 && <div className="gt-map-search-group">Lots cadastraux</div>}
+              {lotMatches.map((l) => (
+                <button key={l.id} className="gt-map-search-item gt-map-search-lot" onClick={() => { setSearchQuery(""); setSearchResults([]); focusLot(l); }}>
+                  <span className="gt-lot-dot" style={{ background: LOT_COLORS[l.statut] }} />
+                  <span><b>Titre {l.titre}</b> · {l.propriete}</span>
+                </button>
+              ))}
+              {lotMatches.length > 0 && (searching || searchResults.length > 0) && <div className="gt-map-search-group">Adresses</div>}
               {searching && <div className="gt-map-search-item gt-map-search-loading">Recherche…</div>}
               {!searching && searchResults.map((r, i) => (
                 <button key={i} className="gt-map-search-item" onClick={() => selectSearchResult(r)}>
@@ -844,16 +997,45 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
               {STATUS_LABELS[k]} <span className="gt-map-legend-n">{counts[k]}</span>
             </button>
           ))}
+          {legendOpen && showCadastreLots && lots.length > 0 && (
+            <div className="gt-map-legend-section" aria-label="Légende des lots cadastraux">
+              <div className="gt-map-legend-subtitle">Lots cadastraux</div>
+              {Object.keys(LOT_COLORS).map((k) => (
+                <div key={k} className="gt-map-legend-row" style={{ cursor: "default" }}>
+                  <span className="gt-lot-swatch" style={{ background: LOT_COLORS[k] }} />
+                  {LOT_STATUT_LABEL[k]} <span className="gt-map-legend-n">{lots.filter((l) => l.statut === k).length}</span>
+                </div>
+              ))}
+              <div className="gt-map-legend-row" style={{ cursor: "default" }}>
+                <span className="gt-lot-swatch is-gap" />
+                Écart de surface <span className="gt-map-legend-n">{lots.filter((l) => !l.conforme).length}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {panelOpen && (
           <aside className="gt-map-panel" aria-label="Projets affichés sur la carte">
             <div className="gt-map-panel-head">
-              <strong>Projets ({visibleProjects.length})</strong>
+              <div className="gt-map-panel-tabs" role="tablist">
+                <button type="button" role="tab" aria-selected={panelTab === "projets"} className={panelTab === "projets" ? "is-on" : ""} onClick={() => setPanelTab("projets")}>Projets ({visibleProjects.length})</button>
+                <button type="button" role="tab" aria-selected={panelTab === "lots"} className={panelTab === "lots" ? "is-on" : ""} onClick={() => setPanelTab("lots")}>Lots ({lots.length})</button>
+              </div>
               <button className="gt-iconbtn" onClick={() => setPanelOpen(false)} aria-label="Fermer la liste"><X size={15} /></button>
             </div>
             <div className="gt-map-panel-list">
-              {visibleProjects.map((pr) => {
+              {panelTab === "lots" && lots.map((l) => (
+                <button key={l.id} type="button" className="gt-map-panel-item" onClick={() => focusLot(l)}>
+                  <span className="gt-lot-dot" style={{ background: LOT_COLORS[l.statut] }} />
+                  <span className="gt-map-panel-item-body">
+                    <span className="gt-map-panel-item-title">{l.propriete}</span>
+                    <span className="gt-map-panel-item-meta">Titre {l.titre} · {LOT_STATUT_LABEL[l.statut]}{l.conforme ? "" : " · écart de surface"}</span>
+                  </span>
+                  <Crosshair size={14} className="gt-map-panel-item-go" />
+                </button>
+              ))}
+              {panelTab === "lots" && lots.length === 0 && <div className="gt-list-empty">Aucun lot enregistré.</div>}
+              {panelTab === "projets" && visibleProjects.map((pr) => {
                 const st = projetStatus(pr);
                 return (
                   <button key={pr.id} type="button" className={`gt-map-panel-item ${activeId === pr.id ? "is-active" : ""}`} onClick={() => focusProject(pr)}>
@@ -866,7 +1048,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
                   </button>
                 );
               })}
-              {visibleProjects.length === 0 && <div className="gt-list-empty">Aucun projet avec ce filtre de statut.</div>}
+              {panelTab === "projets" && visibleProjects.length === 0 && <div className="gt-list-empty">Aucun projet avec ce filtre de statut.</div>}
             </div>
           </aside>
         )}

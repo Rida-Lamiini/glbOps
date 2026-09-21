@@ -112,6 +112,15 @@ class LotReuseTests(TestCase):
         far = self.api.get("/api/cadastre/lots/matches/?lat=35.0&lng=-5.0&radius=200").json()
         self.assertEqual(far["nearby"], [])
 
+    def test_overview_geojson_carries_status_and_conformity(self):
+        lot = self._create_lot(self.p1)
+        data = self.api.get("/api/cadastre/lots/geojson/").json()
+        props = next(f["properties"] for f in data["features"] if f["properties"]["id"] == str(lot.id))
+        self.assertEqual(props["statut"], "brouillon")
+        self.assertIn("conforme", props)
+        self.assertEqual(props["projetId"], self.p1.id)
+        self.assertGreater(props["surfaceCalculeeM2"], 0)
+
     def test_reuse_copies_a_lot_owned_by_another_projet(self):
         source = self._create_lot(self.p1)
         r = self.api.post(f"/api/cadastre/lots/{source.id}/reuse/", {"projet": self.p2.id}, format="json")

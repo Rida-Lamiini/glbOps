@@ -81,6 +81,8 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const [dataError, setDataError] = useState("");
   const [view, setView] = useState("overview");
   const [openProjetId, setOpenProjetId] = useState(null);
+  const [cadastreLotId, setCadastreLotId] = useState(null); // lot to open in Cadastre (from the map)
+  const [mapFocusLotId, setMapFocusLotId] = useState(null); // lot to zoom on in Carte (from Cadastre)
   const [openPrestationId, setOpenPrestationId] = useState(null);
   const [openClientId, setOpenClientId] = useState(null);
   const [openMaterielId, setOpenMaterielId] = useState(null);
@@ -170,6 +172,11 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   };
 
   // Coming from a QR scan ("Ouvrir la fiche complète"): jump to that resource once the data is in.
+  // A lot asked from the map only applies to that one visit of the Cadastre page.
+  useEffect(() => {
+    if (view !== "cadastre" && cadastreLotId) setCadastreLotId(null);
+  }, [view, cadastreLotId]);
+
   const initialResourceDone = useRef(false);
   useEffect(() => {
     if (!initialResource || dataLoading || initialResourceDone.current) return;
@@ -1158,6 +1165,9 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
               projects={filteredProjets}
               getClient={getClient}
               onOpenProjet={setOpenProjetId}
+              onOpenLot={isOffice ? (id) => { setCadastreLotId(id); setView("cadastre"); } : undefined}
+              focusLotId={mapFocusLotId}
+              onFocusHandled={() => setMapFocusLotId(null)}
               onCreateProjetAt={(lat, lng, situation) => {
                 setNewProjetPresetClient(null);
                 setNewProjetPresetLocation({ lat, lng, situation });
@@ -1175,7 +1185,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
 
         {view === "cadastre" && (
           <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <CadastreTool projets={projets} currentUser={currentUser} getClient={getClient} />
+            <CadastreTool projets={projets} currentUser={currentUser} getClient={getClient} initialLotId={cadastreLotId} onShowOnMap={(id) => { setMapFocusLotId(id); setView("carte"); }} />
           </motion.div>
         )}
 

@@ -294,25 +294,28 @@ def lot_geojson(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def lots_geojson(request):
-    """Every lot's polygon, for the overview map."""
-    return Response(
-        {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                    "type": "Feature",
-                    "geometry": row["polygon"],
-                    "properties": {
-                        "id": row["id"],
-                        "titreFoncier": row["titre_foncier"],
-                        "proprieteDite": row["propriete_dite"],
-                        "projetId": row["projet_id"],
-                    },
-                }
-                for row in list_all_lot_polygons_geojson()
-            ],
+    """Every lot's polygon, for the overview map, with what the map needs to colour and describe it."""
+    lots = {str(l.id): l for l in Lot.objects.all()}
+    features = []
+    for row in list_all_lot_polygons_geojson():
+        lot = lots.get(row["id"])
+        props = {
+            "id": row["id"],
+            "titreFoncier": row["titre_foncier"],
+            "proprieteDite": row["propriete_dite"],
+            "projetId": row["projet_id"],
         }
-    )
+        if lot is not None:
+            props.update(
+                {
+                    "statut": lot.statut,
+                    "conforme": LotListSerializer().get_conforme(lot),
+                    "surfaceCalculeeM2": float(lot.surface_calculee_m2),
+                    "surfaceDocumentM2": float(lot.surface_document_m2),
+                }
+            )
+        features.append({"type": "Feature", "geometry": row["polygon"], "properties": props})
+    return Response({"type": "FeatureCollection", "features": features})
 
 
 @api_view(["POST"])

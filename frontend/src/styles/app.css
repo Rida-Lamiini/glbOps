@@ -1429,3 +1429,44 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
 
 .rg-out { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--status-warning-bg); color: var(--status-warning); font-weight: 600; font-size: 11.5px; border: 1px solid color-mix(in srgb, var(--status-warning) 35%, transparent); }
 @media (max-width: 520px) { .rm-qr { flex-direction: column; } }
+
+/* ---- Carte : lots cadastraux bien visibles ---- */
+.gt-lot-pin { --lot: #b7791f; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 2px solid #fff; border-radius: 999px; background: var(--lot); color: #fff; font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .01em; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.35); transition: transform .12s, box-shadow .12s; white-space: nowrap; }
+.gt-lot-pin:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,.45); z-index: 3; }
+.gt-lot-pin.is-valide { --lot: #1f7a55; }
+.gt-lot-pin.is-verifie { --lot: #2f6690; }
+.gt-lot-pin.is-brouillon { --lot: #b7791f; }
+.gt-lot-pin.is-gap { box-shadow: 0 0 0 3px rgba(179,38,30,.55), 0 2px 8px rgba(0,0,0,.35); }
+.gt-lot-pin-label { display: none; }
+.gt-lots-labeled .gt-lot-pin-label { display: inline; }
+.gt-lot-pin svg { flex: none; }
+
+.gt-lot-popup { display: flex; flex-direction: column; gap: 6px; min-width: 210px; font-family: var(--font-body); color: var(--ink); }
+.gt-lot-popup-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding-right: 18px; }
+.gt-lot-popup-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; line-height: 1.15; }
+.gt-lot-popup-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.gt-lot-chip { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--surface-muted); color: var(--ink); }
+.gt-lot-chip.is-valide { background: var(--status-success-bg); color: var(--status-success); }
+.gt-lot-chip.is-verifie { background: var(--status-info-bg); color: var(--status-info); }
+.gt-lot-chip.is-brouillon { background: var(--status-warning-bg); color: var(--status-warning); }
+.gt-lot-chip.is-ok { background: var(--status-success-bg); color: var(--status-success); }
+.gt-lot-chip.is-bad { background: var(--status-danger-bg); color: var(--status-danger); }
+.gt-lot-popup-meta { font-size: 12px; color: var(--muted); }
+.gt-lot-popup-actions { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.gt-lot-popup-btn { min-height: 32px; padding: 0 12px; border: 1px solid var(--ink); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; }
+.gt-lot-popup-btn:hover { background: var(--surface-muted); }
+.gt-lot-popup-btn.is-primary { background: var(--ink); color: var(--canvas); }
+.gt-lot-popup-btn.is-primary:hover { background: var(--accent); }
+
+.gt-lot-dot { flex: none; width: 10px; height: 10px; border-radius: 3px; }
+.gt-lot-swatch { flex: none; width: 14px; height: 10px; border-radius: 3px; border: 1.5px solid rgba(255,255,255,.9); box-shadow: 0 0 0 1px rgba(0,0,0,.18); }
+.gt-lot-swatch.is-gap { background: transparent; border: 2px dashed #b3261e; box-shadow: none; }
+.gt-map-legend-lots { margin-top: 8px; }
+.gt-map-search-group { padding: 6px 12px 3px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.gt-map-search-lot { display: flex; align-items: center; gap: 9px; }
+.gt-map-panel-tabs { display: inline-flex; padding: 2px; gap: 2px; background: var(--surface-muted); border-radius: 999px; }
+.gt-map-panel-tabs button { border: 0; background: none; padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 650; color: var(--muted); cursor: pointer; }
+.gt-map-panel-tabs button.is-on { background: var(--ink); color: var(--canvas); }
+.gt-map-legend-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 3px; }
+.gt-map-legend-subtitle { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--status-neutral); margin-bottom: 2px; }
+@media (max-width: 720px) { .gt-map-legend-section { width: 100%; flex-direction: row; flex-wrap: wrap; gap: 4px 12px; } .gt-map-legend-subtitle { width: 100%; } }

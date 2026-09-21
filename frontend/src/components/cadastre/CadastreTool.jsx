@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Upload, Loader2, ArrowLeft, Trash2, Plus, CheckCircle2, AlertTriangle, Pencil, FilePlus2,
-  Search, X, FileDown,
+  Search, X, FileDown, MapPin,
 } from "lucide-react";
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
@@ -442,7 +442,7 @@ function lotToReviewInitial(lot) {
   };
 }
 
-function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, projets = [], getClient }) {
+function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, projets = [], getClient }) {
   const [lot, setLot] = useState(null);
   const [reporting, setReporting] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -513,6 +513,9 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, projets = [], 
       <div className="cad-top">
         <button className="cad-btn" onClick={onBack}><ArrowLeft size={16} /> Tous les lots</button>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {onShowOnMap && (
+            <button className="cad-btn" onClick={() => onShowOnMap(lotId)}><MapPin size={16} /> Voir sur la carte</button>
+          )}
           <button className="cad-btn primary" disabled={reporting} onClick={makeReport}>
             {reporting ? <Loader2 size={16} className="gt-spin-icon" /> : <FileDown size={16} />} Rapport PDF
           </button>
@@ -598,8 +601,8 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, projets = [], 
 // --- Entry point ---------------------------------------------------------------
 
 /** PDF → OCR → vérification → lot cadastral. Rendered by GlobetudesProjets for view === "cadastre". */
-export default function CadastreTool({ projets = [], currentUser, getClient }) {
-  const [screen, setScreen] = useState({ name: "list" });
+export default function CadastreTool({ projets = [], currentUser, getClient, initialLotId = null, onShowOnMap }) {
+  const [screen, setScreen] = useState(() => (initialLotId ? { name: "detail", id: initialLotId } : { name: "list" }));
   const [reloadKey, setReloadKey] = useState(0);
 
   if (screen.name === "review") {
@@ -619,6 +622,7 @@ export default function CadastreTool({ projets = [], currentUser, getClient }) {
         lotId={screen.id}
         projets={projets}
         getClient={getClient}
+        onShowOnMap={onShowOnMap}
         justSaved={screen.justSaved}
         onBack={() => setScreen({ name: "list" })}
         onEdit={(initial) => setScreen({ name: "review", initial })}

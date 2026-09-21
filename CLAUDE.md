@@ -77,7 +77,6 @@ backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, create
 
 ## Not done yet / ideas
 
-- Search lots directly on the Carte (currently: Cadastre page search, or zoom with the lots layer on).
 - Persist resource attachments; per-lot history entry on the prestation; DELETE/reload of attachments not UI-tested.
 - Remove demo passwords before any deployment; schedule DB backups.
 
@@ -89,3 +88,7 @@ To check a PDF visually: patch `URL.createObjectURL` to capture the blob and ren
 ## QR labels and check-out / check-in
 
 Each matériel/véhicule has a QR label (`utils/labels.js`, A4 sheet of 3x7 labels; button "Étiquettes QR" on the list, "Imprimer l'étiquette" in the "Sorties & QR" tab). The QR encodes `${VITE_PUBLIC_URL || origin}/?ressource=ID` (`utils/resourceLink.js`) — a phone cannot open `localhost`, so set `VITE_PUBLIC_URL` before printing real labels. `App.jsx` shows `ResourceScan` (mobile page, all roles) after login when that param is present; office users can jump to the full drawer via `initialResource`. Movements live in `resources.ResourceMovement` (`POST /api/resources/<id>/movements/`, kind sortie|retour; 409 if already out, 400 if not out or not operational; a vehicle's return with mileage updates `Resource.kilometrage`). `Resource.sortie_courante` is derived from the latest movement.
+
+## Cadastral lots on the Carte
+
+`MapView` colours each lot by review status (validé green / vérifié blue / brouillon amber, dashed red outline when the surface gap exceeds 1 m²), puts a pin with the titre foncier at its centre (visible at any zoom — a 100 m lot is invisible otherwise), and opens a card with the status, surfaces and links ("Ouvrir le lot" → Cadastre via `cadastreLotId`, "Projet …"). The search box also finds lots (titre, propriété dite, projet), and the panel has a Lots tab. Lot page → "Voir sur la carte" zooms there (`mapFocusLotId`). `GET /api/cadastre/lots/geojson/` now carries `statut`, `conforme` and the two surfaces.
