@@ -24,7 +24,7 @@ docker compose -f backend/docker-compose.yml up -d        # db (postgis) + ocr
 backend/venv/Scripts/python.exe backend/manage.py migrate
 backend/venv/Scripts/python.exe backend/manage.py runserver   # :8000
 npm --prefix frontend run dev                                 # :5173
-backend/venv/Scripts/python.exe backend/manage.py test        # 19 tests, creates a throw-away DB
+backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, creates a throw-away DB
 ```
 
 `.claude/launch.json` defines `backend` and `frontend` for the preview tool. Demo users come from `seed_demo`
@@ -57,7 +57,7 @@ backend/venv/Scripts/python.exe backend/manage.py test        # 19 tests, create
   `projets/clients/employees/…` in local state, **optimistic writes with rollback** through `apiPost/apiPatch/apiDelete`
   (`lib/api.js`, JWT in memory + refresh token in localStorage). Server JSON → UI shape in `lib/apiAdapters.js`.
   Persisted: projet create/edit/notes/boundary, prestation create/patch (stage, dates, agents, tâches, history),
-  attachments (real upload), cadastre lots. Resource (matériel/véhicule) attachments are still local-only.
+  attachments (real upload), cadastre lots. Resources (matériel/véhicule: create, edit, maintenance log, vehicle papers) are persisted through `saveResource`/`createResource`; their attachments, employees/congés and client edits are still local-only. Vehicle papers (assurance, visite technique, vignette, kilométrage/entretien, carburant, conducteur) live on `resources.Resource`; due-date logic is in `frontend/src/utils/vehicule.js` and feeds the fleet cards, the Papiers tab, the bell, the Vue d'ensemble alerts and the affectation warning.
 - Views: `OverviewDashboard`, projets list + `KanbanBoard` (flow strip), `MapView` (main Carte: status pins, projet
   polygons, "Lots cadastraux" layer), `CalendarView`, `AnalyticsView` (shadcn Card/Tabs/Chart), `ClientsView`,
   resource/employee lists, `cadastre/CadastreTool` (PDF → OCR → review → lot), role apps (`AgentChantierApp`, …).
