@@ -33,8 +33,8 @@ export default function App() {
     })();
   }, []);
 
-  const handleLogin = async (username, password) => {
-    await apiLogin(username, password);
+  const handleLogin = async (username, password, sharedDevice) => {
+    await apiLogin(username, password, { sharedDevice });
     await loadCurrentUser();
   };
 

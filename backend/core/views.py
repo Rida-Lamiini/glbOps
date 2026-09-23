@@ -1,7 +1,9 @@
-from rest_framework import viewsets
+from django.core.cache import cache
+from rest_framework import status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import ocr
 from .models import Attachment
@@ -11,6 +13,38 @@ from .serializers import AttachmentSerializer, UserSerializer
 @api_view(['GET'])
 def health(request):
     return Response({'status': 'ok'})
+
+
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+
+
+class LockedTokenObtainPairView(TokenObtainPairView):
+    """Same login endpoint as simplejwt's own, but locks a username out for 15 minutes after
+    5 failed attempts in a row. Demo-style passwords (seed_demo) have no other defense against
+    brute-forcing, so this is the one gap worth closing even on an internal tool."""
+
+    def post(self, request, *args, **kwargs):
+        username = (request.data.get('username') or '').strip().lower()
+        key = f'login_attempts:{username}'
+        if username and cache.get(key, 0) >= LOGIN_MAX_ATTEMPTS:
+            return Response(
+                {'detail': 'Trop de tentatives échouées. Réessayez dans 15 minutes.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        # A bad login doesn't return a non-200 Response here — TokenObtainPairSerializer raises
+        # AuthenticationFailed, which propagates out of super().post() rather than being
+        # returned, so the failure count has to be bumped from the except branch, not a status
+        # check afterwards.
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception:
+            if username:
+                cache.set(key, cache.get(key, 0) + 1, LOGIN_LOCKOUT_SECONDS)
+            raise
+        if username:
+            cache.delete(key)
+        return response
 
 
 @api_view(['GET'])
