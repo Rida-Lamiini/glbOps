@@ -32,7 +32,7 @@ import { backdropVariants, drawerVariants } from "../lib/motionVariants";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateTimeField } from "@/components/ui/datetime-field";
 
-export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser }) {
+export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache }) {
   const [natureDemandee, setNatureDemandee] = useState(prestation.natureDemandee);
   const [dateDebutDemande, setDateDebutDemande] = useState(prestation.dateDebutDemande);
   const [dateFinDemande, setDateFinDemande] = useState(prestation.dateFinDemande);
@@ -212,6 +212,7 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
           <div>
             <div className="gt-mono gt-drawer-id">{prestation.id} · {projet.id}</div>
             <div className="gt-drawer-client">{client?.nom || "—"}</div>
+            {focusTache && <div className="gt-drawer-focustag">Tâche : {focusTache}</div>}
           </div>
           <button className="gt-iconbtn" onClick={onClose}>
             <X size={18} />
@@ -659,8 +660,10 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                       <Lock size={12} /> En attente de l'affectation des tâches par le Dispatcher/Directrice
                     </div>
                   ) : (
-                    <div className="gt-tacheslist-readonly">
-                      {tachesSel.map((t) => (
+                    (() => {
+                      const focused = focusTache && tachesSel.find((t) => t.label === focusTache);
+                      const others = focused ? tachesSel.filter((t) => t.label !== focusTache) : tachesSel;
+                      const row = (t) => (
                         <div className="gt-tache-readrow" key={t.label}>
                           <label className="gt-tache-donepick">
                             <input type="checkbox" checked={!!t.done} onChange={() => toggleTacheDone(t.label)} />
@@ -668,8 +671,36 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                           <span className={`gt-tache-readlabel ${t.done ? "done" : ""}`}>{t.label}</span>
                           <span className="gt-tache-readagents">{t.agents.join(", ") || "—"}</span>
                         </div>
-                      ))}
-                    </div>
+                      );
+                      return (
+                        <>
+                          {focused && (
+                            <div className="gt-tache-hero">
+                              <div className="gt-tache-hero-eyebrow">Tâche sélectionnée</div>
+                              <div className="gt-tache-hero-row">
+                                <span className={`gt-tache-hero-label ${focused.done ? "done" : ""}`}>{focused.label}</span>
+                                <button
+                                  type="button"
+                                  className={`gt-btn ${focused.done ? "gt-btn-neutral" : "gt-btn-primary"}`}
+                                  onClick={() => toggleTacheDone(focused.label)}
+                                >
+                                  <CheckCircle2 size={14} /> {focused.done ? "Rouvrir la tâche" : "Marquer terminée"}
+                                </button>
+                              </div>
+                              <div className="gt-tache-hero-agents">
+                                <Users size={12} /> {focused.agents.join(", ") || "Aucun agent assigné"}
+                              </div>
+                            </div>
+                          )}
+                          {others.length > 0 && (
+                            <>
+                              {focused && <div className="gt-tache-otherslabel">Autres tâches du dossier</div>}
+                              <div className="gt-tacheslist-readonly">{others.map(row)}</div>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()
                   )}
 
                   {isOffice && (
