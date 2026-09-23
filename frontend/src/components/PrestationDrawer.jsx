@@ -23,7 +23,8 @@ import { today, activeCongeOn, nextBusinessDayFR, splitDateTimeFR, nowTime } fro
 import { canAct } from "../utils/access";
 import { bookingsFromProjets, findDraftConflicts } from "../utils/bookings";
 import { selectableAgentsByRole } from "../utils/employees";
-import { generatePvPdf } from "../utils/pv";
+import { apiBlob } from "../lib/api";
+import { saveBlob } from "../utils/saveBlob";
 import { vehiculeBlockers } from "../utils/vehicule";
 import { notifySuccess, notifyError } from "../utils/notify";
 import PipelineStepper from "./PipelineStepper";
@@ -258,7 +259,8 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
               onClick={async () => {
                 setPvBusy(true);
                 try {
-                  await generatePvPdf({ projet, client, prestation, materiels, vehicules });
+                  // Built server-side from what is saved (projets/pv.py).
+                  saveBlob(await apiBlob(`/prestations/${prestation.id}/pv/`), `PV-${prestation.id}.pdf`);
                   notifySuccess("PV généré");
                 } catch {
                   notifyError("Le PV n'a pas pu être généré.");
