@@ -6,10 +6,11 @@ import { notifySuccess } from "../../utils/notify";
 
 export default function NewClientModal({ onClose, onCreate }) {
   const [nom, setNom] = useState("");
+  const [code, setCode] = useState("");
 
   const submit = () => {
     if (!nom.trim()) return;
-    onCreate({ nom: nom.trim() });
+    onCreate({ nom: nom.trim(), id: code.trim() || undefined });
     notifySuccess("Client créé");
     onClose();
   };
@@ -26,7 +27,9 @@ export default function NewClientModal({ onClose, onCreate }) {
         <div className="gt-form" style={{ padding: "16px 20px 20px" }}>
           <label>Nom du client / maître d'ouvrage</label>
           <input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="ex. SOMADIR Immobilier" autoFocus onKeyDown={(e) => e.key === "Enter" && submit()} />
-          <div className="gt-attach-note">Le code client est généré automatiquement. Les coordonnées de contact pourront être complétées après la création.</div>
+          <label>Code client <span className="gt-hint">(facultatif)</span></label>
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="laissé vide = généré automatiquement (CLI-XXXX)" className="gt-mono" onKeyDown={(e) => e.key === "Enter" && submit()} />
+          <div className="gt-attach-note">Laissez le code vide pour un CLI-XXXX généré automatiquement, ou saisissez votre propre référence (ex. un code interne existant).</div>
           <button className="gt-btn gt-btn-primary" onClick={submit} disabled={!nom.trim()}>
             Créer le client <ChevronRight size={14} />
           </button>

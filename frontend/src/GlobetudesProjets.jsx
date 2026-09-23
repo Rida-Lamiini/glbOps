@@ -389,10 +389,13 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   // A projet created with a brand-new client must wait for that client to exist server-side.
   const clientSavesRef = useRef({});
 
-  const createClient = ({ nom, code, ...rest }) => {
-    clientSeqRef.current += 1;
-    const id = `CLI-0${clientSeqRef.current}`;
-    const client = { id, nom, code: code || id, ...blankClient(rest) };
+  const createClient = ({ nom, id: manualId, ...rest }) => {
+    let id = manualId?.trim();
+    if (!id) {
+      clientSeqRef.current += 1;
+      id = `CLI-0${clientSeqRef.current}`;
+    }
+    const client = { id, nom, code: id, ...blankClient(rest) };
     setClients((prev) => [...prev, client]);
     const saving = apiPost("/clients/", {
       id,
@@ -412,8 +415,38 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     return id;
   };
 
+  // `code` is client.id itself (a real FK target for projets.client_id) — the server only allows
+  // renaming it while the client has no projets yet (see ClientViewSet.update), so the optimistic
+  // update below has to move the row to its new id/rollback key too, not just patch a display field.
   const editClient = (clientId, patch) => {
-    setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, ...patch } : c)));
+    const before = clients.find((c) => c.id === clientId);
+    if (!before) return;
+    const nextId = patch.code && patch.code !== before.id ? patch.code : clientId;
+    setClients((prev) => prev.map((c) => (c.id === clientId ? { ...c, ...patch, id: nextId } : c)));
+    if (nextId !== clientId && openClientId === clientId) setOpenClientId(nextId);
+    const map = { nom: "nom", contact: "contact", telephone: "telephone", email: "email", adresse: "adresse", secteur: "secteur", notes: "notes" };
+    const payload = {};
+    for (const [k, v] of Object.entries(patch)) if (map[k]) payload[map[k]] = v ?? "";
+    if (nextId !== clientId) payload.id = nextId;
+    if (!Object.keys(payload).length) return;
+    apiPatch(`/clients/${clientId}/`, payload).catch((err) => {
+      setClients((prev) => prev.map((c) => (c.id === nextId ? before : c)));
+      if (nextId !== clientId && openClientId === nextId) setOpenClientId(clientId);
+      // Surface the server's actual reason (code already used, client has projets…) when there is
+      // one, instead of a generic message that would hide why the rename specifically was refused.
+      const match = /\((\d{3})\): (.*)$/s.exec(err?.message || "");
+      let reason = null;
+      if (match) {
+        try {
+          const body = JSON.parse(match[2]);
+          reason = body.id || body.error || body.detail || null;
+          if (Array.isArray(reason)) reason = reason[0];
+        } catch {
+          // Not JSON — fall through to the generic message.
+        }
+      }
+      notifyError(reason || "Le client n'a pas pu être modifié.");
+    });
   };
 
   // Equipment and vehicles share one API resource. Like projets, edits show instantly and are

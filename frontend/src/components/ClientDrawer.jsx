@@ -78,7 +78,7 @@ export default function ClientDrawer({ client, projects, onClose, onOpenProjet, 
         <div className="gt-drawer-head">
           <div style={{ flex: 1 }}>
             {editing ? (
-              <div className="gt-editbox">
+              <div className="gt-renamebox">
                 <input value={codeDraft} onChange={(e) => setCodeDraft(e.target.value)} placeholder="Code client" className="gt-mono" />
                 <input value={nomDraft} onChange={(e) => setNomDraft(e.target.value)} placeholder="Nom du client" autoFocus onKeyDown={(e) => e.key === "Enter" && submitEdit()} />
                 <button className="gt-iconbtn" onClick={submitEdit}>
