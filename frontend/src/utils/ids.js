@@ -4,9 +4,10 @@ const nextSeq = (list) => list.reduce((max, it) => Math.max(max, parseInt(String
 export const nextEmployeeId = (list) => `EMP-${String(nextSeq(list)).padStart(3, "0")}`;
 export const nextMaterielId = (list) => `MAT-${String(nextSeq(list)).padStart(3, "0")}`;
 export const nextVehiculeId = (list) => `VEH-${String(nextSeq(list)).padStart(3, "0")}`;
-// Scoped to one employee's own conges list (not global), matched by employeeId + congeId
-// together everywhere it's read, so a per-employee counter is safe and collision-free.
-export const nextCongeId = (conges) => `CNG-${String((conges || []).length + 1).padStart(3, "0")}`;
+// Conge.id is a real, globally unique primary key on the server (not scoped per employee), so
+// the employee id has to be part of it — a bare per-employee counter would let two different
+// employees' first congé both mint "CNG-001" and collide once persisted.
+export const nextCongeId = (employeeId, conges) => `CNG-${employeeId}-${String((conges || []).length + 1).padStart(3, "0")}`;
 
 export const nextPrestationId = (projets) => {
   let max = 0;

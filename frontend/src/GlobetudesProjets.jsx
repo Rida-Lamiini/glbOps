@@ -489,50 +489,109 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const editMateriel = (id, patch) => saveResource("materiel", id, patch);
   const addMaterielMaintenance = (id, entry) => addMaintenance("materiel", id, entry);
 
-  const addMaterielAttachments = (id, newAttachments) => {
-    if (newAttachments.length === 0) return;
-    setMateriels((prev) => prev.map((m) => (m.id === id ? { ...m, attachments: [...(m.attachments || []), ...newAttachments] } : m)));
-  };
-
-  const removeMaterielAttachment = (id, index) => {
-    setMateriels((prev) => prev.map((m) => (m.id === id ? { ...m, attachments: m.attachments.filter((_, i) => i !== index) } : m)));
-  };
-
   const createVehicule = (nom) => createResource("vehicule", nom);
   const renameVehicule = (id, nom) => saveResource("vehicule", id, { nom });
   const editVehicule = (id, patch) => saveResource("vehicule", id, patch);
   const addVehiculeMaintenance = (id, entry) => addMaintenance("vehicule", id, entry);
 
-  const addVehiculeAttachments = (id, newAttachments) => {
-    if (newAttachments.length === 0) return;
-    setVehicules((prev) => prev.map((v) => (v.id === id ? { ...v, attachments: [...(v.attachments || []), ...newAttachments] } : v)));
-  };
-
-  const removeVehiculeAttachment = (id, index) => {
-    setVehicules((prev) => prev.map((v) => (v.id === id ? { ...v, attachments: v.attachments.filter((_, i) => i !== index) } : v)));
-  };
-
-  const createEmployee = ({ nom, role, poste }) => {
-    setEmployees((prev) => [...prev, { id: nextEmployeeId(prev), nom, ...blankEmployee({ role, poste }) }]);
-  };
-
-  const renameEmployee = (id, nom) => {
-    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, nom } : e)));
-  };
-
-  const editEmployee = (id, patch) => {
-    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-  };
-
-  const addConge = (employeeId, conge) => {
-    setEmployees((prev) =>
-      prev.map((e) =>
-        e.id === employeeId ? { ...e, conges: [...(e.conges || []), { ...conge, id: nextCongeId(e.conges || []) }] } : e
+  // Same upload/replace-on-save pattern as projet and prestation attachments (uploadAttachment
+  // is defined above, shared across all three) — resources were the one attachment surface left
+  // local-only.
+  const replaceResourceAttachment = (kind, resourceId, item, saved) => {
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    setList((prev) =>
+      prev.map((r) =>
+        r.id !== resourceId ? r : { ...r, attachments: (r.attachments || []).flatMap((a) => (a === item ? (saved ? [saved] : []) : [a])) }
       )
     );
   };
 
+  const addResourceAttachments = (kind, id, newItems) => {
+    if (newItems.length === 0) return;
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    setList((prev) => prev.map((r) => (r.id === id ? { ...r, attachments: [...(r.attachments || []), ...newItems] } : r)));
+    newItems.forEach((item) => {
+      uploadAttachment("resource", id, item)
+        .then((saved) => replaceResourceAttachment(kind, id, item, saved))
+        .catch(() => {
+          replaceResourceAttachment(kind, id, item, null);
+          notifyError("Une pièce jointe n'a pas pu être téléversée.");
+        });
+    });
+  };
+
+  const removeResourceAttachment = (kind, id, index) => {
+    const setList = kind === "vehicule" ? setVehicules : setMateriels;
+    const list = kind === "vehicule" ? vehicules : materiels;
+    const removed = list.find((r) => r.id === id)?.attachments?.[index];
+    setList((prev) => prev.map((r) => (r.id === id ? { ...r, attachments: r.attachments.filter((_, i) => i !== index) } : r)));
+    if (removed?.id) apiDelete(`/attachments/${removed.id}/`).catch(() => notifyError("La pièce jointe n'a pas pu être supprimée."));
+  };
+
+  const addMaterielAttachments = (id, newAttachments) => addResourceAttachments("materiel", id, newAttachments);
+  const removeMaterielAttachment = (id, index) => removeResourceAttachment("materiel", id, index);
+  const addVehiculeAttachments = (id, newAttachments) => addResourceAttachments("vehicule", id, newAttachments);
+  const removeVehiculeAttachment = (id, index) => removeResourceAttachment("vehicule", id, index);
+
+  const createEmployee = ({ nom, role, poste }) => {
+    const id = nextEmployeeId(employees);
+    setEmployees((prev) => [...prev, { id, nom, ...blankEmployee({ role, poste }) }]);
+    apiPost("/employees/", { id, nom, role, poste: poste || "" }).catch(() => {
+      setEmployees((prev) => prev.filter((e) => e.id !== id));
+      notifyError("L'employé n'a pas pu être enregistré.");
+    });
+  };
+
+  const employeePayload = (patch) => {
+    const out = {};
+    const plain = { nom: "nom", role: "role", poste: "poste", telephone: "telephone", email: "email", status: "status", notes: "notes" };
+    for (const [k, v] of Object.entries(patch)) {
+      if (plain[k]) out[plain[k]] = v ?? "";
+      else if (k === "dateEmbauche") out.date_embauche = frToISO(v) || null;
+    }
+    return out;
+  };
+
+  const saveEmployeePatch = (id, patch) => {
+    const before = employees.find((e) => e.id === id);
+    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+    const payload = employeePayload(patch);
+    if (!before || !Object.keys(payload).length) return;
+    apiPatch(`/employees/${id}/`, payload).catch(() => {
+      setEmployees((prev) => prev.map((e) => (e.id === id ? before : e)));
+      notifyError("La fiche employé n'a pas pu être modifiée.");
+    });
+  };
+
+  const renameEmployee = (id, nom) => saveEmployeePatch(id, { nom });
+  const editEmployee = (id, patch) => saveEmployeePatch(id, patch);
+
+  const addConge = (employeeId, conge) => {
+    const employee = employees.find((e) => e.id === employeeId);
+    const id = nextCongeId(employeeId, employee?.conges || []);
+    const saved = { ...conge, id };
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === employeeId ? { ...e, conges: [...(e.conges || []), saved] } : e))
+    );
+    apiPost("/conges/", {
+      id,
+      employee: employeeId,
+      type: conge.type,
+      date_debut: frToISO(conge.dateDebut),
+      date_fin: frToISO(conge.dateFin),
+      statut: conge.statut,
+      motif: conge.motif || "",
+    }).catch(() => {
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === employeeId ? { ...e, conges: e.conges.filter((c) => c.id !== id) } : e))
+      );
+      notifyError("La demande de congé n'a pas pu être enregistrée.");
+    });
+  };
+
   const updateCongeStatut = (employeeId, congeId, statut) => {
+    const employee = employees.find((e) => e.id === employeeId);
+    const before = employee?.conges.find((c) => c.id === congeId)?.statut;
     setEmployees((prev) =>
       prev.map((e) =>
         e.id === employeeId
@@ -540,12 +599,29 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
           : e
       )
     );
+    apiPatch(`/conges/${congeId}/`, { statut }).catch(() => {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.id === employeeId ? { ...e, conges: e.conges.map((c) => (c.id === congeId ? { ...c, statut: before } : c)) } : e
+        )
+      );
+      notifyError("Le statut du congé n'a pas pu être modifié.");
+    });
   };
 
   const removeConge = (employeeId, congeId) => {
+    const employee = employees.find((e) => e.id === employeeId);
+    const removed = employee?.conges.find((c) => c.id === congeId);
     setEmployees((prev) =>
       prev.map((e) => (e.id === employeeId ? { ...e, conges: e.conges.filter((c) => c.id !== congeId) } : e))
     );
+    apiDelete(`/conges/${congeId}/`).catch(() => {
+      if (!removed) return;
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === employeeId ? { ...e, conges: [...e.conges, removed] } : e))
+      );
+      notifyError("Le congé n'a pas pu être supprimé.");
+    });
   };
 
   const createProjet = async ({ clientId, newClientNom, refFonciere, situation, nature, lat, lng, reuseLotIds = [] }) => {
