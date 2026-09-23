@@ -57,10 +57,13 @@ backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, create
   `projets/clients/employees/…` in local state, **optimistic writes with rollback** through `apiPost/apiPatch/apiDelete`
   (`lib/api.js`, JWT in memory + refresh token in localStorage). Server JSON → UI shape in `lib/apiAdapters.js`.
   Persisted: projet create/edit/notes/boundary, prestation create/patch (stage, dates, agents, tâches, history),
-  attachments (real upload), cadastre lots. Resources (matériel/véhicule: create, edit, maintenance log, vehicle papers) are persisted through `saveResource`/`createResource`; their attachments, employees/congés and client edits are still local-only. Vehicle papers (assurance, visite technique, vignette, kilométrage/entretien, carburant, conducteur) live on `resources.Resource`; due-date logic is in `frontend/src/utils/vehicule.js` and feeds the fleet cards, the Papiers tab, the bell, the Vue d'ensemble alerts and the affectation warning.
-- Views: `OverviewDashboard`, projets list + `KanbanBoard` (flow strip), `MapView` (main Carte: status pins, projet
-  polygons, "Lots cadastraux" layer), `CalendarView`, `AnalyticsView` (shadcn Card/Tabs/Chart), `ClientsView`,
-  resource/employee lists, `cadastre/CadastreTool` (PDF → OCR → review → lot), role apps (`AgentChantierApp`, …).
+  attachments (real upload), cadastre lots, client edits, employee edits/creation, congé CRUD, resource (matériel/véhicule) attachments — all round-trip through the real API now, none of it is local-only state. Vehicle papers (assurance, visite technique, vignette, kilométrage/entretien, carburant, conducteur) live on `resources.Resource`; due-date logic is in `frontend/src/utils/vehicule.js` and feeds the fleet cards, the Papiers tab, the bell, the Vue d'ensemble alerts and the affectation warning.
+- Views: `OverviewDashboard` (KPI tiles link into the filtered Projets list via `onGo`), projets list +
+  `KanbanBoard` (flow strip; "Sélection multiple" lets Dispatcher/Directrice bulk-add one agent chantier to every
+  selected project's prestation(s) in the Affectation terrain / Exécution columns), `MapView` (main Carte: status
+  pins, projet polygons, "Lots cadastraux" layer), `CalendarView`, `AnalyticsView` (shadcn Card/Tabs/Chart),
+  `ClientsView`, resource/employee lists (`EmployeeListView` has a "Congés" month-calendar mode alongside "Liste",
+  via `CongeCalendar.jsx`), `cadastre/CadastreTool` (PDF → OCR → review → lot), role apps (`AgentChantierApp`, …).
 - Drawers use `DrawerTabs`; tables use `ResponsiveTableCard` (cards under ~720 px). Nav is defined once in `constants/nav.js`.
 - Map polygon precedence: drawn `boundary` → saved lot polygon of that projet → deterministic approximate outline.
 
@@ -77,7 +80,7 @@ backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, create
 
 ## Not done yet / ideas
 
-- Persist resource attachments; per-lot history entry on the prestation; DELETE/reload of attachments not UI-tested.
+- Per-lot history entry on the prestation.
 - Remove demo passwords before any deployment; schedule DB backups.
 
 ## PDF reports
@@ -95,4 +98,40 @@ Each matériel/véhicule has a QR label (`utils/labels.js`, A4 sheet of 3x7 labe
 
 ## Excel import of lots
 
-`cadastre/excel_import.py` reads a workbook with a "Lots" sheet (one row per lot) and a "Bornes" sheet (one row per borne, keyed by titre foncier); header spellings are matched loosely (accents, case, units). `POST /api/cadastre/lots/parse-excel/` only reads and returns each lot with `errors` (block it) / `warnings` and the surface recomputed from the bornes; `GET /api/cadastre/lots/excel-template/` serves the blank workbook (two examples + instructions, and it parses back with no error — tested). The UI (`cadastre/ExcelImport.jsx`, button "Importer un fichier Excel" on the Cadastre page) shows a review table, then saves the ticked lots one by one through the normal `POST /api/cadastre/lots/` (so status = brouillon and the surface is recomputed as for a PDF). Needs `openpyxl` (in requirements.txt). Not done: exporting lots to Excel.
+`cadastre/excel_import.py` reads a workbook with a "Lots" sheet (one row per lot) and a "Bornes" sheet (one row per borne, keyed by titre foncier); header spellings are matched loosely (accents, case, units). `POST /api/cadastre/lots/parse-excel/` only reads and returns each lot with `errors` (block it) / `warnings` and the surface recomputed from the bornes; `GET /api/cadastre/lots/excel-template/` serves the blank workbook (two examples + instructions, and it parses back with no error — tested). The UI (`cadastre/ExcelImport.jsx`, button "Importer un fichier Excel" on the Cadastre page) shows a review table, then saves the ticked lots one by one through the normal `POST /api/cadastre/lots/` (so status = brouillon and the surface is recomputed as for a PDF). Needs `openpyxl` (in requirements.txt). `GET /api/cadastre/lots/export-excel/` (button "Exporter en Excel" next to the lot search) is the reverse: every current lot + its bornes, same two-sheet shape, so it round-trips back through the importer.
+
+## Comments: @mentions and congé calendar
+
+`CommentsPanel.jsx` has an `@` autocomplete over the `employees` list (typing `@` opens a matching-name
+dropdown; picking one inserts `@Full Name `) and highlights `@Full Name` mentions when rendering a comment —
+matched as a literal substring, no persisted mentions field. `utils/notifications.js`'s `isMentioned()` reuses the
+same rule to surface a "Mentionné par …" bell notification to any role whose name appears in a comment they
+didn't write and haven't already read (`comment.isRead`, the same per-viewer field the read-receipts feature added).
+`EmployeeListView` has a "Congés" mode (`CongeCalendar.jsx`) alongside "Liste": a month grid of who's on
+congé (approuvé/en attente) each day, built from `employees[].conges` the same way the list view's "En congé
+aujourd'hui" count is.
+
+## Client code (code interne)
+
+`NewClientModal` lets you type a client's `id`/"code interne" instead of auto-generating `CLI-XXXX`
+(`nextClientId` in `utils/ids.js` — note it's `clients.length`-based, not max-suffix-based like the other
+`next*Id` helpers, so it can collide after a deletion). `ClientDrawer`'s pencil icon lets you rename it later
+too, but only while the client has no projets yet: `Client.id` is a real FK target (`projets.client_id`,
+`on_delete=PROTECT`), and a plain `instance.save()` after mutating a Django primary key doesn't rename the
+row — it silently inserts a second one under the new id and leaves the old row behind. `ClientViewSet.update`
+(`backend/clients/views.py`) handles this explicitly: rejects the rename with a 400 if `instance.projets.exists()`
+or the new id is taken, otherwise renames via `Client.objects.filter(pk=old).update(id=new)` (a real UPDATE,
+not the instance-mutation path) before applying the rest of the patch. `editClient` in `GlobetudesProjets.jsx`
+mirrors this on the frontend: the optimistic update moves the client to its new id (not just a `code` display
+field), and keeps `openClientId` following it so the drawer doesn't close mid-edit; on a 400 it rolls back to
+the old id and surfaces the server's actual reason. (Historical bug, fixed: the rename input used a
+`gt-editbox` class that had no CSS anywhere, so it rendered with no border/background — visually
+indistinguishable from plain text, though the input itself worked. Renamed to `gt-renamebox`, the class the
+same pattern already uses correctly in `EmployeeDrawer`/`ResourceDrawer`.)
+
+## Reminders
+
+`buildNotifications` (Agent Chantier branch) pushes a "Visite demain" reminder for any prestation still at stage
+`affectation` (visite planned, not yet started) whose `dateDebutExec` is tomorrow — `utils/dates.js`'s `isTomorrow()`
+compares calendar day only, so a trailing time-of-day on that field doesn't throw off the match. Same derived,
+no-separate-log pattern as the rest of the bell (congé/étalonnage/véhicule alerts, non-conformités, @mentions).
