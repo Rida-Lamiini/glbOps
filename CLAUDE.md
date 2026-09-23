@@ -24,7 +24,7 @@ docker compose -f backend/docker-compose.yml up -d        # db (postgis) + ocr
 backend/venv/Scripts/python.exe backend/manage.py migrate
 backend/venv/Scripts/python.exe backend/manage.py runserver   # :8000
 npm --prefix frontend run dev                                 # :5173
-(cd backend && venv/Scripts/python.exe manage.py test)       # 56 tests, creates a throw-away DB; must run from backend/ (from the root it finds 0)
+(cd backend && venv/Scripts/python.exe manage.py test)       # 65 tests, creates a throw-away DB; must run from backend/ (from the root it finds 0)
 ```
 
 `.claude/launch.json` defines `backend` and `frontend` for the preview tool. Demo users come from `seed_demo`
@@ -82,7 +82,6 @@ npm --prefix frontend run dev                                 # :5173
 
 ## Not done yet / ideas
 
-- Per-lot history entry on the prestation.
 - Remove demo passwords before any deployment; schedule DB backups.
 
 ## PDF reports
@@ -105,10 +104,13 @@ Each matériel/véhicule has a QR label (`utils/labels.js`, A4 sheet of 3x7 labe
 ## Comments: @mentions and congé calendar
 
 `CommentsPanel.jsx` has an `@` autocomplete over the `employees` list (typing `@` opens a matching-name
-dropdown; picking one inserts `@Full Name `) and highlights `@Full Name` mentions when rendering a comment —
-matched as a literal substring, no persisted mentions field. `utils/notifications.js`'s `isMentioned()` reuses the
-same rule to surface a "Mentionné par …" bell notification to any role whose name appears in a comment they
-didn't write and haven't already read (`comment.isRead`, the same per-viewer field the read-receipts feature added).
+dropdown; picking one inserts `@Full Name `) and highlights `@Full Name` mentions when rendering a comment.
+Mentions are persisted: `Comment.mentions` (M2M → Employee) is resolved server-side from the text on create/edit by
+`core/mentions.py` (`@nom` must not run on into more letters; longest name wins, so "@Salma Idrissi" doesn't also
+tag "Salma"), and the API returns them as current `{id, nom}` — so a mention survives the employee's rename.
+`utils/notifications.js`'s `isMentioned()` checks that list (falling back to the text for a comment not yet saved)
+to surface a "Mentionné par …" bell notification for a comment you didn't write and haven't already read
+(`comment.isRead`, the same per-viewer field the read-receipts feature added).
 `EmployeeListView` has a "Congés" mode (`CongeCalendar.jsx`) alongside "Liste": a month grid of who's on
 congé (approuvé/en attente) each day, built from `employees[].conges` the same way the list view's "En congé
 aujourd'hui" count is.

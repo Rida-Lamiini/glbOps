@@ -50,6 +50,10 @@ class Comment(models.Model):
     # need attention versus which have already been seen by the team.
     read_by = models.ManyToManyField("auth.User", related_name="comments_read", blank=True)
 
+    # Resolved from "@Full Name" in the text when the comment is saved (core.mentions), so a
+    # mention survives the employee being renamed later.
+    mentions = models.ManyToManyField("employees.Employee", related_name="mentioned_in", blank=True)
+
     class Meta:
         ordering = ["created_at"]
 

@@ -305,7 +305,15 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
         }
         if (patch.comments) {
           for (const c of patch.comments.slice((before.comments || []).length)) {
-            await apiPost("/comments/", { content_type_model_input: "prestation", object_id: before.id, text: c.text });
+            // Swap the optimistic entry for the server's: it brings the id (needed to mark it
+            // read) and the mentions the server resolved from the text.
+            const saved = adaptComment(await apiPost("/comments/", { content_type_model_input: "prestation", object_id: before.id, text: c.text }));
+            setProjets((prev) =>
+              prev.map((pr) => pr.id !== projetId ? pr : {
+                ...pr,
+                prestations: pr.prestations.map((p) => (p.id !== before.id ? p : { ...p, comments: (p.comments || []).map((x) => (x === c ? saved : x)) })),
+              })
+            );
           }
         }
         if (patch.attachments) {

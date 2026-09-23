@@ -2,6 +2,9 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 
+from employees.models import Employee
+
+from .mentions import find_mentioned
 from .models import Attachment, Comment
 
 ATTACHABLE_MODELS = {
@@ -71,13 +74,14 @@ class CommentSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
     readers = serializers.SerializerMethodField()
+    mentions = serializers.SerializerMethodField()
     content_type_model_input = serializers.ChoiceField(
         choices=list(ATTACHABLE_MODELS), write_only=True,
     )
 
     class Meta:
         model = Comment
-        fields = ["id", "text", "author", "created_at", "is_read", "readers", "content_type_model_input", "object_id"]
+        fields = ["id", "text", "author", "created_at", "is_read", "readers", "mentions", "content_type_model_input", "object_id"]
         read_only_fields = ["created_at"]
 
     def _display_name(self, user):
@@ -100,8 +104,24 @@ class CommentSerializer(serializers.ModelSerializer):
         # not just that it was posted.
         return [self._display_name(u) for u in instance.read_by.all()]
 
+    def get_mentions(self, instance):
+        # Current names, not the text as typed — a renamed employee is still found by the bell.
+        return [{"id": e.id, "nom": e.nom} for e in instance.mentions.all()]
+
+    def _resolve_mentions(self, comment):
+        comment.mentions.set(find_mentioned(comment.text, Employee.objects.all()))
+
     def create(self, validated_data):
         model_key = validated_data.pop("content_type_model_input")
         app_label, model = ATTACHABLE_MODELS[model_key]
         validated_data["content_type"] = ContentType.objects.get_by_natural_key(app_label, model)
-        return super().create(validated_data)
+        comment = super().create(validated_data)
+        self._resolve_mentions(comment)
+        return comment
+
+    def update(self, instance, validated_data):
+        validated_data.pop("content_type_model_input", None)
+        comment = super().update(instance, validated_data)
+        if "text" in validated_data:
+            self._resolve_mentions(comment)
+        return comment

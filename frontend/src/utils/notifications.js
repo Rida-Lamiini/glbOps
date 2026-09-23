@@ -16,10 +16,11 @@ export function rejectionReason(prestation) {
 
 const clientLabel = (p, getClient) => getClient(p.projet.clientId)?.nom || p.projet.id;
 
-// "@Full Name" is matched as a literal substring of the comment text — every valid target is a
-// known employee/user name, so there's no need for a parsing grammar, and it sidesteps the
-// ambiguity of names containing spaces.
-export const isMentioned = (text, name) => !!name && (text || "").includes(`@${name}`);
+// A saved comment carries the mentions the server resolved (current employee names, so they
+// survive a rename). A comment still on its way to the server falls back to "@Full Name" in
+// its text.
+export const isMentioned = (comment, name) =>
+  !!name && (Array.isArray(comment.mentions) ? comment.mentions.includes(name) : (comment.text || "").includes(`@${name}`));
 
 // Notifications are always derived from current state — no separate log to keep in sync, no
 // read/unread bookkeeping. Each item carries whichever *Id lets the header wire an onOpen
@@ -33,7 +34,7 @@ export function buildNotifications(currentUser, { tasks = [], employees = [], ma
   // that you haven't already read (server-computed per-viewer via c.isRead) surfaces here.
   tasks.forEach((p) => {
     (p.comments || []).forEach((c) => {
-      if (c.author !== me && !c.isRead && isMentioned(c.text, me)) {
+      if (c.author !== me && !c.isRead && isMentioned(c, me)) {
         notes.push({
           id: `mention-${c.id ?? `${p.id}-${c.date}`}`,
           kind: "info",

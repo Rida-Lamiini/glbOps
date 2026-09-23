@@ -118,6 +118,8 @@ export const adaptComment = (c) => ({
   date: isoToFR((c.created_at || "").slice(0, 10)),
   isRead: !!c.is_read,
   readers: c.readers || [],
+  // Current names of the employees the server resolved from "@Full Name" in the text.
+  mentions: (c.mentions || []).map((m) => m.nom),
 });
 
 export const adaptPrestation = (p, employeesById) => ({
