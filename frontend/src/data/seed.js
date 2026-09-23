@@ -29,6 +29,7 @@ export const blankPrestation = (overrides = {}) => ({
   reprogramme: false,
   attachments: [],
   history: [{ date: today(), label: "Demande reçue" }],
+  comments: [],
   ...overrides,
 });
 

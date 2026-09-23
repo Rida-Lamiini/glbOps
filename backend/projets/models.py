@@ -1,7 +1,7 @@
 from django.contrib.contenttypes.fields import GenericRelation
 from django.db import models
 
-from core.models import Attachment
+from core.models import Attachment, Comment
 
 from clients.models import Client
 from employees.models import Employee
@@ -47,6 +47,7 @@ class Projet(models.Model):
 class Prestation(models.Model):
     id = models.CharField(max_length=30, primary_key=True)
     attachments = GenericRelation(Attachment)
+    comments = GenericRelation(Comment)
     projet = models.ForeignKey(Projet, related_name="prestations", on_delete=models.CASCADE)
 
     nature_demandee = models.CharField(max_length=300, blank=True)

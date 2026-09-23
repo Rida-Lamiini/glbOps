@@ -16,6 +16,7 @@ import {
   Paperclip,
   FileText,
   Plus,
+  MessageSquare,
 } from "lucide-react";
 import { STAGES, NATURES, LIVRABLE_TYPES, RESOURCE_STATUSES, NON_CONFORMITY_SOURCES } from "../constants";
 import { today, activeCongeOn, nextBusinessDayFR, splitDateTimeFR, nowTime } from "../utils/dates";
@@ -28,11 +29,12 @@ import { notifySuccess, notifyError } from "../utils/notify";
 import PipelineStepper from "./PipelineStepper";
 import HistoriqueTimeline from "./HistoriqueTimeline";
 import AttachmentsPanel from "./AttachmentsPanel";
+import CommentsPanel from "./CommentsPanel";
 import { backdropVariants, drawerVariants } from "../lib/motionVariants";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateTimeField } from "@/components/ui/datetime-field";
 
-export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache }) {
+export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache, onMarkCommentRead }) {
   const [natureDemandee, setNatureDemandee] = useState(prestation.natureDemandee);
   const [dateDebutDemande, setDateDebutDemande] = useState(prestation.dateDebutDemande);
   const [dateFinDemande, setDateFinDemande] = useState(prestation.dateFinDemande);
@@ -195,6 +197,11 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
       { attachments: [...prestation.attachments, ...newItems] },
       `${label ? `${label} — ` : ""}${newItems.length} pièce${newItems.length > 1 ? "s" : ""} jointe${newItems.length > 1 ? "s" : ""} ajoutée${newItems.length > 1 ? "s" : ""} : ${newItems.map(attachmentDisplayName).join(", ")}`
     );
+  };
+
+  const handleAddComment = (text) => {
+    const comment = { text, author: currentUser.name || currentUser.role, date: today() };
+    onUpdate(prestation.id, { comments: [...(prestation.comments || []), comment] });
   };
 
   const removeAttachment = (index) => {
@@ -909,6 +916,19 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
               onRemove={removeAttachment}
               currentUser={currentUser}
               isOffice={isOffice}
+            />
+          </section>
+
+          <section className="gt-section">
+            <h4>
+              <MessageSquare size={13} strokeWidth={2.2} /> Commentaires ({(prestation.comments || []).length})
+            </h4>
+            <CommentsPanel
+              comments={prestation.comments}
+              onAdd={handleAddComment}
+              onMarkRead={onMarkCommentRead ? (commentId) => onMarkCommentRead(prestation.id, commentId) : undefined}
+              currentUser={currentUser}
+              employees={employees}
             />
           </section>
 

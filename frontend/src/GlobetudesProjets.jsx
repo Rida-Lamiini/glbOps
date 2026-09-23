@@ -24,7 +24,7 @@ import { downloadFile, buildGeoJSON, buildKML } from "./utils/geo";
 import { blankPrestation, blankResource, blankEmployee, blankClient } from "./data/seed";
 import { apiGet, apiPost, apiPatch, apiDelete } from "./lib/api";
 import { reuseLot } from "./components/cadastre/api";
-import { adaptAttachment } from "./lib/apiAdapters";
+import { adaptAttachment, adaptComment } from "./lib/apiAdapters";
 import { notifyError } from "./utils/notify";
 import { adaptClient, adaptEmployee, adaptProjet, adaptResource } from "./lib/apiAdapters";
 
@@ -303,6 +303,11 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             await apiPost("/history/", { prestation: before.id, date: h.date, label: h.label, author: h.author || currentUser?.name || "" });
           }
         }
+        if (patch.comments) {
+          for (const c of patch.comments.slice((before.comments || []).length)) {
+            await apiPost("/comments/", { content_type_model_input: "prestation", object_id: before.id, text: c.text });
+          }
+        }
         if (patch.attachments) {
           const kept = new Set(patch.attachments.map((a) => a.id).filter(Boolean));
           for (const gone of (before.attachments || []).filter((a) => a.id && !kept.has(a.id))) await apiDelete(`/attachments/${gone.id}/`);
@@ -351,6 +356,32 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   };
 
   const findProjetOfPrestation = (prestationId) => projets.find((pr) => pr.prestations.some((p) => p.id === prestationId));
+
+  // Marks one comment read by the current user — a direct call to its own endpoint (not part
+  // of the prestation patch flow), so the author can see who has actually seen their note.
+  const markCommentRead = async (prestationId, commentId) => {
+    const projetId = findProjetOfPrestation(prestationId)?.id;
+    if (!projetId) return;
+    try {
+      const updated = adaptComment(await apiPost(`/comments/${commentId}/mark_read/`, {}));
+      setProjets((prev) =>
+        prev.map((pr) =>
+          pr.id !== projetId
+            ? pr
+            : {
+                ...pr,
+                prestations: pr.prestations.map((p) =>
+                  p.id !== prestationId
+                    ? p
+                    : { ...p, comments: (p.comments || []).map((c) => (c.id === commentId ? updated : c)) }
+                ),
+              }
+        )
+      );
+    } catch {
+      notifyError("Impossible de marquer ce commentaire comme lu.");
+    }
+  };
 
   // Writes go into local state first (the UI stays instant), then to the API. If the server
   // refuses, the local change is rolled back and the user is told, so what is on screen never
@@ -961,6 +992,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             const projetId = findProjetOfPrestation(prestationId)?.id;
             if (projetId) updatePrestation(projetId, prestationId, patch);
           }}
+          onMarkCommentRead={markCommentRead}
         />
       </div>
     );
@@ -989,6 +1021,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             const projetId = findProjetOfPrestation(prestationId)?.id;
             if (projetId) updatePrestation(projetId, prestationId, patch);
           }}
+          onMarkCommentRead={markCommentRead}
         />
       </div>
     );
@@ -1358,6 +1391,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             allProjets={projets}
             onClose={() => setOpenPrestationId(null)}
             onUpdate={(id, patch) => updatePrestation(openPrestationCtx.projet.id, id, patch)}
+            onMarkCommentRead={markCommentRead}
             onOpenMateriel={(id) => {
               setOpenPrestationId(null);
               setOpenMaterielId(id);

@@ -386,6 +386,35 @@
   .gt-attach-remove { opacity: 1; }
 }
 
+.gt-comments { display: flex; flex-direction: column; gap: 10px; }
+.gt-comments-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.gt-comment { border: 1px solid var(--line); background: #fff; padding: 8px 10px; }
+.gt-comment-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+.gt-comment-author { font-size: 11.5px; font-weight: 600; color: var(--ink); }
+.gt-comment-date { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+.gt-comment-text { font-size: 12.5px; color: var(--ink); white-space: pre-wrap; line-height: 1.4; }
+.gt-comment-foot { margin-top: 5px; }
+.gt-comment-readers { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--muted); }
+.gt-comment-markread { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 10.5px; font-family: var(--font-body); padding: 3px 8px; cursor: pointer; }
+.gt-comment-markread:hover { border-color: var(--accent); color: var(--accent); }
+.gt-comments-add { display: flex; flex-direction: column; gap: 6px; position: relative; }
+.gt-comments-add textarea { border: 1px solid var(--line); background: #fff; padding: 8px 9px; font-size: 12.5px; font-family: var(--font-body); color: var(--ink); resize: vertical; }
+.gt-comments-add .gt-btn { align-self: flex-end; margin-top: 0; }
+.gt-comment-mention { color: var(--accent); font-weight: 600; }
+
+.gt-comments-mentions {
+  display: flex; flex-direction: column; gap: 1px;
+  border: 1px solid var(--line); background: #fff;
+  box-shadow: var(--shadow-card); max-height: 160px; overflow-y: auto;
+}
+.gt-comments-mentions button {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  border: none; background: none; text-align: left; padding: 7px 10px;
+  font-size: 12px; font-family: var(--font-body); color: var(--ink); cursor: pointer;
+}
+.gt-comments-mentions button:hover { background: var(--surface-muted); }
+.gt-comments-mentions button span { font-size: 10.5px; color: var(--muted); }
+
 .gt-cal-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 10px; background: var(--canvas); }
 .gt-cal-toolbar { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 10px 14px; }
 .gt-cal-monthlabel { font-size: 14px; font-weight: 600; text-transform: capitalize; min-width: 160px; text-align: center; }

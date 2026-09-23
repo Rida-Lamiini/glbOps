@@ -1,13 +1,13 @@
 from django.core.cache import cache
 from rest_framework import status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import ocr
-from .models import Attachment
-from .serializers import AttachmentSerializer, UserSerializer
+from .models import Attachment, Comment
+from .serializers import AttachmentSerializer, CommentSerializer, UserSerializer
 
 
 @api_view(['GET'])
@@ -74,3 +74,18 @@ class AttachmentViewSet(viewsets.ModelViewSet):
         if instance.file and ocr.is_ocr_eligible(instance.file.name):
             instance.ocr_text = ocr.extract_text(instance.file)
             instance.save(update_fields=["ocr_text"])
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    queryset = Comment.objects.select_related("content_type", "created_by").all()
+    serializer_class = CommentSerializer
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(created_by=user)
+
+    @action(detail=True, methods=["post"])
+    def mark_read(self, request, pk=None):
+        comment = self.get_object()
+        comment.read_by.add(request.user)
+        return Response(self.get_serializer(comment).data)

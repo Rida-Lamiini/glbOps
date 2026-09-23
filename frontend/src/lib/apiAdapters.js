@@ -110,6 +110,16 @@ export const adaptAttachment = (a) => ({
   date: isoToFR((a.uploaded_at || "").slice(0, 10)),
 });
 
+// Server comment -> the shape CommentsPanel renders (text/author/date/read receipts).
+export const adaptComment = (c) => ({
+  id: c.id,
+  text: c.text,
+  author: c.author || "",
+  date: isoToFR((c.created_at || "").slice(0, 10)),
+  isRead: !!c.is_read,
+  readers: c.readers || [],
+});
+
 export const adaptPrestation = (p, employeesById) => ({
   id: p.id,
   natureDemandee: p.nature_demandee || "",
@@ -140,6 +150,7 @@ export const adaptPrestation = (p, employeesById) => ({
   nonConformiteSource: p.non_conformite_source || "",
   attachments: (p.attachments || []).map(adaptAttachment),
   history: (p.history || []).map(adaptHistoryEntry),
+  comments: (p.comments || []).map(adaptComment),
 });
 
 export const adaptProjet = (pr, employeesById) => ({

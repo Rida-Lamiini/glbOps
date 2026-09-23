@@ -5,6 +5,7 @@ from . import views
 
 router = DefaultRouter()
 router.register('attachments', views.AttachmentViewSet)
+router.register('comments', views.CommentViewSet)
 
 urlpatterns = [
     path('health/', views.health, name='health'),

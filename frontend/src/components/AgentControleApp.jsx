@@ -106,7 +106,7 @@ function ControleAgenda({ tasks, getClient, onOpen }) {
   );
 }
 
-export default function AgentControleApp({ currentUser, tasks, materiels, vehicules, employees, allProjets, getClient, onUpdatePrestation }) {
+export default function AgentControleApp({ currentUser, tasks, materiels, vehicules, employees, allProjets, getClient, onUpdatePrestation, onMarkCommentRead }) {
   const [tab, setTab] = useState("kanban");
   const [openId, setOpenId] = useState(null);
 
@@ -213,6 +213,7 @@ export default function AgentControleApp({ currentUser, tasks, materiels, vehicu
               allProjets={allProjets}
               onClose={() => setOpenId(null)}
               onUpdate={onUpdatePrestation}
+              onMarkCommentRead={onMarkCommentRead}
               currentUser={currentUser}
             />
           );

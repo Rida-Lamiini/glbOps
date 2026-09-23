@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from rest_framework import serializers
 
-from .models import Attachment
+from .models import Attachment, Comment
 
 ATTACHABLE_MODELS = {
     "projet": ("projets", "projet"),
@@ -59,6 +59,46 @@ class AttachmentSerializer(serializers.ModelSerializer):
 
     def get_content_type_model(self, instance):
         return instance.content_type.model
+
+    def create(self, validated_data):
+        model_key = validated_data.pop("content_type_model_input")
+        app_label, model = ATTACHABLE_MODELS[model_key]
+        validated_data["content_type"] = ContentType.objects.get_by_natural_key(app_label, model)
+        return super().create(validated_data)
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    author = serializers.SerializerMethodField()
+    is_read = serializers.SerializerMethodField()
+    readers = serializers.SerializerMethodField()
+    content_type_model_input = serializers.ChoiceField(
+        choices=list(ATTACHABLE_MODELS), write_only=True,
+    )
+
+    class Meta:
+        model = Comment
+        fields = ["id", "text", "author", "created_at", "is_read", "readers", "content_type_model_input", "object_id"]
+        read_only_fields = ["created_at"]
+
+    def _display_name(self, user):
+        employee = getattr(user, "employee", None)
+        return employee.nom if employee else (user.first_name or user.username)
+
+    def get_author(self, instance):
+        return self._display_name(instance.created_by) if instance.created_by else ""
+
+    def get_is_read(self, instance):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            return False
+        # Prefetched (list/detail reads) or not (right after creation) — works either way.
+        return any(u.pk == user.pk for u in instance.read_by.all())
+
+    def get_readers(self, instance):
+        # Who has seen this comment — so the person who wrote it can tell whether it landed,
+        # not just that it was posted.
+        return [self._display_name(u) for u in instance.read_by.all()]
 
     def create(self, validated_data):
         model_key = validated_data.pop("content_type_model_input")

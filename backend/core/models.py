@@ -30,3 +30,28 @@ class Attachment(models.Model):
 
     def __str__(self):
         return self.label or self.file.name
+
+
+class Comment(models.Model):
+    """A free-form note between people working a prestation — separate from HistoryEntry,
+    which only ever logs automated pipeline events (stage changes, task completions)."""
+
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        "auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="comments",
+    )
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.CharField(max_length=30)
+    content_object = GenericForeignKey("content_type", "object_id")
+
+    # Who has acknowledged this comment — lets everyone see, at a glance, which notes still
+    # need attention versus which have already been seen by the team.
+    read_by = models.ManyToManyField("auth.User", related_name="comments_read", blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return self.text[:50]
