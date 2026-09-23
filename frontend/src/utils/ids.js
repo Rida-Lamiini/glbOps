@@ -1,6 +1,6 @@
-export const nextClientId = (clients) => `CLI-0${240 + clients.length}`;
 // Highest numeric suffix + 1, so an id is never reused after a deletion or a gap.
 const nextSeq = (list) => list.reduce((max, it) => Math.max(max, parseInt(String(it.id).split("-").pop(), 10) || 0), 0) + 1;
+export const nextClientId = (clients) => `CLI-${String(nextSeq(clients)).padStart(4, "0")}`;
 export const nextEmployeeId = (list) => `EMP-${String(nextSeq(list)).padStart(3, "0")}`;
 export const nextMaterielId = (list) => `MAT-${String(nextSeq(list)).padStart(3, "0")}`;
 export const nextVehiculeId = (list) => `VEH-${String(nextSeq(list)).padStart(3, "0")}`;
