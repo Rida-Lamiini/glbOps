@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import ResponsiveTableCard from "./ResponsiveTableCard";
-import { Palmtree } from "lucide-react";
+import CongeCalendar from "./CongeCalendar";
+import { Palmtree, List, CalendarDays } from "lucide-react";
 import { computeEmployeeStats } from "../utils/stats";
 import { activeCongeOn, today } from "../utils/dates";
 import { EMPLOYEE_STATUSES, ROLES } from "../constants";
@@ -18,6 +19,7 @@ const initials = (nom) => nom.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slic
 export default function EmployeeListView({ items, projects, query, onOpenItem }) {
   const [filterRole, setFilterRole] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [mode, setMode] = useState("list");
   const todayKey = today();
 
   const all = useMemo(
@@ -69,13 +71,24 @@ export default function EmployeeListView({ items, projects, query, onOpenItem })
             </button>
           ))}
         </div>
-        {hasActiveFilters && (
-          <div className="rg-filters-end">
+        <div className="rg-filters-end" style={hasActiveFilters ? undefined : { marginLeft: "auto" }}>
+          {hasActiveFilters && (
             <button type="button" className="rg-reset" onClick={() => { setFilterRole("all"); setFilterStatus("all"); }}>Réinitialiser</button>
+          )}
+          <div className="gt-viewtoggle">
+            <button type="button" className={mode === "list" ? "active" : ""} onClick={() => setMode("list")}>
+              <List size={13} /> Liste
+            </button>
+            <button type="button" className={mode === "calendar" ? "active" : ""} onClick={() => setMode("calendar")}>
+              <CalendarDays size={13} /> Congés
+            </button>
           </div>
-        )}
+        </div>
       </div>
 
+      {mode === "calendar" ? (
+        <CongeCalendar employees={items} onOpenEmployee={onOpenItem} />
+      ) : (
       <ResponsiveTableCard className="rg-table" minBreakpoint={520} pxPerColumn={90}>
         <Table>
           <TableHeader>
@@ -129,6 +142,7 @@ export default function EmployeeListView({ items, projects, query, onOpenItem })
           </TableBody>
         </Table>
       </ResponsiveTableCard>
+      )}
     </>
   );
 }

@@ -1749,3 +1749,103 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
   .lg-form { padding: 28px 20px; gap: 12px; }
 }
 
+/* Congé calendar (EmployeeListView "Congés" mode) */
+
+.cg-cal {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.cg-cal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.cg-cal-month { display: flex; flex-direction: column; gap: 2px; }
+.cg-cal-month > span:first-child { font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--ink); }
+.cg-cal-monthcount { font-size: 11.5px; color: var(--muted); }
+
+.cg-cal-nav { display: flex; align-items: center; gap: 4px; }
+.cg-cal-nav button {
+  display: flex; align-items: center; justify-content: center;
+  height: 30px; width: 30px; border-radius: 8px; border: 1px solid var(--border-subtle);
+  background: #fff; color: var(--ink); cursor: pointer;
+}
+.cg-cal-nav button:hover { background: var(--paper, #f7f4ee); }
+.cg-cal-nav .cg-cal-today { width: auto; padding: 0 12px; font-size: 12px; font-weight: 500; }
+
+.cg-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  padding: 8px 8px 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.cg-cal-weekdays span { text-align: center; padding: 4px 0; }
+
+.cg-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 4px 8px 10px;
+}
+
+.cg-cal-cell {
+  min-height: 78px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 5px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cg-cal-cell.is-weekend { background: var(--paper, #f7f4ee); }
+.cg-cal-cell.is-outside { opacity: 0.35; }
+
+.cg-cal-daynum { font-size: 11.5px; color: var(--muted); padding-left: 2px; }
+.cg-cal-daynum.is-today {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 18px; width: 18px; border-radius: 999px;
+  background: var(--accent); color: #fff; font-weight: 600;
+}
+
+.cg-cal-chips { display: flex; flex-direction: column; gap: 2px; }
+
+.cg-cal-chip {
+  display: flex; align-items: center; gap: 4px;
+  border: none; border-radius: 5px; padding: 2px 5px;
+  font-size: 10.5px; text-align: left; cursor: pointer;
+  overflow: hidden; white-space: nowrap;
+}
+.cg-cal-chip.is-approuve { background: var(--status-success-bg); color: var(--status-success); }
+.cg-cal-chip.is-en_attente { background: var(--status-warning-bg); color: var(--status-warning); }
+.cg-cal-chip-initials { font-weight: 700; }
+.cg-cal-chip-name { overflow: hidden; text-overflow: ellipsis; }
+
+.cg-cal-more { font-size: 10px; color: var(--muted); padding-left: 5px; }
+
+.cg-cal-legend {
+  display: flex; gap: 16px; align-items: center;
+  padding: 10px 16px; border-top: 1px solid var(--border-subtle);
+  font-size: 11px; color: var(--muted);
+}
+.cg-cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cg-cal-legend i { display: inline-block; height: 8px; width: 8px; border-radius: 999px; }
+.cg-cal-legend i.is-approuve { background: var(--status-success); }
+.cg-cal-legend i.is-en_attente { background: var(--status-warning); }
+
+@media (max-width: 640px) {
+  .cg-cal-cell { min-height: 60px; }
+  .cg-cal-chip-name { display: none; }
+}
+
