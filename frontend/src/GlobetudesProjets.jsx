@@ -355,6 +355,22 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     if (before) persistPrestationPatch(projetId, before, patch);
   };
 
+  // Kanban bulk selection: one agent added to every selected project's prestation(s) at that
+  // column's stage (the reason the dispatcher grouped them there in the first place) — additive,
+  // never replaces an existing chantier team.
+  const bulkAssignAgentChantier = (projetIds, stageKey, agentName) => {
+    projetIds.forEach((projetId) => {
+      const pr = projets.find((p) => p.id === projetId);
+      if (!pr) return;
+      pr.prestations
+        .filter((p) => p.stage === stageKey && !isPrestationArchived(p))
+        .forEach((p) => {
+          const next = Array.from(new Set([...(p.agentChantier || []), agentName]));
+          updatePrestation(projetId, p.id, { agentChantier: next });
+        });
+    });
+  };
+
   const findProjetOfPrestation = (prestationId) => projets.find((pr) => pr.prestations.some((p) => p.id === prestationId));
 
   // Marks one comment read by the current user — a direct call to its own endpoint (not part
@@ -1197,6 +1213,8 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             getClient={getClient}
             onOpenProjet={setOpenProjetId}
             getProjetStage={getProjetStage}
+            employees={employees}
+            onBulkAssignAgentChantier={bulkAssignAgentChantier}
           />
         )}
 
