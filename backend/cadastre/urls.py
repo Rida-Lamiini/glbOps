@@ -8,6 +8,7 @@ urlpatterns = [
     path("cadastre/lots/parse-pdf/", views.parse_pdf, name="cadastre-parse-pdf"),
     path("cadastre/lots/parse-excel/", views.parse_excel, name="cadastre-parse-excel"),
     path("cadastre/lots/excel-template/", views.excel_template, name="cadastre-excel-template"),
+    path("cadastre/lots/export-excel/", views.export_excel, name="cadastre-export-excel"),
     path("cadastre/lots/matches/", views.lot_matches, name="cadastre-lot-matches"),
     path("cadastre/lots/geojson/", views.lots_geojson, name="cadastre-lots-geojson"),
     path("cadastre/lots/<uuid:pk>/", views.lot_detail, name="cadastre-lot-detail"),

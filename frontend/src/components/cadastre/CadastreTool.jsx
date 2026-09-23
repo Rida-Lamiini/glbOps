@@ -6,6 +6,7 @@ import {
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
+  downloadLotsExcel,
 } from "./api";
 import LotMap from "./LotMap";
 import ExcelImportScreen from "./ExcelImport";
@@ -195,6 +196,15 @@ function LotsList({ reloadKey, onOpenLot }) {
           <Search size={16} color="var(--muted)" />
           <input placeholder="Titre foncier, propriété…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Rechercher un lot" />
         </label>
+        {lots && lots.length > 0 && (
+          <button
+            type="button"
+            className="cad-btn"
+            onClick={() => downloadLotsExcel().catch(() => notifyError("L'export n'a pas pu être téléchargé."))}
+          >
+            <FileDown size={16} /> Exporter en Excel
+          </button>
+        )}
       </div>
       {error && <div className="cad-error" role="alert">{error}</div>}
       {!lots ? (

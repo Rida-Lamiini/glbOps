@@ -13,7 +13,7 @@ from projets.models import Projet
 
 from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygons_geojson, set_lot_geometry
 from .db.lot_features import get_lot_feature_collection
-from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_template, parse_lots_workbook
+from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_lots_export, build_template, parse_lots_workbook
 from .geo.build_lot import build_lot_geometry
 from .models import Borne, DistanceCheck, Lot, ReferencePoint
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
@@ -350,6 +350,20 @@ def excel_template(request):
     """The blank workbook to fill in, with two example lots and the instructions."""
     response = HttpResponse(build_template(), content_type=XLSX_CONTENT_TYPE)
     response["Content-Disposition"] = 'attachment; filename="modele-import-lots.xlsx"'
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def export_excel(request):
+    """All current lots (optionally ?q= filtered, same search as the list) as a workbook — the
+    reverse of parse_excel/excel_template, for an offline copy or handing lots to a client."""
+    queryset = Lot.objects.prefetch_related("bornes").order_by("titre_foncier")
+    search = request.query_params.get("q")
+    if search:
+        queryset = queryset.filter(Q(titre_foncier__icontains=search) | Q(propriete_dite__icontains=search))
+    response = HttpResponse(build_lots_export(queryset), content_type=XLSX_CONTENT_TYPE)
+    response["Content-Disposition"] = 'attachment; filename="lots-cadastraux.xlsx"'
     return response
 
 

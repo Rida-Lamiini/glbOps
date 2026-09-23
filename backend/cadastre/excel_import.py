@@ -18,6 +18,7 @@ from openpyxl.utils import get_column_letter
 from projets.models import Prestation, Projet
 
 from .geo.build_lot import is_surface_conforme
+from .models import STATUT_CHOICES
 from .geo.calculations import planar_shoelace_area_m2
 from .models import Lot
 
@@ -342,6 +343,52 @@ def build_template() -> bytes:
         cell = ws_h.cell(row=i, column=1, value=text)
         cell.font = Font(name="Cambria", bold=True, size=14, color=_INK) if bold else Font(size=10, color=_INK)
         cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------------------------
+
+def build_lots_export(lots) -> bytes:
+    """A workbook of existing lots, in the same "Lots" + "Bornes" shape as the template — so it
+    round-trips through parse_lots_workbook unchanged, and doubles as an offline/client copy."""
+    wb = Workbook()
+
+    ws = wb.active
+    ws.title = "Lots"
+    _header(ws, [
+        "Titre foncier", "Propriété dite", "Lot n°", "Référence d'affaire", "Géomètre", "Date du levé",
+        "Service du cadastre", "Projet", "Prestation", "Surface du document (m²)", "Correction Lambert (m²)",
+        "Surface calculée (m²)", "Statut",
+    ], [16, 28, 8, 20, 22, 13, 22, 15, 15, 18, 16, 18, 12])
+    for lot in lots:
+        row = ws.max_row + 1
+        ws.append([
+            lot.titre_foncier, lot.propriete_dite, lot.lot_number, lot.affaire_ref, lot.geometre,
+            lot.date_leve, lot.service_cadastre, lot.projet_id or "", lot.prestation_id or "",
+            float(lot.surface_document_m2), float(lot.correction_lambert_m2),
+            float(lot.surface_calculee_m2), dict(STATUT_CHOICES).get(lot.statut, lot.statut),
+        ])
+        for cell in ws[row]:
+            cell.border = Border(bottom=Side(style="thin", color=_LINE))
+        ws.cell(row=row, column=6).number_format = "dd/mm/yyyy"
+        for col in (10, 11, 12):
+            ws.cell(row=row, column=col).number_format = "#,##0.00"
+
+    wb_b = wb.create_sheet("Bornes")
+    _header(wb_b, ["Titre foncier", "Borne", "X Lambert (m)", "Y Lambert (m)", "N°"], [16, 14, 18, 18, 8])
+    for lot in lots:
+        for borne in lot.bornes.all().order_by("sequence"):
+            row = wb_b.max_row + 1
+            wb_b.append([lot.titre_foncier, borne.name, float(borne.x_lambert), float(borne.y_lambert), borne.sequence + 1])
+            for cell in wb_b[row]:
+                cell.border = Border(bottom=Side(style="thin", color=_LINE))
+            wb_b.cell(row=row, column=3).number_format = "#,##0.000"
+            wb_b.cell(row=row, column=4).number_format = "#,##0.000"
 
     buf = BytesIO()
     wb.save(buf)
