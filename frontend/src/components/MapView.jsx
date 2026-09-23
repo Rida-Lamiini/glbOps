@@ -110,7 +110,13 @@ function formatArea(m2) {
   return m2 < 10000 ? `${Math.round(m2)} m²` : `${(m2 / 10000).toFixed(2)} ha`;
 }
 
-export default function MapView({ projects, getClient, onOpenProjet, onCreateProjetAt, onOpenLot, focusLotId, onFocusHandled }) {
+// Cadastral lots are business-sensitive (titres fonciers, surfaces) — only office roles and
+// the contrôle agent who signs off on them need to see the layer on the map. Agent Bureau
+// already has its own dedicated Cadastre tool for that data; it just doesn't belong on their map.
+const CADASTRE_MAP_ROLES = new Set(["Dispatcher", "Directrice", "Agent Contrôle"]);
+
+export default function MapView({ projects, getClient, onOpenProjet, onCreateProjetAt, onOpenLot, focusLotId, onFocusHandled, currentUser, minimal = false }) {
+  const canSeeCadastre = !currentUser || CADASTRE_MAP_ROLES.has(currentUser.role);
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef({});
@@ -520,10 +526,12 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   }, [measureMode]);
 
   // Saved cadastral lot polygons — past surveys are useful context when
-  // siting a new project nearby, so they're shown by default (toggleable).
+  // siting a new project nearby, so they're shown by default (toggleable). Skipped entirely
+  // (not just hidden) for roles that shouldn't see this layer at all.
   useEffect(() => {
+    if (!canSeeCadastre) return;
     getAllCadastreLotsGeoJSON().then(setCadastreGeojson).catch(() => {});
-  }, []);
+  }, [canSeeCadastre]);
 
   // One entry per lot: what the pins, the search and the list need (centre, bounds, status…).
   const lots = useMemo(
@@ -907,36 +915,48 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
             {basemap === "satellite" && <><Mountain size={14} /> <span className="lbl">Topographie</span></>}
             {basemap === "topo" && <><MapIcon size={14} /> <span className="lbl">Plan</span></>}
           </button>
-          <span className="gt-map-toolsep" />
-          <button className={`gt-map-toolbtn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} title="Mesurer une distance" aria-label="Mesurer une distance">
-            <Ruler size={14} /> <span className="lbl">Distance</span>
-          </button>
-          <button className={`gt-map-toolbtn ${measureMode === "area" ? "active" : ""}`} onClick={() => toggleMeasure("area")} title="Mesurer une surface" aria-label="Mesurer une surface">
-            <Shapes size={14} /> <span className="lbl">Surface</span>
-          </button>
-          <span className="gt-map-toolsep" />
-          <button className="gt-map-toolbtn" onClick={() => fileInputRef.current?.click()} title="Importer des points GPX ou CSV" aria-label="Importer des points GPX ou CSV">
-            <Upload size={14} /> <span className="lbl">Importer</span>
-          </button>
-          <button
-            className={`gt-map-toolbtn ${showCadastreLots ? "active" : ""}`}
-            onClick={() => setShowCadastreLots((v) => !v)}
-            title="Afficher/masquer les lots cadastraux enregistrés" aria-label="Afficher/masquer les lots cadastraux enregistrés"
-          >
-            <FileScan size={14} /> <span className="lbl">Lots cadastraux{lots.length ? ` (${lots.length})` : ""}</span>
-          </button>
-          <button
-            className={`gt-map-toolbtn ${panelOpen ? "active" : ""}`}
-            onClick={() => setPanelOpen((v) => !v)}
-            aria-expanded={panelOpen}
-            title="Liste des projets affichés" aria-label="Liste des projets affichés"
-          >
-            <ListIcon size={14} /> <span className="lbl">Projets ({visibleProjects.length})</span>
-          </button>
-          <span className="gt-map-toolsep" />
-          <button className="gt-map-toolbtn" onClick={exportPdf} disabled={exportingPdf} title="Exporter la carte en PDF" aria-label="Exporter la carte en PDF">
-            <Printer size={14} /> <span className="lbl">{exportingPdf ? "Export…" : "PDF"}</span>
-          </button>
+          {!minimal && (
+            <>
+              <span className="gt-map-toolsep" />
+              <button className={`gt-map-toolbtn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} title="Mesurer une distance" aria-label="Mesurer une distance">
+                <Ruler size={14} /> <span className="lbl">Distance</span>
+              </button>
+              <button className={`gt-map-toolbtn ${measureMode === "area" ? "active" : ""}`} onClick={() => toggleMeasure("area")} title="Mesurer une surface" aria-label="Mesurer une surface">
+                <Shapes size={14} /> <span className="lbl">Surface</span>
+              </button>
+              <span className="gt-map-toolsep" />
+              <button className="gt-map-toolbtn" onClick={() => fileInputRef.current?.click()} title="Importer des points GPX ou CSV" aria-label="Importer des points GPX ou CSV">
+                <Upload size={14} /> <span className="lbl">Importer</span>
+              </button>
+            </>
+          )}
+          {canSeeCadastre && !minimal && (
+            <button
+              className={`gt-map-toolbtn ${showCadastreLots ? "active" : ""}`}
+              onClick={() => setShowCadastreLots((v) => !v)}
+              title="Afficher/masquer les lots cadastraux enregistrés" aria-label="Afficher/masquer les lots cadastraux enregistrés"
+            >
+              <FileScan size={14} /> <span className="lbl">Lots cadastraux{lots.length ? ` (${lots.length})` : ""}</span>
+            </button>
+          )}
+          {!minimal && (
+            <button
+              className={`gt-map-toolbtn ${panelOpen ? "active" : ""}`}
+              onClick={() => setPanelOpen((v) => !v)}
+              aria-expanded={panelOpen}
+              title="Liste des projets affichés" aria-label="Liste des projets affichés"
+            >
+              <ListIcon size={14} /> <span className="lbl">Projets ({visibleProjects.length})</span>
+            </button>
+          )}
+          {!minimal && (
+            <>
+              <span className="gt-map-toolsep" />
+              <button className="gt-map-toolbtn" onClick={exportPdf} disabled={exportingPdf} title="Exporter la carte en PDF" aria-label="Exporter la carte en PDF">
+                <Printer size={14} /> <span className="lbl">{exportingPdf ? "Export…" : "PDF"}</span>
+              </button>
+            </>
+          )}
           <input ref={fileInputRef} type="file" accept=".gpx,.csv,text/csv,application/gpx+xml" style={{ display: "none" }} onChange={handleImportFile} />
         </div>
 

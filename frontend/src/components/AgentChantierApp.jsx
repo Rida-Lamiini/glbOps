@@ -398,6 +398,8 @@ export default function AgentChantierApp({ currentUser, tasks, projects, materie
             <MapView
               projects={projects}
               getClient={getClient}
+              currentUser={currentUser}
+              minimal
               onOpenProjet={(projetId) => {
                 const match = tasks.find((t) => t.projet.id === projetId);
                 if (match) setOpenId(match.id);

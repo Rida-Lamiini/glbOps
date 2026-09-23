@@ -1273,6 +1273,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             <MapView
               projects={filteredProjets}
               getClient={getClient}
+              currentUser={currentUser}
               onOpenProjet={setOpenProjetId}
               onOpenLot={isOffice ? (id) => { setCadastreLotId(id); setView("cadastre"); } : undefined}
               focusLotId={mapFocusLotId}

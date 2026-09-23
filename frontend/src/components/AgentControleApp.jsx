@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { LayoutGrid, CalendarDays, AlertTriangle, MapPin, ChevronRight, ClipboardList } from "lucide-react";
+import { LayoutGrid, CalendarDays, FileScan, Map as MapIcon, AlertTriangle, MapPin, ChevronRight, ClipboardList } from "lucide-react";
 import { STAGE_COLORS, STAGES } from "../constants";
 import { parseDateFR } from "../utils/dates";
 import { buildNotifications } from "../utils/notifications";
 import PrestationDrawer from "./PrestationDrawer";
 import NotificationBell from "./NotificationBell";
+import CadastreTool from "./cadastre/CadastreTool";
+import MapView from "./MapView";
 
 const COLUMNS = [
   { key: "attente", label: "En attente", stages: ["demande", "prestation", "affectation", "execution", "bureau"] },
@@ -139,6 +141,12 @@ export default function AgentControleApp({ currentUser, tasks, materiels, vehicu
             <button className={tab === "calendrier" ? "active" : ""} onClick={() => setTab("calendrier")}>
               <CalendarDays size={14} /> Agenda
             </button>
+            <button className={tab === "carte" ? "active" : ""} onClick={() => setTab("carte")}>
+              <MapIcon size={14} /> Carte
+            </button>
+            <button className={tab === "cadastre" ? "active" : ""} onClick={() => setTab("cadastre")}>
+              <FileScan size={14} /> Cadastre
+            </button>
           </div>
           <NotificationBell notifications={notifications} onOpen={(n) => setOpenId(n.prestationId)} />
         </div>
@@ -166,6 +174,27 @@ export default function AgentControleApp({ currentUser, tasks, materiels, vehicu
       {tab === "calendrier" && (
         <div className="ab-fullpane">
           <ControleAgenda tasks={tasks} getClient={getClient} onOpen={setOpenId} />
+        </div>
+      )}
+
+      {tab === "carte" && (
+        <div className="ab-fullpane">
+          <MapView
+            projects={allProjets}
+            getClient={getClient}
+            currentUser={currentUser}
+            onOpenProjet={(projetId) => {
+              const match = tasks.find((t) => t.projet.id === projetId);
+              if (match) setOpenId(match.id);
+              setTab("kanban");
+            }}
+          />
+        </div>
+      )}
+
+      {tab === "cadastre" && (
+        <div className="ab-fullpane ab-fullpane-scroll">
+          <CadastreTool projets={allProjets} currentUser={currentUser} getClient={getClient} />
         </div>
       )}
 

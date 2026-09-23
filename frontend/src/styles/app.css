@@ -634,6 +634,7 @@
 .ab-card-rejectreason { display: flex; align-items: flex-start; gap: 4px; font-size: 10.5px; color: var(--status-danger); background: var(--status-danger-bg); padding: 4px 6px; border-radius: var(--radius-sm); }
 
 .ab-fullpane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.ab-fullpane-scroll { overflow-y: auto; }
 
 .ab-agenda { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 18px; max-width: 640px; }
 .ab-agenda-group { display: flex; flex-direction: column; gap: 8px; }
