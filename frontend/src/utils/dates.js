@@ -73,6 +73,17 @@ export const splitDateTimeFR = (s) => {
   return { datePart, timePart };
 };
 
+// Calendar-day comparison (not exact ms) so a "DD/MM/YYYY HH:MM" visite time doesn't throw off
+// the match — only the date part matters for a "demain" reminder.
+export const isTomorrow = (dateFR) => {
+  const t = parseDateFR(dateFR);
+  if (t == null) return false;
+  const d = new Date(t);
+  const tmrw = new Date();
+  tmrw.setDate(tmrw.getDate() + 1);
+  return d.getFullYear() === tmrw.getFullYear() && d.getMonth() === tmrw.getMonth() && d.getDate() === tmrw.getDate();
+};
+
 // Next business day (Mon–Fri) after `dateFR`, falling back to tomorrow if `dateFR` can't be
 // parsed. Used only as a starting suggestion — never auto-committed.
 export const nextBusinessDayFR = (dateFR) => {

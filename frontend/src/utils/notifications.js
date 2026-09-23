@@ -1,4 +1,4 @@
-import { isPastDue } from "./dates";
+import { isPastDue, isTomorrow } from "./dates";
 import { vehiculeAlerts } from "./vehicule";
 
 const REJECT_PREFIXES = ["Non conforme", "Données insuffisantes"];
@@ -80,6 +80,11 @@ export function buildNotifications(currentUser, { tasks = [], employees = [], ma
     tasks.forEach((p) => {
       if (p.reprogramme) {
         notes.push({ id: `reprog-${p.id}`, kind: "warn", label: `Reprise programmée — ${clientLabel(p, getClient)}`, detail: `Prévue le ${p.dateDebutExec}`, prestationId: p.id });
+      }
+      // A visite planned for tomorrow (stage still "affectation" — not yet started) is worth a
+      // proactive nudge, not just something the agent has to notice by scrolling their list.
+      if (p.stage === "affectation" && isTomorrow(p.dateDebutExec)) {
+        notes.push({ id: `demain-${p.id}`, kind: "warn", label: `Visite demain — ${clientLabel(p, getClient)}`, detail: p.dateDebutExec, prestationId: p.id });
       }
       const reason = rejectionReason(p);
       if (reason && p.stage === "execution") {
