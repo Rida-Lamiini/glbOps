@@ -416,14 +416,17 @@ export default function AgentChantierApp({ currentUser, tasks, projects, materie
         <button className={`ac-navbtn ${tab === "taches" ? "active" : ""}`} onClick={() => setTab("taches")}>
           <ClipboardList size={20} />
           <span>Mes tâches</span>
+          {tab === "taches" && <i className="ac-navbtn-dot" />}
         </button>
         <button className={`ac-navbtn ${tab === "carte" ? "active" : ""}`} onClick={() => setTab("carte")}>
           <MapIcon size={20} />
           <span>Carte</span>
+          {tab === "carte" && <i className="ac-navbtn-dot" />}
         </button>
         <button className={`ac-navbtn ${tab === "planning" ? "active" : ""}`} onClick={() => setTab("planning")}>
           <CalendarDays size={20} />
           <span>Planning</span>
+          {tab === "planning" && <i className="ac-navbtn-dot" />}
         </button>
       </div>
 

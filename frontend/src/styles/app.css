@@ -422,7 +422,7 @@
 .ab-shell .ab-primary-action:hover { background: var(--accent-strong); }
 
 /* Control agent light-mode polish */
-.ac-shell { min-height: 100vh; background: linear-gradient(180deg, #fbfcff 0%, var(--canvas) 52%); color: var(--ink); }
+.ac-shell { height: 100vh; height: 100dvh; overflow: hidden; background: linear-gradient(180deg, #fbfcff 0%, var(--canvas) 52%); color: var(--ink); }
 .ac-shell button:focus-visible, .ac-shell input:focus-visible, .ac-shell select:focus-visible { outline: 3px solid rgba(179,38,30,0.22); outline-offset: 2px; }
 .ac-shell .ac-taskcard, .ac-shell .ac-agenda-item, .ac-shell .ac-card { border: 1px solid #e4e9f1; box-shadow: 0 4px 16px rgba(31,43,69,0.06); }
 .ac-shell .ac-taskcard:hover, .ac-shell .ac-agenda-item:hover { border-color: #d9c9a8; box-shadow: 0 10px 26px rgba(179,38,30,0.10); }
@@ -432,15 +432,18 @@
 .ac-shell .ac-chip { background: #fff; border-color: #dfe5ee; }
 
 /* ===== Agent Chantier — mobile-first field UI ===== */
-.ac-shell { min-height: 100vh; background: var(--canvas); display: flex; flex-direction: column; align-items: center; }
+/* height (not min-height) + overflow:hidden pins this to the viewport instead of letting the
+   page grow with content — only .ac-content scrolls, so .ac-navbar stays fixed at the bottom
+   like a real mobile app's tab bar, instead of scrolling away with a long task list. */
+.ac-shell { height: 100vh; height: 100dvh; overflow: hidden; background: var(--canvas); display: flex; flex-direction: column; align-items: center; }
 
-.ac-topstrip { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; row-gap: 8px; }
+.ac-topstrip { width: 100%; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; row-gap: 8px; }
 .ac-topstrip-brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 700; font-size: 13.5px; }
 .ac-topstrip-mark { width: 24px; height: 24px; object-fit: contain; border-radius: var(--radius-sm); }
 
 .ac-app { width: 100%; max-width: 480px; flex: 1; display: flex; flex-direction: column; background: var(--canvas); min-height: 0; position: relative; }
 
-.ac-header { padding: 18px 18px 14px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ac-header { flex-shrink: 0; padding: 18px 18px 14px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ac-header-greeting { font-size: 19px; font-weight: 700; color: var(--ink); }
 .ac-header-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
 
@@ -485,9 +488,10 @@
 .ac-agenda-item-title { font-size: 14px; font-weight: 600; color: var(--ink); }
 .ac-agenda-item-meta { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.ac-navbar { display: flex; border-top: 1px solid var(--line); background: #fff; padding-bottom: env(safe-area-inset-bottom, 0); }
+.ac-navbar { flex-shrink: 0; display: flex; border-top: 1px solid var(--line); background: #fff; padding-bottom: env(safe-area-inset-bottom, 0); position: relative; z-index: 5; }
 .ac-navbtn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 4px 10px; border: none; background: transparent; color: var(--muted); font-size: 11px; font-family: var(--font-body); cursor: pointer; min-height: 44px; }
 .ac-navbtn.active { color: var(--accent); }
+.ac-navbtn-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin-top: -2px; }
 
 .ac-detail { position: absolute; inset: 0; background: var(--canvas); display: flex; flex-direction: column; z-index: 20; }
 .ac-detail-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); }
