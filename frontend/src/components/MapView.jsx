@@ -420,6 +420,13 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       }
 
       syncMarkers();
+      // querySourceFeatures only sees tiles already rendered for the current viewport, so this
+      // first call can come back empty on a fresh load (before the initial fitBounds below even
+      // moves the map). "idle" fires once every pending tile/paint operation has actually
+      // settled — a stronger guarantee than "data", and the one case the existing data/moveend
+      // listeners could still miss (e.g. fitBounds animating to bounds the map was already at,
+      // which never fires "moveend").
+      map.once("idle", syncMarkers);
 
       const bounds = new LngLatBounds();
       visibleProjects.forEach((pr) => bounds.extend([pr.lng, pr.lat]));
