@@ -339,20 +339,41 @@
 .gt-conflict-list { margin: 6px 0 0; padding-left: 18px; font-size: 11.5px; color: var(--bad); }
 .gt-conflict-list li { margin-bottom: 2px; }
 
-.gt-attach-uploadbtn { display: inline-flex; width: fit-content; cursor: pointer; position: relative; margin-bottom: 10px; }
+.gt-attach-uploadform { border: 1px solid var(--line); background: var(--canvas); padding: 10px; margin-bottom: 4px; }
+.gt-attach-uploadbtn { display: inline-flex; width: fit-content; cursor: pointer; position: relative; margin-bottom: 0; }
 .gt-attach-uploadbtn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.gt-attach-list { display: flex; flex-direction: column; gap: 6px; }
-.gt-attach-item { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; padding: 7px 9px; font-size: 12px; }
-.gt-attach-ext { display: inline-flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); padding: 2px 5px; flex-shrink: 0; }
-.gt-attach-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gt-attach-label { font-size: 9.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.02em; }
-.gt-attach-size { font-size: 10.5px; color: var(--muted); flex-shrink: 0; }
-.gt-attach-author { font-size: 10.5px; color: var(--muted); font-style: italic; flex-shrink: 0; }
-.gt-attach-note { font-size: 10.5px; color: var(--muted); margin-top: 8px; font-style: italic; }
+
 .gt-attach-sectionlabel { font-size: 11px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.03em; margin: 14px 0 6px; }
 .gt-attach-sectionlabel:first-child { margin-top: 0; }
 .gt-attach-section { margin-top: 10px; }
 .gt-attach-section-head { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+
+.gt-attach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.gt-attach-grid .gt-list-empty { grid-column: 1 / -1; }
+
+.gt-attach-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); background: #fff; overflow: hidden; transition: box-shadow 0.15s ease, border-color 0.15s ease; }
+.gt-attach-card:hover { border-color: var(--accent); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.gt-attach-card:hover .gt-attach-remove { opacity: 1; }
+
+.gt-attach-thumb { display: flex; align-items: center; justify-content: center; height: 84px; background: var(--canvas); color: var(--muted); position: relative; flex-shrink: 0; }
+.gt-attach-card.kind-image .gt-attach-thumb { background: #efe9dc; }
+.gt-attach-card.kind-pdf .gt-attach-thumb { color: var(--bad); }
+.gt-attach-thumbimg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gt-attach-extbadge { position: absolute; bottom: 4px; right: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; font-weight: 700; color: #fff; background: var(--ink); padding: 1px 4px; letter-spacing: 0.02em; }
+
+.gt-attach-body { padding: 6px 8px 7px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gt-attach-label { font-size: 9.5px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-attach-filename { font-size: 11.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-attach-filename a { color: var(--ink); text-decoration: none; }
+.gt-attach-filename a:hover { text-decoration: underline; }
+.gt-attach-meta { font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.gt-attach-remove { position: absolute; top: 4px; right: 4px; opacity: 0; transition: opacity 0.15s ease; border: none; background: rgba(29,27,24,0.72); color: #fff; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.gt-attach-remove:hover { background: var(--bad); }
+
+@media (hover: none) {
+  .gt-attach-remove { opacity: 1; }
+}
 
 .gt-cal-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 10px; background: var(--canvas); }
 .gt-cal-toolbar { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 10px 14px; }
