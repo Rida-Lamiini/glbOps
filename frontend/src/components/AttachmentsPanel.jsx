@@ -18,7 +18,7 @@ function fileKind(a) {
   return "file";
 }
 
-function AttachmentItem({ a, onRemove, canRemove }) {
+export function AttachmentItem({ a, onRemove, canRemove }) {
   const kind = fileKind(a);
   const ext = (a.name || "").split(".").pop()?.toUpperCase().slice(0, 4) || "";
   const openable = !a.chemin && a.url;

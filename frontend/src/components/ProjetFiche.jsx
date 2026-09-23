@@ -2,7 +2,6 @@ import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  X,
   MapPin,
   Plus,
   ChevronRight,
@@ -22,7 +21,7 @@ import {
 } from "lucide-react";
 import { STAGES, STAGE_COLORS, NATURES } from "../constants";
 import { visibleToUser } from "../utils/access";
-import { parseDateFR, formatFileSize, fileExt, today } from "../utils/dates";
+import { parseDateFR, today } from "../utils/dates";
 import { notifySuccess } from "../utils/notify";
 import { fadeUpVariants } from "../lib/motionVariants";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { reverseGeocode } from "../utils/geocode";
 import { formatLambert } from "../utils/lambert";
+import { AttachmentItem } from "./AttachmentsPanel";
 import LocationPicker from "./LocationPicker";
 import HistoriqueTimeline from "./HistoriqueTimeline";
 import ProjetMap from "./ProjetMap";
@@ -483,43 +483,18 @@ export default function ProjetFiche({
                   </div>
                 </div>
               )}
-              <div className="gt-attach-list">
+              <div className="gt-attach-grid">
                 {attachments.map((a, i) => (
-                  <div className="gt-attach-item" key={i}>
-                    {a.chemin ? (
-                      <>
-                        <span className="gt-attach-ext"><FolderOpen size={12} /></span>
-                        <span className="gt-attach-name">
-                          {a.label && <span className="gt-attach-label">{a.label}</span>}
-                          <span className="gt-mono">{a.chemin}</span>
-                        </span>
-                        {(a.author || a.date) && (
-                          <span className="gt-attach-author">{[a.author, a.date].filter(Boolean).join(" · ")}</span>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <span className="gt-attach-ext">{fileExt(a.name)}</span>
-                        <span className="gt-attach-name">
-                          {a.label && <span className="gt-attach-label">{a.label}</span>}
-                          {a.name}
-                        </span>
-                        {(a.author || a.date) && (
-                          <span className="gt-attach-author">{[a.author, a.date].filter(Boolean).join(" · ")}</span>
-                        )}
-                        <span className="gt-attach-size">{formatFileSize(a.size)}</span>
-                      </>
-                    )}
-                    {isOffice && (
-                      <button className="gt-iconbtn" onClick={() => { onRemoveAttachment(projet.id, i); notifySuccess("Pièce jointe supprimée"); }}>
-                        <X size={13} />
-                      </button>
-                    )}
-                  </div>
+                  <AttachmentItem
+                    key={a.id ?? i}
+                    a={a}
+                    canRemove={isOffice}
+                    onRemove={() => { onRemoveAttachment(projet.id, i); notifySuccess("Pièce jointe supprimée"); }}
+                  />
                 ))}
                 {attachments.length === 0 && <div className="gt-list-empty">Aucune pièce jointe au niveau du projet.</div>}
               </div>
-              <div className="gt-attach-note">Démo — les fichiers ne sont pas réellement téléversés, seul le nom (ou le chemin) est conservé.</div>
+              <div className="gt-attach-note">Les fichiers sont téléversés sur le serveur ; un chemin réseau est simplement mémorisé.</div>
             </div>
           )}
         </div>

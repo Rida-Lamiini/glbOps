@@ -1851,3 +1851,6 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
   .cg-cal-chip-name { display: none; }
 }
 
+
+/* Attachment cards right under an inline upload form (projet / resource drawers, projet fiche) */
+.gt-form + .gt-attach-grid { margin-top: 12px; }

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { AttachmentItem } from "./AttachmentsPanel";
 import DrawerTabs from "./DrawerTabs";
 import { motion } from "framer-motion";
 import { X, Check, Pencil, AlertTriangle, Wrench, Paperclip, FolderOpen, Plus, MapPin, Coins, Clock, ListChecks, ShieldCheck, ArrowLeftRight, QrCode, Printer } from "lucide-react";
 import { STAGES, STAGE_COLORS, RESOURCE_STATUSES, RESOURCE_TYPES } from "../constants";
 import { computeResourceStats } from "../utils/stats";
-import { formatFileSize, fileExt, today, isPastDue } from "../utils/dates";
+import { today, isPastDue } from "../utils/dates";
 import { notifySuccess } from "../utils/notify";
 import { backdropVariants, drawerVariants } from "../lib/motionVariants";
 import { Button } from "@/components/ui/button";
@@ -440,39 +441,14 @@ export default function ResourceDrawer({
                 </div>
               </div>
             )}
-            <div className="gt-attach-list">
+            <div className="gt-attach-grid">
               {attachments.map((a, i) => (
-                <div className="gt-attach-item" key={i}>
-                  {a.chemin ? (
-                    <>
-                      <span className="gt-attach-ext"><FolderOpen size={12} /></span>
-                      <span className="gt-attach-name">
-                        {a.label && <span className="gt-attach-label">{a.label}</span>}
-                        <span className="gt-mono">{a.chemin}</span>
-                      </span>
-                      {(a.author || a.date) && (
-                        <span className="gt-attach-author">{[a.author, a.date].filter(Boolean).join(" · ")}</span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <span className="gt-attach-ext">{fileExt(a.name)}</span>
-                      <span className="gt-attach-name">
-                        {a.label && <span className="gt-attach-label">{a.label}</span>}
-                        {a.name}
-                      </span>
-                      {(a.author || a.date) && (
-                        <span className="gt-attach-author">{[a.author, a.date].filter(Boolean).join(" · ")}</span>
-                      )}
-                      <span className="gt-attach-size">{formatFileSize(a.size)}</span>
-                    </>
-                  )}
-                  {isOffice && (
-                    <button className="gt-iconbtn" onClick={() => { onRemoveAttachment(item.id, i); notifySuccess("Pièce jointe supprimée"); }}>
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
+                <AttachmentItem
+                  key={a.id ?? i}
+                  a={a}
+                  canRemove={isOffice}
+                  onRemove={() => { onRemoveAttachment(item.id, i); notifySuccess("Pièce jointe supprimée"); }}
+                />
               ))}
               {attachments.length === 0 && <div className="gt-list-empty">Aucune pièce jointe (photo, certificat d'étalonnage, manuel...).</div>}
             </div>
