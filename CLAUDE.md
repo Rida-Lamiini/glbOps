@@ -24,7 +24,7 @@ docker compose -f backend/docker-compose.yml up -d        # db (postgis) + ocr
 backend/venv/Scripts/python.exe backend/manage.py migrate
 backend/venv/Scripts/python.exe backend/manage.py runserver   # :8000
 npm --prefix frontend run dev                                 # :5173
-backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, creates a throw-away DB
+(cd backend && venv/Scripts/python.exe manage.py test)       # 56 tests, creates a throw-away DB; must run from backend/ (from the root it finds 0)
 ```
 
 `.claude/launch.json` defines `backend` and `frontend` for the preview tool. Demo users come from `seed_demo`
@@ -72,7 +72,9 @@ backend/venv/Scripts/python.exe backend/manage.py test        # 25 tests, create
 - Match surrounding style; no new abstractions unless needed. shadcn components: `npx shadcn@latest add …` then fix
   any `from "cn"` imports to `@/lib/utils`.
 - Tailwind v4 needs the base rule in `index.css` that sets `border-color: var(--color-border)`.
-- Tests: `cadastre/tests.py` (geometry, PDF parser, lot reuse, review flow, attachments, boundary). Uploads in tests use a temp `MEDIA_ROOT`.
+- Tests: `cadastre/tests.py` (geometry, PDF parser, lot reuse, review flow, attachments, boundary), `clients/tests.py`
+  (client code rename), `core/tests.py` (comments, read receipts). Uploads in tests use a temp `MEDIA_ROOT`.
+  The db container publishes Postgres on host port **5433** (`POSTGRES_PORT=5433` in `backend/.env`); pointing at 5432 makes every `manage.py` command hang.
 - Testing in the Claude browser pane: it often becomes hidden (`document.visibilityState === "hidden"`), which freezes
   framer-motion views — reopen with `preview_start` (url). Heredocs with mixed quotes fail in the Bash tool: write a
   script file and run it instead. Windows paths in `docker exec` need `MSYS_NO_PATHCONV=1`.
