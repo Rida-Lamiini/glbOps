@@ -6,11 +6,10 @@ import {
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
-  downloadLotsExcel,
+  downloadLotsExcel, downloadLotReport,
 } from "./api";
 import LotMap from "./LotMap";
 import ExcelImportScreen from "./ExcelImport";
-import { generateLotReport } from "../../utils/reportLot";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import "./cadastre.css";
 
@@ -465,13 +464,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
   const makeReport = async () => {
     setReporting(true);
     try {
-      const projet = projets.find((p) => p.id === lot.projet);
-      await generateLotReport({
-        lot,
-        projet,
-        client: projet && getClient ? getClient(projet.clientId) : null,
-        prestation: projet?.prestations.find((p) => p.id === lot.prestation),
-      });
+      await downloadLotReport(lot);
       notifySuccess("Rapport cadastral généré");
     } catch {
       notifyError("Le rapport n'a pas pu être généré.");

@@ -17,6 +17,7 @@ from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_lots_export, build_
 from .geo.build_lot import build_lot_geometry
 from .models import Borne, DistanceCheck, Lot, ReferencePoint
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
+from .report import build_lot_report, report_filename
 from .serializers import CreateLotSerializer, LotDetailSerializer, LotListSerializer
 
 MAX_PDF_BYTES = 25 * 1024 * 1024
@@ -317,6 +318,21 @@ def lot_detail(request, pk):
         )
 
     return Response(LotDetailSerializer(lot).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def lot_report(request, pk):
+    """The lot's cadastral report as a PDF download."""
+    lot = get_object_or_404(
+        Lot.objects.select_related("projet__client", "prestation", "created_by", "statut_par").prefetch_related(
+            "bornes", "distance_checks", "reference_points",
+        ),
+        pk=pk,
+    )
+    response = HttpResponse(build_lot_report(lot), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{report_filename(lot)}"'
+    return response
 
 
 @api_view(["GET"])

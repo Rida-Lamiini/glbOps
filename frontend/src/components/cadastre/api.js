@@ -72,6 +72,10 @@ export const downloadExcelTemplate = async () => saveBlob(await apiBlob("/cadast
 // The reverse of the import: every current lot (with its bornes), same "Lots"/"Bornes" shape.
 export const downloadLotsExcel = async () => saveBlob(await apiBlob("/cadastre/lots/export-excel/"), "lots-cadastraux.xlsx");
 
+// Cadastral report PDF, built server-side (cadastre/report.py).
+export const downloadLotReport = async (lot) =>
+  saveBlob(await apiBlob(`/cadastre/lots/${lot.id}/report/`), `Rapport-cadastral-${String(lot.titreFoncier).replace(/[^\w-]+/g, "_")}.pdf`);
+
 const toLotSummary = (lot) => ({
   id: lot.id,
   projet: lot.projet,

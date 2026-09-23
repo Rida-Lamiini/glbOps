@@ -236,6 +236,33 @@ class LotReviewTests(TestCase):
         date = HistoryEntry.objects.filter(prestation=self.prestation).first().date
         self.assertRegex(date, r"^\d{2}/\d{2}/\d{4}$")
 
+    def test_lot_report_pdf(self):
+        import fitz
+
+        bureau, controle = self._as(self.bureau_user), self._as(self.controle_user)
+        lot_id = self._lot(bureau, geometre="Cabinet Alaoui", distance_checks=[
+            {"segment_label": "B1-B2", "croquis_m": 100.0},
+            {"segment_label": "B2-B3", "croquis_m": 52.0},
+        ])
+        bureau.post(f"/api/cadastre/lots/{lot_id}/statut/", {"statut": "verifie"}, format="json")
+        controle.post(f"/api/cadastre/lots/{lot_id}/statut/", {"statut": "valide"}, format="json")
+
+        r = bureau.get(f"/api/cadastre/lots/{lot_id}/report/")
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/pdf")
+        self.assertIn('filename="Rapport-cadastral-TF_9_R.pdf"', r["Content-Disposition"])
+        with fitz.open(stream=r.content, filetype="pdf") as doc:
+            text = "\n".join(page.get_text() for page in doc)
+        for expected in [
+            "Rapport cadastral · Titre foncier TF/9/R".upper(), "Lot conforme", "5 000,00 m²", "Cabinet Alaoui",
+            "Client test (CLI-T2)", "PRJ-T-3", "Plan du lot", "Périmètre".upper(), "300,00 m",
+            "B1", "500 000,000", "Contrôle des distances", "B2-B3", "À vérifier", "Conforme",
+            "Validé par Jean Controle", "Marc Bureau", "Validé par (contrôle)",
+        ]:
+            self.assertIn(expected, text)
+        self.assertEqual(self.client.get(f"/api/cadastre/lots/{lot_id}/report/").status_code, 401)
+
     def test_lot_without_prestation_logs_nothing(self):
         api = self._as(self.bureau_user)
         r = api.post("/api/cadastre/lots/", _payload(self.projet.id, "TF/10/R"), format="json")
