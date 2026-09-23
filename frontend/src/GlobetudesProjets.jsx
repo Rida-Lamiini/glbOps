@@ -1376,7 +1376,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
 
         {view === "analytics" && (
           <motion.div key="analytics" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <AnalyticsView projets={projets} employees={employees} materiels={materiels} vehicules={vehicules} getClient={getClient} author={currentUser.name} />
+            <AnalyticsView projets={projets} employees={employees} getClient={getClient} />
           </motion.div>
         )}
 

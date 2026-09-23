@@ -24,7 +24,7 @@ docker compose -f backend/docker-compose.yml up -d        # db (postgis) + ocr
 backend/venv/Scripts/python.exe backend/manage.py migrate
 backend/venv/Scripts/python.exe backend/manage.py runserver   # :8000
 npm --prefix frontend run dev                                 # :5173
-(cd backend && venv/Scripts/python.exe manage.py test)       # 65 tests, creates a throw-away DB; must run from backend/ (from the root it finds 0)
+(cd backend && venv/Scripts/python.exe manage.py test)       # 71 tests, creates a throw-away DB; must run from backend/ (from the root it finds 0)
 ```
 
 `.claude/launch.json` defines `backend` and `frontend` for the preview tool. Demo users come from `seed_demo`
@@ -73,7 +73,7 @@ npm --prefix frontend run dev                                 # :5173
   any `from "cn"` imports to `@/lib/utils`.
 - Tailwind v4 needs the base rule in `index.css` that sets `border-color: var(--color-border)`.
 - Tests: `cadastre/tests.py` (geometry, PDF parser, lot reuse, review flow, attachments, boundary), `clients/tests.py`
-  (client code rename), `core/tests.py` (comments, read receipts). Uploads in tests use a temp `MEDIA_ROOT`.
+  (client code rename), `core/tests.py` (comments, read receipts, mentions), `projets/tests.py` (PV and monthly report PDFs). Uploads in tests use a temp `MEDIA_ROOT`.
   The db container publishes Postgres on host port **5433** (`POSTGRES_PORT=5433` in `backend/.env`); pointing at 5432 makes every `manage.py` command hang.
 - Testing in the Claude browser pane: it often becomes hidden (`document.visibilityState === "hidden"`), which freezes
   framer-motion views — reopen with `preview_start` (url). Heredocs with mixed quotes fail in the Bash tool: write a
@@ -86,8 +86,19 @@ npm --prefix frontend run dev                                 # :5173
 
 ## PDF reports
 
-`frontend/src/utils/reportKit.js` is the shared PDF layout (logo, running header, numbered footer, tables, KPI tiles, bars, lot plot, photo grid) built on jsPDF and WinAnsi-safe text (`safe()`). Three documents use it: `pv.js` (PV, now with the linked lot, field photos and the rejection history), `reportLot.js` (cadastral report, "Rapport PDF" on a lot) and `reportMonthly.js` (monthly management report, launched from Analytique). Everything runs in the browser; server-side generation is not done.
-To check a PDF visually: patch `URL.createObjectURL` to capture the blob and render it with pdf.js from cdnjs in the pane (a page reload is needed after editing a util module — HMR does not refresh it).
+Built on the server with PyMuPDF (already a dependency; no new one). `backend/core/pdf_kit.py` is the shared layout
+(logo from `core/assets/logo.png`, running header, numbered footer, sections, key/value grid, KPI tiles, callouts,
+tables, bars, columns, lot plot, photo grid, signatures), a port of the old jsPDF kit that keeps its millimetre
+layout. PyMuPDF's bundled Nimbus fonts are embedded as Unicode fonts, so accents, "—", "≤", "²" print as-is.
+Three documents, all login-required downloads:
+- PV — `GET /api/prestations/<id>/pv/` (`projets/pv.py`): lot (the prestation's, else the projet's latest), up to 6
+  field photos (downscaled to JPEG), bureau tâches, rejection history, contrôle, livraison. "Générer le PV" in the drawer.
+- Lot report — `GET /api/cadastre/lots/<id>/report/` (`cadastre/report.py`). "Rapport PDF" on a lot.
+- Monthly management report — `GET /api/reports/monthly/?month=YYYY-MM` (`projets/report_monthly.py`, Dispatcher/
+  Directrice only, 403 otherwise); includes server ports of `vehiculeAlerts` and the agent workload. Launched from Analytique.
+They reflect what is saved, not unsaved edits in an open drawer. `frontend/src/utils/reportKit.js` now only holds
+`COLORS`/`safe()`/`loadLogo` for the QR label sheet (`labels.js`, still jsPDF in the browser, as is the map's PDF export).
+To look at a PDF: render its pages with `fitz` (`page.get_pixmap(dpi=80).save(...)`) and open the PNGs.
 
 ## QR labels and check-out / check-in
 

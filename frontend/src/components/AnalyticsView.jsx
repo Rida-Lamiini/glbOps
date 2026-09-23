@@ -6,10 +6,25 @@ import { listCadastreLots } from "./cadastre/api";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileDown, Loader2 } from "lucide-react";
-import { generateMonthlyReport, monthLabelFR, reportMonths } from "../utils/reportMonthly";
+import { apiBlob } from "../lib/api";
+import { saveBlob } from "../utils/saveBlob";
 import { notifyError, notifySuccess } from "../utils/notify";
 
 const DAY = 86400000;
+
+// Months (YYYY-MM) offered for the management report: the current month and the five before it.
+const reportMonths = (count = 6) => {
+  const now = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+};
+const monthLabelFR = (key) => {
+  const [y, m] = key.split("-").map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+};
 const PERIODS = [
   { value: "3", label: "3 mois", months: 3 },
   { value: "6", label: "6 mois", months: 6 },
@@ -59,7 +74,7 @@ function Panel({ title, description, empty, children, className = "" }) {
   );
 }
 
-export default function AnalyticsView({ projets, employees, materiels = [], vehicules = [], getClient, author }) {
+export default function AnalyticsView({ projets, employees, getClient }) {
   const [reportMonth, setReportMonth] = useState(() => reportMonths()[0]);
   const [reporting, setReporting] = useState(false);
   const [period, setPeriod] = useState("6");
@@ -76,7 +91,8 @@ export default function AnalyticsView({ projets, employees, materiels = [], vehi
   const makeReport = async () => {
     setReporting(true);
     try {
-      await generateMonthlyReport({ monthKey: reportMonth, projets, employees, materiels, vehicules, lots, getClient, author });
+      // Built server-side from the whole database (projets/report_monthly.py).
+      saveBlob(await apiBlob(`/reports/monthly/?month=${reportMonth}`), `Rapport-direction-${reportMonth}.pdf`);
       notifySuccess("Rapport de direction généré");
     } catch {
       notifyError("Le rapport n'a pas pu être généré.");

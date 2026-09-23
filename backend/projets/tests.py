@@ -112,3 +112,54 @@ class PvPdfTests(TestCase):
     def test_pv_requires_login(self):
         self.api.force_authenticate(None)
         self.assertEqual(self.api.get(f"/api/prestations/{self.prestation.id}/pv/").status_code, 401)
+
+
+class MonthlyReportTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from employees.models import Conge
+
+        cls.office = User.objects.create_user("directrice", password="x")
+        Employee.objects.create(id="EMP-001", user=cls.office, nom="Salma Idrissi", role="Directrice")
+        cls.agent = User.objects.create_user("chantier", password="x")
+        youssef = Employee.objects.create(id="EMP-002", user=cls.agent, nom="Youssef Benali", role="Agent Chantier", poste="Topographe")
+        client = Client.objects.create(id="CLI-0231", nom="SOMADIR Immobilier")
+        projet = Projet.objects.create(id="PRJ-2026-001", client=client)
+        livree = Prestation.objects.create(
+            id="PRS-2026-001", projet=projet, nature_demandee="Levé topographique", stage="livraison", chemin="x",
+            date_debut_demande=datetime.date(2026, 9, 2), date_livraison=datetime.date(2026, 9, 20), cycles=1,
+        )
+        HistoryEntry.objects.create(prestation=livree, date="16/09/2026", label="Non conforme — bornes inversées", author="Nadia Tazi")
+        en_cours = Prestation.objects.create(id="PRS-2026-002", projet=projet, stage="execution", date_debut_demande=datetime.date(2026, 9, 10))
+        en_cours.agent_chantier.add(youssef)
+        Prestation.objects.create(id="PRS-2026-003", projet=projet, stage="demande", date_debut_demande=datetime.date(2026, 8, 5))
+        Resource.objects.create(id="VEH-001", nom="Duster 12345-A-6", type="vehicule", assurance_echeance=datetime.date(2020, 1, 1))
+        Resource.objects.create(id="MAT-001", nom="Leica TS16", type="station_totale", prochaine_calibration=datetime.date(2020, 1, 1))
+        Conge.objects.create(id="CNG-1", employee=youssef, type="Congé payé", date_debut=datetime.date(2026, 9, 25), date_fin=datetime.date(2026, 10, 2), statut="approuve")
+
+    def _get(self, user, query="?month=2026-09"):
+        api = APIClient(SERVER_NAME="localhost")
+        api.force_authenticate(user)
+        return api.get(f"/api/reports/monthly/{query}")
+
+    def test_monthly_report(self):
+        response = self._get(self.office)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('filename="Rapport-direction-2026-09.pdf"', response["Content-Disposition"])
+        _, text = _pdf_text(response.content)
+        for expected in [
+            "Rapport de direction — Septembre 2026", "DEMANDES REÇUES", "+1 vs mois précédent", "18 j",
+            "Points d'attention", "1 véhicule avec un papier expiré (Duster 12345-A-6)", "PRS-2026-001", "SOMADIR Immobilier",
+            "Non conforme — bornes inversées", "Duster 12345-A-6", "Assurance", "expiré — échéance 01/01/2020",
+            "Leica TS16", "en retard (échéance 01/01/2020)", "Youssef Benali", "Topographe",
+            "Congé payé, du 25/09/2026 au 02/10/2026 (approuvé)", "LOTS ENREGISTRÉS", "Établi par Salma Idrissi",
+            "sept", "août",
+        ]:
+            self.assertIn(expected, text)
+
+    def test_agents_are_refused_and_month_is_checked(self):
+        self.assertEqual(self._get(self.agent).status_code, 403)
+        self.assertEqual(self._get(self.office, "?month=2026-13").status_code, 400)
+        self.assertEqual(self._get(self.office, "?month=sept").status_code, 400)
+        self.assertEqual(self._get(self.office, "").status_code, 200)
