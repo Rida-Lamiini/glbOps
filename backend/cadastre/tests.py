@@ -154,7 +154,7 @@ import tempfile  # noqa: E402
 from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
 from django.test import override_settings  # noqa: E402
 from employees.models import Employee  # noqa: E402
-from projets.models import Prestation  # noqa: E402
+from projets.models import HistoryEntry, Prestation  # noqa: E402
 
 
 class LotReviewTests(TestCase):
@@ -208,6 +208,39 @@ class LotReviewTests(TestCase):
         api.post(f"/api/cadastre/lots/{lot_id}/statut/", {"statut": "verifie"}, format="json")
         body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id, "propriete_dite": "Modifié"}
         self.assertEqual(api.put(f"/api/cadastre/lots/{lot_id}/", body, format="json").json()["statut"], "brouillon")
+
+    def _history(self):
+        return list(HistoryEntry.objects.filter(prestation=self.prestation).values_list("label", "author"))
+
+    def test_lot_events_are_logged_on_the_prestation(self):
+        bureau, controle = self._as(self.bureau_user), self._as(self.controle_user)
+        lot_id = self._lot(bureau)
+        url = f"/api/cadastre/lots/{lot_id}/statut/"
+        bureau.post(url, {"statut": "verifie"}, format="json")
+        bureau.post(url, {"statut": "verifie"}, format="json")  # no change, no entry
+        controle.post(url, {"statut": "valide"}, format="json")
+        bureau.post(url, {"statut": "chantier"}, format="json")  # refused, no entry
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id}
+        bureau.put(f"/api/cadastre/lots/{lot_id}/", body, format="json")
+        bureau.put(f"/api/cadastre/lots/{lot_id}/", body, format="json")
+        bureau.delete(f"/api/cadastre/lots/{lot_id}/")
+
+        self.assertEqual(self._history(), [
+            ("Lot cadastral enregistré — TF TF/9/R", "Marc Bureau"),
+            ("Lot cadastral vérifié — TF TF/9/R", "Marc Bureau"),
+            ("Lot cadastral validé — TF TF/9/R", "Jean Controle"),
+            ("Lot cadastral modifié (repasse en brouillon) — TF TF/9/R", "Marc Bureau"),
+            ("Lot cadastral modifié — TF TF/9/R", "Marc Bureau"),
+            ("Lot cadastral supprimé — TF TF/9/R", "Marc Bureau"),
+        ])
+        date = HistoryEntry.objects.filter(prestation=self.prestation).first().date
+        self.assertRegex(date, r"^\d{2}/\d{2}/\d{4}$")
+
+    def test_lot_without_prestation_logs_nothing(self):
+        api = self._as(self.bureau_user)
+        r = api.post("/api/cadastre/lots/", _payload(self.projet.id, "TF/10/R"), format="json")
+        api.post(f"/api/cadastre/lots/{r.json()['id']}/statut/", {"statut": "verifie"}, format="json")
+        self.assertEqual(HistoryEntry.objects.count(), 0)
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

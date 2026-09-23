@@ -24,7 +24,7 @@ import { downloadFile, buildGeoJSON, buildKML } from "./utils/geo";
 import { blankPrestation, blankResource, blankEmployee, blankClient } from "./data/seed";
 import { apiGet, apiPost, apiPatch, apiDelete } from "./lib/api";
 import { reuseLot } from "./components/cadastre/api";
-import { adaptAttachment, adaptComment } from "./lib/apiAdapters";
+import { adaptAttachment, adaptComment, adaptHistoryEntry } from "./lib/apiAdapters";
 import { notifyError } from "./utils/notify";
 import { adaptClient, adaptEmployee, adaptProjet, adaptResource } from "./lib/apiAdapters";
 
@@ -397,6 +397,32 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     } catch {
       notifyError("Impossible de marquer ce commentaire comme lu.");
     }
+  };
+
+  // The server also writes Historique lines on its own (cadastral lot saved, verified, validated,
+  // deleted), which the initial load can't know about — re-read them when a drawer opens. Only
+  // ever grows the list: if a local entry is still on its way to the server, keep what we have.
+  const syncPrestationHistory = async (prestationId) => {
+    const projetId = findProjetOfPrestation(prestationId)?.id;
+    if (!projetId) return;
+    let history;
+    try {
+      history = ((await apiGet(`/prestations/${prestationId}/`)).history || []).map(adaptHistoryEntry);
+    } catch {
+      return;
+    }
+    setProjets((prev) =>
+      prev.map((pr) =>
+        pr.id !== projetId
+          ? pr
+          : {
+              ...pr,
+              prestations: pr.prestations.map((p) =>
+                p.id !== prestationId || history.length <= (p.history || []).length ? p : { ...p, history }
+              ),
+            }
+      )
+    );
   };
 
   // Writes go into local state first (the UI stays instant), then to the API. If the server
@@ -1009,6 +1035,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             if (projetId) updatePrestation(projetId, prestationId, patch);
           }}
           onMarkCommentRead={markCommentRead}
+          onSyncHistory={syncPrestationHistory}
         />
       </div>
     );
@@ -1038,6 +1065,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             if (projetId) updatePrestation(projetId, prestationId, patch);
           }}
           onMarkCommentRead={markCommentRead}
+          onSyncHistory={syncPrestationHistory}
         />
       </div>
     );
@@ -1410,6 +1438,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             onClose={() => setOpenPrestationId(null)}
             onUpdate={(id, patch) => updatePrestation(openPrestationCtx.projet.id, id, patch)}
             onMarkCommentRead={markCommentRead}
+            onSyncHistory={syncPrestationHistory}
             onOpenMateriel={(id) => {
               setOpenPrestationId(null);
               setOpenMaterielId(id);

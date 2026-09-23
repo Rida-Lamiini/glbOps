@@ -34,7 +34,7 @@ import { backdropVariants, drawerVariants } from "../lib/motionVariants";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateTimeField } from "@/components/ui/datetime-field";
 
-export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache, onMarkCommentRead }) {
+export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache, onMarkCommentRead, onSyncHistory }) {
   const [natureDemandee, setNatureDemandee] = useState(prestation.natureDemandee);
   const [dateDebutDemande, setDateDebutDemande] = useState(prestation.dateDebutDemande);
   const [dateFinDemande, setDateFinDemande] = useState(prestation.dateFinDemande);
@@ -115,6 +115,12 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
       setDateFinExec("");
     }
   }, [prestation.cycles]);
+
+  // Pick up Historique lines the server wrote since the initial load (cadastral lot events).
+  useEffect(() => {
+    onSyncHistory?.(prestation.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prestation.id]);
 
   const REDO_LABEL_PREFIXES = ["Non conforme", "Données insuffisantes"];
   const lastHistoryEntry = prestation.history[prestation.history.length - 1];

@@ -9,7 +9,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from projets.models import Projet
+from projets.models import HistoryEntry, Projet
 
 from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygons_geojson, set_lot_geometry
 from .db.lot_features import get_lot_feature_collection
@@ -20,6 +20,28 @@ from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
 from .serializers import CreateLotSerializer, LotDetailSerializer, LotListSerializer
 
 MAX_PDF_BYTES = 25 * 1024 * 1024
+
+STATUT_HISTORY_LABELS = {"brouillon": "remis en brouillon", "verifie": "vérifié", "valide": "validé"}
+
+
+def _display_name(user):
+    if user is None:
+        return ""
+    employee = getattr(user, "employee", None)
+    return employee.nom if employee else (user.first_name or user.username)
+
+
+def _log_on_prestation(lot, label, user):
+    """One line on the prestation's Historique for what happened to its lot — same DD/MM/YYYY
+    date string the frontend writes. A lot with no prestation has nowhere to log."""
+    if not lot.prestation_id:
+        return
+    HistoryEntry.objects.create(
+        prestation_id=lot.prestation_id,
+        date=timezone.localdate().strftime("%d/%m/%Y"),
+        label=f"{label} — TF {lot.titre_foncier}",
+        author=_display_name(user),
+    )
 
 
 def _save_lot(data, existing_lot=None, user=None):
@@ -56,6 +78,7 @@ def _save_lot(data, existing_lot=None, user=None):
             lot = Lot.objects.create(created_by=user, **field_values)
         else:
             lot = existing_lot
+            was_reviewed = lot.statut != "brouillon"
             for field, value in field_values.items():
                 setattr(lot, field, value)
             # An edited survey has to be reviewed again.
@@ -108,6 +131,12 @@ def _save_lot(data, existing_lot=None, user=None):
         # validate_bornes on the serializer requires at least 3, so this ring
         # always has >= 3 points — never a stale polygon to clear on update.
         set_lot_geometry(lot.id, built.polygon_ring_lat_lng, built.centroid)
+
+        if existing_lot is None:
+            label = "Lot cadastral enregistré"
+        else:
+            label = "Lot cadastral modifié" + (" (repasse en brouillon)" if was_reviewed else "")
+        _log_on_prestation(lot, label, user)
 
     return lot
 
@@ -254,10 +283,13 @@ def lot_statut(request, pk):
         return Response({"detail": "Votre rôle ne permet pas ce changement de statut."}, status=status.HTTP_403_FORBIDDEN)
     if statut == "valide" and lot.statut != "verifie":
         return Response({"detail": "Un lot doit être vérifié avant d'être validé."}, status=status.HTTP_400_BAD_REQUEST)
+    changed = lot.statut != statut
     lot.statut = statut
     lot.statut_par = None if statut == "brouillon" else request.user
     lot.statut_at = None if statut == "brouillon" else timezone.now()
     lot.save(update_fields=["statut", "statut_par", "statut_at", "updated_at"])
+    if changed:
+        _log_on_prestation(lot, f"Lot cadastral {STATUT_HISTORY_LABELS[statut]}", request.user)
     return Response(LotListSerializer(lot).data)
 
 
@@ -269,6 +301,7 @@ def lot_detail(request, pk):
     )
 
     if request.method == "DELETE":
+        _log_on_prestation(lot, "Lot cadastral supprimé", request.user)
         lot.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

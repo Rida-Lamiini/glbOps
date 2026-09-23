@@ -241,7 +241,7 @@ function BureauAgenda({ cards, getClient, onOpen }) {
   );
 }
 
-export default function AgentBureauApp({ currentUser, tasks, materiels, vehicules, employees, allProjets, getClient, onUpdatePrestation, onMarkCommentRead }) {
+export default function AgentBureauApp({ currentUser, tasks, materiels, vehicules, employees, allProjets, getClient, onUpdatePrestation, onMarkCommentRead, onSyncHistory }) {
   const [tab, setTab] = useState("kanban");
   const [openId, setOpenId] = useState(null);
   const [focusTache, setFocusTache] = useState(null);
@@ -400,6 +400,7 @@ export default function AgentBureauApp({ currentUser, tasks, materiels, vehicule
               onClose={() => { setOpenId(null); setFocusTache(null); }}
               onUpdate={onUpdatePrestation}
               onMarkCommentRead={onMarkCommentRead}
+              onSyncHistory={onSyncHistory}
               currentUser={currentUser}
               focusTache={focusTache}
             />

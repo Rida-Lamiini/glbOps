@@ -91,7 +91,7 @@ const adaptTache = (t, employeesById) => ({
   agents: (t.agents || []).map((id) => employeeName(employeesById, id)),
 });
 
-const adaptHistoryEntry = (h) => ({
+export const adaptHistoryEntry = (h) => ({
   date: h.date,
   label: h.label,
   author: h.author || "",
