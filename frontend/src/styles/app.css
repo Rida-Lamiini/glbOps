@@ -382,6 +382,8 @@
 .gt-attach-remove { position: absolute; top: 4px; right: 4px; opacity: 0; transition: opacity 0.15s ease; border: none; background: rgba(29,27,24,0.72); color: #fff; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .gt-attach-remove:hover { background: var(--bad); }
 
+.gt-attach-note { font-size: 10.5px; color: var(--muted); margin-top: 8px; font-style: italic; }
+
 @media (hover: none) {
   .gt-attach-remove { opacity: 1; }
 }
