@@ -60,6 +60,8 @@ class Lot(models.Model):
     geometre = models.CharField(max_length=200, blank=True)
     date_leve = models.DateField(null=True, blank=True)
     service_cadastre = models.CharField(max_length=200, blank=True)
+    # Lambert zone of the bornes' X/Y: Nord (EPSG:26191) or Sud (EPSG:26192).
+    zone = models.CharField(max_length=4, choices=[("nord", "Nord"), ("sud", "Sud")], default="nord")
 
     # surface_document_m2 is the "contenance adoptée" printed on the document;
     # surface_calculee_m2 is always recomputed from the bornes on save, never
@@ -67,6 +69,9 @@ class Lot(models.Model):
     surface_document_m2 = models.DecimalField(max_digits=12, decimal_places=2)
     surface_calculee_m2 = models.DecimalField(max_digits=12, decimal_places=2)
     correction_lambert_m2 = models.DecimalField(max_digits=12, decimal_places=2)
+    # Sum of the lot's signed Ajustement rows (appoints add or remove, déductions remove),
+    # kept here so every conformity check reads one number.
+    ajustements_m2 = models.DecimalField(max_digits=14, decimal_places=4, default=0)
 
     source_pdf_url = models.CharField(max_length=500, blank=True)
 
@@ -110,6 +115,27 @@ class Borne(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Ajustement(models.Model):
+    """A surface adjustment printed on the document between S and the adopted contenance
+    (appoint graphique, cimetière, parcelle détachée...). ``m2`` is signed: a déduction
+    is negative, an appoint can be either."""
+
+    TYPE_CHOICES = [("appoint", "Appoint"), ("deduction", "Déduction")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lot = models.ForeignKey(Lot, related_name="ajustements", on_delete=models.CASCADE)
+    libelle = models.CharField(max_length=200)
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default="deduction")
+    m2 = models.DecimalField(max_digits=14, decimal_places=4)
+
+    class Meta:
+        db_table = "cadastre_ajustements"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.libelle} ({self.m2} m²)"
 
 
 class DistanceCheck(models.Model):

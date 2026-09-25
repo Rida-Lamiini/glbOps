@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 
 /** Renders a lot's polygon + borne/reference-point markers from its GeoJSON FeatureCollection. */
-export default function LotMap({ geojson }) {
+export default function LotMap({ geojson, focusName = null }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -55,6 +55,18 @@ export default function LotMap({ geojson }) {
         return marker.addTo(map);
       });
   }, [geojson, ready]);
+
+  // Selecting a borne (from the table) flies to it and enlarges its marker.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    (map._lotMarkers || []).forEach((m) => {
+      const on = focusName && m.getElement().title === focusName;
+      m.getElement().style.zIndex = on ? 5 : "";
+      m.getElement().style.filter = on ? "drop-shadow(0 0 6px #b3261e) brightness(1.25)" : "";
+      if (on) map.easeTo({ center: m.getLngLat(), zoom: Math.max(map.getZoom(), 18), duration: 500 });
+    });
+  }, [focusName, ready, geojson]);
 
   return <div ref={containerRef} className="cad-map" />;
 }

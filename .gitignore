@@ -23,3 +23,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# DB + media backups (scripts/backup.ps1)
+backups/

@@ -307,7 +307,7 @@ def build_monthly_report(year, month, author=""):
     lots = list(Lot.objects.all())
     conformes = sum(
         1 for lot in lots
-        if is_surface_conforme(float(lot.surface_calculee_m2), float(lot.correction_lambert_m2), float(lot.surface_document_m2))
+        if is_surface_conforme(float(lot.surface_calculee_m2), float(lot.correction_lambert_m2), float(lot.surface_document_m2), float(lot.ajustements_m2))
     )
     by_statut = {s: sum(1 for lot in lots if lot.statut == s) for s in ("brouillon", "verifie", "valide")}
     touched = sum(1 for lot in lots if _in(timezone.localtime(lot.updated_at).date(), b))

@@ -82,7 +82,10 @@ npm --prefix frontend run dev                                 # :5173
 
 ## Not done yet / ideas
 
-- Remove demo passwords before any deployment; schedule DB backups.
+- Remove demo passwords before any deployment. `scripts/backup.ps1` dumps the DB + media into `backups/` (the daily schedule
+  command is in its header — not registered yet). The compose stack runs with `DJANGO_DEBUG=True` so Django serves `/media`;
+  a real deployment needs DEBUG off and nginx (or similar) serving the `glbops_media` volume. After changing backend code,
+  `docker compose up -d --build backend` — files uploaded through a local `runserver` live in `backend/media`, not the volume.
 
 ## PDF reports
 
@@ -150,3 +153,11 @@ same pattern already uses correctly in `EmployeeDrawer`/`ResourceDrawer`.)
 `affectation` (visite planned, not yet started) whose `dateDebutExec` is tomorrow — `utils/dates.js`'s `isTomorrow()`
 compares calendar day only, so a trailing time-of-day on that field doesn't throw off the match. Same derived,
 no-separate-log pattern as the rest of the bell (congé/étalonnage/véhicule alerts, non-conformités, @mentions).
+
+## Lambert zone and surface adjustments (lots)
+
+`Lot.zone` (nord|sud) picks the projection for the bornes (`cadastre/geo/proj.py`, EPSG:26191 / 26192); the X/Y look
+alike in both zones so it can't be guessed — Marrakech is Nord, Agadir is Sud. `Lot.ajustements` (`Ajustement`: libellé,
+type appoint|deduction, signed m²) are the appoints/deductions printed between S and the adopted contenance;
+`Lot.ajustements_m2` is their sum and is part of the conformity check (`is_surface_conforme(..., ajustements_m2)`).
+The lot PUT keeps existing adjustments unless the payload carries an `ajustements` list (the review UI doesn't edit them).

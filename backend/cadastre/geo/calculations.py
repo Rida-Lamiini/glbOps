@@ -82,7 +82,7 @@ def planar_perimeter_m(ring: list[tuple[float, float]]) -> float:
     return sum(planar_distance_m(a, b) for a, b in zip(closed, closed[1:]))
 
 
-def centroid_of_lambert_ring(ring: list[tuple[float, float]]) -> tuple[float, float]:
+def centroid_of_lambert_ring(ring: list[tuple[float, float]], zone: str = "nord") -> tuple[float, float]:
     """Arithmetic-mean centroid of the ring's vertices, returned as WGS84 (lat, lng).
 
     A vertex mean, not an area-weighted centroid — matching the original
@@ -94,7 +94,7 @@ def centroid_of_lambert_ring(ring: list[tuple[float, float]]) -> tuple[float, fl
         raise ValueError("Cannot compute the centroid of an empty ring.")
     mean_x = sum(p[0] for p in vertices) / len(vertices)
     mean_y = sum(p[1] for p in vertices) / len(vertices)
-    return lambert_to_wgs84(mean_x, mean_y)
+    return lambert_to_wgs84(mean_x, mean_y, zone)
 
 
 def distance_and_bearing(

@@ -118,3 +118,26 @@
 .xl-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .xl-progress { height: 8px; border-radius: 8px; background: var(--surface-muted); overflow: hidden; margin: 12px 0 6px; }
 .xl-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .25s; }
+
+/* Lot comparison: plan | map + bornes | review rail */
+.cad-layout-compare { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 300px; }
+.cad-layout-compare .cad-rail { top: 84px; }
+.cad-plan { position: sticky; top: 84px; min-height: 0; }
+.cad-plan-frame { width: 100%; height: calc(100vh - 190px); min-height: 420px; border: 1px solid var(--border-subtle); border-radius: 12px; background: #fff; }
+.cad-plan-img { height: calc(100vh - 190px); min-height: 420px; overflow: auto; border: 1px solid var(--border-subtle); border-radius: 12px; background: #fff; }
+.cad-plan-img img { display: block; width: 100%; height: auto; }
+.cad-plan-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; min-height: 260px; color: var(--muted); font-size: 13px; }
+.cad-plan-empty strong { color: var(--ink); font-size: 14px; }
+.cad-borne-row { cursor: pointer; }
+.cad-borne-row:hover td { background: var(--status-warning-bg); }
+.cad-borne-row.is-focused td { background: var(--status-warning-bg); box-shadow: inset 3px 0 0 var(--accent); }
+.cad-layout-compare .cad-map { height: clamp(260px, 38vh, 420px); }
+@media (max-width: 1280px) {
+  .cad-layout-compare { grid-template-columns: minmax(0, 1fr) 300px; }
+  .cad-layout-compare .cad-plan { grid-column: 1 / -1; position: static; }
+  .cad-plan-frame, .cad-plan-img { height: 60vh; }
+}
+@media (max-width: 900px) {
+  .cad-layout-compare { grid-template-columns: 1fr; }
+}
+.cad-select { height: 40px; width: 100%; padding: 0 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--ink); box-sizing: border-box; }

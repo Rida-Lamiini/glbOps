@@ -105,7 +105,7 @@ def build_pv(prestation):
 
     if lot:
         calculee, document, correction = (float(v) for v in (lot.surface_calculee_m2, lot.surface_document_m2, lot.correction_lambert_m2))
-        ecart = round(calculee + correction - document, 2)
+        ecart = round(calculee + correction + float(lot.ajustements_m2) - document, 2)
         conforme = abs(ecart) <= 1
         r.section("Lot cadastral", note=f"Titre foncier {lot.titre_foncier}", keep=106)
         r.kpis([

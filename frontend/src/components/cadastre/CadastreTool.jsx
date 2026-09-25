@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Upload, Loader2, ArrowLeft, Trash2, Plus, CheckCircle2, AlertTriangle, Pencil, FilePlus2,
-  Search, X, FileDown, MapPin, FileSpreadsheet,
+  Search, X, FileDown, MapPin, FileSpreadsheet, Columns2,
 } from "lucide-react";
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
@@ -9,6 +9,7 @@ import {
   downloadLotsExcel, downloadLotReport,
 } from "./api";
 import LotMap from "./LotMap";
+import LotPlanViewer from "./LotPlanViewer";
 import ExcelImportScreen from "./ExcelImport";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import "./cadastre.css";
@@ -23,6 +24,7 @@ const EMPTY_INITIAL = {
   prestationId: "",
   distanceChecks: [],
   referencePoints: [],
+  ajustements: [],
   lotId: null,
 };
 
@@ -172,7 +174,7 @@ function ImportZone({ onReview, onExcel }) {
   );
 }
 
-function LotsList({ reloadKey, onOpenLot }) {
+function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
   const [lots, setLots] = useState(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState(null);
@@ -181,11 +183,11 @@ function LotsList({ reloadKey, onOpenLot }) {
     let cancelled = false;
     const t = setTimeout(() => {
       listCadastreLots(query)
-        .then((data) => !cancelled && (setLots(data), setError(null)))
+        .then((data) => !cancelled && (setLots(allowedProjetIds ? data.filter((l) => allowedProjetIds.has(l.projet)) : data), setError(null)))
         .catch((e) => !cancelled && setError(readApiError(e, "Impossible de charger les lots.")));
     }, query ? 250 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, reloadKey]);
+  }, [query, reloadKey, allowedProjetIds]);
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -239,7 +241,7 @@ function LotsList({ reloadKey, onOpenLot }) {
   );
 }
 
-function HomeScreen({ reloadKey, onReview, onOpenLot, onExcel }) {
+function HomeScreen({ reloadKey, onReview, onOpenLot, onExcel, allowedProjetIds }) {
   return (
     <div className="cad">
       <Hero title="Cadastre">
@@ -248,7 +250,7 @@ function HomeScreen({ reloadKey, onReview, onOpenLot, onExcel }) {
       </Hero>
       <Stepper step={0} />
       <ImportZone onReview={onReview} onExcel={onExcel} />
-      <LotsList reloadKey={reloadKey} onOpenLot={onOpenLot} />
+      <LotsList reloadKey={reloadKey} onOpenLot={onOpenLot} allowedProjetIds={allowedProjetIds} />
     </div>
   );
 }
@@ -279,6 +281,11 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
   const [header, setHeader] = useState(initial.header);
   const [projetId, setProjetId] = useState(initial.projetId || "");
   const [prestationId, setPrestationId] = useState(initial.prestationId || "");
+  const [zone, setZone] = useState(initial.zone || "nord");
+  const [ajustements, setAjustements] = useState(initial.ajustements || []);
+  const setAjustement = (i, patch) => setAjustements((p) => p.map((a, k) => (k === i ? { ...a, ...patch } : a)));
+  // A déduction always removes surface; an appoint keeps the sign it is typed with.
+  const ajustementsTotal = ajustements.reduce((s, a) => s + (a.type === "deduction" ? -Math.abs(Number(a.m2) || 0) : Number(a.m2) || 0), 0);
   const projetPrestations = useMemo(() => projets.find((p) => p.id === projetId)?.prestations || [], [projets, projetId]);
   // Picking a projet suggests the prestation this survey most likely belongs to: the one assigned
   // to the current user, else the one already at the bureau step, else the only one.
@@ -298,7 +305,7 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
   const setBorne = (i, patch) => setBornes((p) => p.map((b, k) => (k === i ? { ...b, ...patch, flagged: false, flagReason: undefined } : b)));
   const flagged = bornes.filter((b) => b.flagged).length;
   const area = useMemo(() => previewArea(bornes), [bornes]);
-  const ecart = area == null ? null : area + (Number(correctionLambertM2) || 0) - (Number(surfaceDocumentM2) || 0);
+  const ecart = area == null ? null : area + (Number(correctionLambertM2) || 0) + ajustementsTotal - (Number(surfaceDocumentM2) || 0);
 
   const checks = [
     { ok: Boolean(header.titreFoncier.trim()), label: "Titre foncier renseigné" },
@@ -316,11 +323,13 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
       prestation: projetId && prestationId ? prestationId : null,
       titreFoncier: header.titreFoncier,
       proprieteDite: header.proprieteDite,
+      zone,
       lotNumber: header.lot,
       geometre: header.geometre,
       surfaceDocumentM2: Number(surfaceDocumentM2) || 0,
       correctionLambertM2: Number(correctionLambertM2) || 0,
       bornes,
+      ajustements: ajustements.filter((a) => a.libelle.trim() && Number(a.m2)).map((a) => ({ ...a, m2: Number(a.m2) })),
       distanceChecks: initial.distanceChecks,
       referencePoints: initial.referencePoints,
     };
@@ -351,6 +360,10 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
               <Field label="Géomètre" value={header.geometre} onChange={(v) => setHeader((h) => ({ ...h, geometre: v }))} />
               <Field label="Surface du document (m²)" type="number" value={surfaceDocumentM2} onChange={setSurfaceDocumentM2} />
               <Field label="Correction Lambert (m²)" type="number" value={correctionLambertM2} onChange={setCorrectionLambertM2} />
+              <SelectField label="Zone Lambert" hint="Sud pour Marrakech, Agadir… (place le lot sur la carte)" value={zone} onChange={setZone}>
+                <option value="nord">Nord (Casablanca, Rabat, Tanger…)</option>
+                <option value="sud">Sud (Marrakech, Agadir…)</option>
+              </SelectField>
               <SelectField label="Projet lié" hint="Optionnel" value={projetId} onChange={changeProjet}>
                 <option value="">— aucun —</option>
                 {projets.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.situation}</option>)}
@@ -399,6 +412,41 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
               </table>
             )}
           </section>
+
+          <section className="cad-panel">
+            <div className="cad-top">
+              <h2>Ajustements de surface · {ajustements.length}</h2>
+              <button className="cad-btn" onClick={() => setAjustements((p) => [...p, { libelle: "", type: "deduction", m2: "" }])}>
+                <Plus size={16} /> Ajouter
+              </button>
+            </div>
+            {ajustements.length === 0 ? (
+              <div className="cad-note">Appoints graphiques, cimetière, parcelles détachées… imprimés entre S et la contenance adoptée. Une déduction retranche toujours (le signe est automatique) ; un appoint garde le signe saisi.</div>
+            ) : (
+              <table className="cad-bornes">
+                <thead><tr><th>Libellé</th><th>Type</th><th>m²</th><th aria-label="Actions" /></tr></thead>
+                <tbody>
+                  {ajustements.map((a, i) => (
+                    <tr key={i}>
+                      <td data-label="Libellé"><input value={a.libelle} onChange={(e) => setAjustement(i, { libelle: e.target.value })} aria-label={`Libellé de l'ajustement ${i + 1}`} /></td>
+                      <td data-label="Type">
+                        <select className="cad-select" value={a.type} onChange={(e) => setAjustement(i, { type: e.target.value })} aria-label={`Type de l'ajustement ${i + 1}`}>
+                          <option value="deduction">Déduction (−)</option>
+                          <option value="appoint">Appoint (±)</option>
+                        </select>
+                      </td>
+                      <td data-label="m²"><input type="number" inputMode="decimal" value={a.m2} onChange={(e) => setAjustement(i, { m2: e.target.value })} /></td>
+                      <td style={{ width: 52 }}>
+                        <button className="cad-btn danger" style={{ minHeight: 40, padding: "0 10px" }} onClick={() => setAjustements((p) => p.filter((_, k) => k !== i))} aria-label={`Supprimer l'ajustement ${a.libelle || i + 1}`}>
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
         </div>
 
         <aside className="cad-rail" aria-label="Contrôles">
@@ -415,7 +463,7 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
             ) : (
               <>
                 <div className="cad-figure"><span>Calculée (bornes)</span><strong>{fmt(area)} m²</strong></div>
-                <div className="cad-figure"><span>Document + correction</span><strong>{fmt((Number(surfaceDocumentM2) || 0) - (Number(correctionLambertM2) || 0))} m²</strong></div>
+                <div className="cad-figure"><span>Document − correction − ajustements</span><strong>{fmt((Number(surfaceDocumentM2) || 0) - (Number(correctionLambertM2) || 0) - ajustementsTotal)} m²</strong></div>
                 <div className="cad-figure"><span>Écart</span><strong style={{ color: Math.abs(ecart) <= SURFACE_TOLERANCE_M2 ? "var(--status-success)" : "var(--status-danger)" }}>{ecart > 0 ? "+" : ""}{fmt(ecart)} m²</strong></div>
                 <div className="cad-note">Tolérance : ±{SURFACE_TOLERANCE_M2} m². Un écart signale souvent un chiffre mal lu.</div>
               </>
@@ -449,6 +497,8 @@ function lotToReviewInitial(lot) {
     correctionLambertM2: lot.correctionLambertM2,
     projetId: lot.projet || "",
     prestationId: lot.prestation || "",
+    zone: lot.zone,
+    ajustements: lot.ajustements.map((a) => ({ libelle: a.libelle, type: a.type, m2: a.m2 })),
     distanceChecks: lot.distanceChecks.map((d) => ({ segmentLabel: d.segmentLabel, croquisM: d.croquisM })),
     referencePoints: lot.referencePoints.map((r) => ({ label: r.label, lat: r.lat, lng: r.lng })),
     lotId: lot.id,
@@ -460,6 +510,8 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
   const [reporting, setReporting] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [statutBusy, setStatutBusy] = useState(false);
+  const [compare, setCompare] = useState(false);
+  const [focusBorne, setFocusBorne] = useState(null);
 
   const makeReport = async () => {
     setReporting(true);
@@ -513,7 +565,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
   if (error) return <div className="cad"><div className="cad-error" role="alert">{error}</div><button className="cad-btn" onClick={onBack}><ArrowLeft size={16} /> Retour</button></div>;
   if (!lot) return <div className="cad"><div className="cad-note">Chargement…</div></div>;
 
-  const ecart = lot.surfaceCalculeeM2 + lot.correctionLambertM2 - lot.surfaceDocumentM2;
+  const ecart = lot.surfaceCalculeeM2 + lot.correctionLambertM2 + lot.ajustementsM2 - lot.surfaceDocumentM2;
 
   return (
     <div className="cad">
@@ -523,6 +575,9 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
           {onShowOnMap && (
             <button className="cad-btn" onClick={() => onShowOnMap(lotId)}><MapPin size={16} /> Voir sur la carte</button>
           )}
+          <button className={`cad-btn${compare ? " primary" : ""}`} onClick={() => setCompare((c) => !c)} aria-pressed={compare}>
+            <Columns2 size={16} /> {compare ? "Fermer la comparaison" : "Comparer avec le plan"}
+          </button>
           <button className="cad-btn primary" disabled={reporting} onClick={makeReport}>
             {reporting ? <Loader2 size={16} className="gt-spin-icon" /> : <FileDown size={16} />} Rapport PDF
           </button>
@@ -547,9 +602,10 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
         {[lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`, lot.prestation && `Prestation ${lot.prestation}`, lot.createdByName && `Saisi par ${lot.createdByName}`].filter(Boolean).join(" · ")}
       </Hero>
 
-      <div className="cad-layout">
+      <div className={compare ? "cad-layout cad-layout-compare" : "cad-layout"}>
+        {compare && <LotPlanViewer url={lot.sourcePdfUrl} />}
         <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-          <LotMap geojson={geojson} />
+          <LotMap geojson={geojson} focusName={focusBorne} />
           <section className="cad-panel">
             <h2>Bornes · {lot.bornes.length}</h2>
             <div style={{ overflowX: "auto" }}>
@@ -557,7 +613,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
                 <thead><tr><th>Borne</th><th>X Lambert</th><th>Y Lambert</th><th>Lat, Lng</th></tr></thead>
                 <tbody>
                   {lot.bornes.map((b) => (
-                    <tr key={b.id}>
+                    <tr key={b.id} className={`cad-borne-row${focusBorne === b.name ? " is-focused" : ""}`} onClick={() => setFocusBorne((f) => (f === b.name ? null : b.name))} title="Afficher sur la carte">
                       <td data-label="Borne"><strong>{b.name}</strong></td>
                       <td data-label="X Lambert" className="gt-mono">{fmt(b.xLambert, 3)}</td>
                       <td data-label="Y Lambert" className="gt-mono">{fmt(b.yLambert, 3)}</td>
@@ -589,6 +645,9 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
             <div className="cad-figure"><span>Calculée (bornes)</span><strong>{fmt(lot.surfaceCalculeeM2)} m²</strong></div>
             <div className="cad-figure"><span>Document</span><strong>{fmt(lot.surfaceDocumentM2)} m²</strong></div>
             <div className="cad-figure"><span>Correction Lambert</span><strong>{fmt(lot.correctionLambertM2)} m²</strong></div>
+            {lot.ajustements.map((a) => (
+              <div className="cad-figure" key={a.id}><span>{a.libelle}</span><strong>{a.m2 > 0 ? "+" : ""}{fmt(a.m2)} m²</strong></div>
+            ))}
             <div className="cad-figure"><span>Écart</span><strong style={{ color: lot.conforme ? "var(--status-success)" : "var(--status-danger)" }}>{ecart > 0 ? "+" : ""}{fmt(ecart)} m²</strong></div>
           </section>
           {lot.distanceChecks.length > 0 && (
@@ -608,9 +667,10 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
 // --- Entry point ---------------------------------------------------------------
 
 /** PDF → OCR → vérification → lot cadastral. Rendered by GlobetudesProjets for view === "cadastre". */
-export default function CadastreTool({ projets = [], currentUser, getClient, initialLotId = null, onShowOnMap }) {
+export default function CadastreTool({ projets = [], scopeToProjets = false, currentUser, getClient, initialLotId = null, onShowOnMap }) {
   const [screen, setScreen] = useState(() => (initialLotId ? { name: "detail", id: initialLotId } : { name: "list" }));
   const [reloadKey, setReloadKey] = useState(0);
+  const allowedProjetIds = useMemo(() => (scopeToProjets ? new Set(projets.map((p) => p.id)) : null), [scopeToProjets, projets]);
 
   if (screen.name === "review") {
     return (
@@ -647,6 +707,7 @@ export default function CadastreTool({ projets = [], currentUser, getClient, ini
   }
   return (
     <HomeScreen
+      allowedProjetIds={allowedProjetIds}
       reloadKey={reloadKey}
       onReview={(initial) => setScreen({ name: "review", initial })}
       onOpenLot={(id) => setScreen({ name: "detail", id })}

@@ -68,17 +68,18 @@ def build_lot_geometry(
     bornes_input: list[dict],
     distance_checks_input: list[dict],
     reference_points_input: list[dict],
+    zone: str = "nord",
 ) -> BuiltLotGeometry:
     ordered = sorted(bornes_input, key=lambda b: b["sequence"])
     ring = [(b["x_lambert"], b["y_lambert"]) for b in ordered]
 
     surface_calculee_m2 = planar_shoelace_area_m2(ring)
     perimeter_m = planar_perimeter_m(ring)
-    centroid = centroid_of_lambert_ring(ring)
+    centroid = centroid_of_lambert_ring(ring, zone)
 
     bornes = []
     for b in ordered:
-        lat, lng = lambert_to_wgs84(b["x_lambert"], b["y_lambert"])
+        lat, lng = lambert_to_wgs84(b["x_lambert"], b["y_lambert"], zone)
         bornes.append(
             BuiltBorne(
                 name=b["name"],
@@ -157,7 +158,10 @@ SURFACE_CONFORMITY_TOLERANCE_M2 = 1.0
 
 
 def is_surface_conforme(
-    surface_calculee_m2: float, correction_lambert_m2: float, surface_document_m2: float
+    surface_calculee_m2: float,
+    correction_lambert_m2: float,
+    surface_document_m2: float,
+    ajustements_m2: float = 0.0,
 ) -> bool:
-    ecart = surface_calculee_m2 + correction_lambert_m2 - surface_document_m2
+    ecart = surface_calculee_m2 + correction_lambert_m2 + ajustements_m2 - surface_document_m2
     return abs(ecart) <= SURFACE_CONFORMITY_TOLERANCE_M2

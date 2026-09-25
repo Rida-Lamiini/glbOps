@@ -15,7 +15,7 @@ from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygon
 from .db.lot_features import get_lot_feature_collection
 from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_lots_export, build_template, parse_lots_workbook
 from .geo.build_lot import build_lot_geometry
-from .models import Borne, DistanceCheck, Lot, ReferencePoint
+from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
 from .report import build_lot_report, report_filename
 from .serializers import CreateLotSerializer, LotDetailSerializer, LotListSerializer
@@ -55,7 +55,8 @@ def _save_lot(data, existing_lot=None, user=None):
     and safe since the caller (the review UI) always submits the full set.
     """
     built = build_lot_geometry(
-        data["bornes"], data.get("distance_checks") or [], data.get("reference_points") or []
+        data["bornes"], data.get("distance_checks") or [], data.get("reference_points") or [],
+        data.get("zone", "nord"),
     )
 
     field_values = dict(
@@ -68,6 +69,7 @@ def _save_lot(data, existing_lot=None, user=None):
         geometre=data.get("geometre", ""),
         date_leve=data.get("date_leve"),
         service_cadastre=data.get("service_cadastre", ""),
+        zone=data.get("zone", "nord"),
         surface_document_m2=data["surface_document_m2"],
         surface_calculee_m2=built.surface_calculee_m2,
         correction_lambert_m2=data["correction_lambert_m2"],
@@ -88,6 +90,8 @@ def _save_lot(data, existing_lot=None, user=None):
             lot.bornes.all().delete()
             lot.distance_checks.all().delete()
             lot.reference_points.all().delete()
+            if data.get("ajustements") is not None:
+                lot.ajustements.all().delete()
 
         Borne.objects.bulk_create(
             [
@@ -103,6 +107,21 @@ def _save_lot(data, existing_lot=None, user=None):
                 for b in built.bornes
             ]
         )
+        ajustements = data.get("ajustements")
+        if ajustements is not None:
+            Ajustement.objects.bulk_create(
+                [
+                    Ajustement(
+                        lot=lot,
+                        libelle=a["libelle"],
+                        type=a["type"],
+                        m2=-abs(a["m2"]) if a["type"] == "deduction" else a["m2"],
+                    )
+                    for a in ajustements
+                ]
+            )
+            lot.ajustements_m2 = sum(a.m2 for a in lot.ajustements.all())
+            lot.save(update_fields=["ajustements_m2"])
         DistanceCheck.objects.bulk_create(
             [
                 DistanceCheck(
@@ -215,7 +234,7 @@ def lot_reuse(request, pk):
     points and polygon) and the copy remembers its origin in ``derive_de``, so
     the original survey is never altered.
     """
-    source = get_object_or_404(Lot.objects.prefetch_related("bornes", "distance_checks", "reference_points"), pk=pk)
+    source = get_object_or_404(Lot.objects.prefetch_related("bornes", "distance_checks", "reference_points", "ajustements"), pk=pk)
     projet = get_object_or_404(Projet, pk=request.data.get("projet"))
 
     existing = Lot.objects.filter(titre_foncier=source.titre_foncier, projet=projet).first()
@@ -239,9 +258,11 @@ def lot_reuse(request, pk):
             geometre=source.geometre,
             date_leve=source.date_leve,
             service_cadastre=source.service_cadastre,
+            zone=source.zone,
             surface_document_m2=source.surface_document_m2,
             surface_calculee_m2=source.surface_calculee_m2,
             correction_lambert_m2=source.correction_lambert_m2,
+            ajustements_m2=source.ajustements_m2,
             source_pdf_url=source.source_pdf_url,
         )
         Borne.objects.bulk_create(
@@ -253,6 +274,7 @@ def lot_reuse(request, pk):
         ReferencePoint.objects.bulk_create(
             [ReferencePoint(lot=copy, label=r.label, lat=r.lat, lng=r.lng, distance_m=r.distance_m, bearing_deg=r.bearing_deg) for r in source.reference_points.all()]
         )
+        Ajustement.objects.bulk_create([Ajustement(lot=copy, libelle=a.libelle, type=a.type, m2=a.m2) for a in source.ajustements.all()])
         copy_lot_geometry(source.id, copy.id)
     return Response({"id": str(copy.id), "mode": "copied"}, status=status.HTTP_201_CREATED)
 
@@ -298,7 +320,7 @@ def lot_statut(request, pk):
 @permission_classes([IsAuthenticated])
 def lot_detail(request, pk):
     lot = get_object_or_404(
-        Lot.objects.prefetch_related("bornes", "distance_checks", "reference_points"), pk=pk
+        Lot.objects.prefetch_related("bornes", "distance_checks", "reference_points", "ajustements"), pk=pk
     )
 
     if request.method == "DELETE":

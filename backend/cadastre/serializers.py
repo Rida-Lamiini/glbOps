@@ -3,13 +3,19 @@ from rest_framework import serializers
 from projets.models import Prestation, Projet
 
 from .geo.build_lot import is_surface_conforme
-from .models import Borne, DistanceCheck, Lot, ReferencePoint
+from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
 
 
 class BorneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Borne
         fields = ["id", "name", "sequence", "x_lambert", "y_lambert", "lat", "lng"]
+
+
+class AjustementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Ajustement
+        fields = ["id", "libelle", "type", "m2"]
 
 
 class DistanceCheckSerializer(serializers.ModelSerializer):
@@ -49,9 +55,11 @@ class LotListSerializer(serializers.ModelSerializer):
             "statut_par_name",
             "titre_foncier",
             "propriete_dite",
+            "zone",
             "surface_document_m2",
             "surface_calculee_m2",
             "correction_lambert_m2",
+            "ajustements_m2",
             "updated_at",
             "conforme",
         ]
@@ -67,6 +75,7 @@ class LotListSerializer(serializers.ModelSerializer):
             float(lot.surface_calculee_m2),
             float(lot.correction_lambert_m2),
             float(lot.surface_document_m2),
+            float(lot.ajustements_m2),
         )
 
 
@@ -74,6 +83,7 @@ class LotDetailSerializer(LotListSerializer):
     bornes = BorneSerializer(many=True, read_only=True)
     distance_checks = DistanceCheckSerializer(many=True, read_only=True)
     reference_points = ReferencePointSerializer(many=True, read_only=True)
+    ajustements = AjustementSerializer(many=True, read_only=True)
 
     class Meta(LotListSerializer.Meta):
         fields = LotListSerializer.Meta.fields + [
@@ -87,6 +97,7 @@ class LotDetailSerializer(LotListSerializer):
             "bornes",
             "distance_checks",
             "reference_points",
+            "ajustements",
         ]
 
 
@@ -103,6 +114,12 @@ class BorneInputSerializer(serializers.Serializer):
 class DistanceCheckInputSerializer(serializers.Serializer):
     segment_label = serializers.CharField(min_length=1, max_length=100)
     croquis_m = serializers.FloatField(min_value=0)
+
+
+class AjustementInputSerializer(serializers.Serializer):
+    libelle = serializers.CharField(min_length=1, max_length=200)
+    type = serializers.ChoiceField(choices=["appoint", "deduction"])
+    m2 = serializers.FloatField()
 
 
 class ReferencePointInputSerializer(serializers.Serializer):
@@ -125,12 +142,15 @@ class CreateLotSerializer(serializers.Serializer):
     geometre = serializers.CharField(max_length=200, required=False, allow_blank=True)
     date_leve = serializers.DateField(required=False, allow_null=True)
     service_cadastre = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    zone = serializers.ChoiceField(choices=["nord", "sud"], required=False, default="nord")
     surface_document_m2 = serializers.FloatField(min_value=0)
     correction_lambert_m2 = serializers.FloatField()
     source_pdf_url = serializers.CharField(max_length=500, required=False, allow_blank=True)
     bornes = BorneInputSerializer(many=True)
     distance_checks = DistanceCheckInputSerializer(many=True, required=False, default=list)
     reference_points = ReferencePointInputSerializer(many=True, required=False, default=list)
+    # None = leave the lot's existing adjustments untouched (the review UI doesn't edit them).
+    ajustements = AjustementInputSerializer(many=True, required=False, allow_null=True, default=None)
 
     def _check_prestation_belongs_to_projet(self, attrs):
         prestation, projet = attrs.get("prestation"), attrs.get("projet")

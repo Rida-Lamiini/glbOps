@@ -45,7 +45,7 @@ def build_lot_report(lot):
     for b in bornes:
         b.x_lambert, b.y_lambert = float(b.x_lambert), float(b.y_lambert)
     calculee, document, correction = (float(v) for v in (lot.surface_calculee_m2, lot.surface_document_m2, lot.correction_lambert_m2))
-    ecart = round(calculee + correction - document, 2)
+    ecart = round(calculee + correction + float(lot.ajustements_m2) - document, 2)
     conforme = abs(ecart) <= SURFACE_TOLERANCE_M2
     projet = lot.projet
     client = projet.client if projet else None

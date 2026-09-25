@@ -187,6 +187,21 @@ class LotReviewTests(TestCase):
         d = self._as(self.bureau_user).get(f"/api/cadastre/lots/{lot_id}/").json()
         self.assertEqual((d["prestation"], d["created_by_name"], d["statut"]), (self.prestation.id, "Marc Bureau", "brouillon"))
 
+    def test_adjustments_are_signed_kept_on_edit_and_replaced_when_sent(self):
+        api = self._as(self.bureau_user)
+        adj = [{"libelle": "Cimetière", "type": "deduction", "m2": 500}, {"libelle": "Appoint B1-B2", "type": "appoint", "m2": -3.5}]
+        lot_id = self._lot(api, ajustements=adj)
+        url = f"/api/cadastre/lots/{lot_id}/"
+        d = api.get(url).json()
+        self.assertEqual(sorted(float(a["m2"]) for a in d["ajustements"]), [-500.0, -3.5])  # deduction forced negative
+        self.assertAlmostEqual(float(d["ajustements_m2"]), -503.5)
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id}
+        self.assertEqual(api.put(url, body, format="json").status_code, 200)  # no key: untouched
+        self.assertEqual(len(api.get(url).json()["ajustements"]), 2)
+        self.assertEqual(api.put(url, {**body, "ajustements": []}, format="json").status_code, 200)  # empty list: cleared
+        d = api.get(url).json()
+        self.assertEqual((d["ajustements"], float(d["ajustements_m2"])), ([], 0.0))
+
     def test_prestation_must_belong_to_the_projet(self):
         body = {**_payload(self.other.id, "TF/9/R"), "prestation": self.prestation.id}
         self.assertEqual(self._as(self.bureau_user).post("/api/cadastre/lots/", body, format="json").status_code, 400)
@@ -472,3 +487,31 @@ class ExcelImportTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("spreadsheetml", res["Content-Type"])
         self.assertIn("modele-import-lots.xlsx", res["Content-Disposition"])
+
+
+from .geo.proj import lambert_to_wgs84, wgs84_to_lambert  # noqa: E402
+
+
+class LambertZoneTests(SimpleTestCase):
+    def test_zone_moves_the_same_xy_hundreds_of_km(self):
+        nord = lambert_to_wgs84(289379.08, 331463.70)
+        sud = lambert_to_wgs84(289379.08, 331463.70, "sud")
+        self.assertAlmostEqual(nord[0], 33.56, delta=0.1)  # Casablanca
+        self.assertGreater(nord[0] - sud[0], 3)
+
+    def test_round_trip_per_zone(self):
+        for zone in ("nord", "sud"):
+            lat, lng = lambert_to_wgs84(300000, 350000, zone)
+            x, y = wgs84_to_lambert(lat, lng, zone)
+            self.assertAlmostEqual(x, 300000, places=2)
+            self.assertAlmostEqual(y, 350000, places=2)
+
+
+from .geo.build_lot import is_surface_conforme  # noqa: E402
+
+
+class AjustementConformityTests(SimpleTestCase):
+    def test_signed_adjustments_close_the_chain(self):
+        # 4 144 383 + 0 - 328 400 (deductions) vs the 3 815 983 the document declares.
+        self.assertFalse(is_surface_conforme(4144383.0, 0.0, 3815983.0))
+        self.assertTrue(is_surface_conforme(4144383.0, 0.0, 3815983.0, -328400.0))

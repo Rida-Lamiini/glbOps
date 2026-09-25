@@ -86,9 +86,12 @@ const toLotSummary = (lot) => ({
   statutParName: lot.statut_par_name || "",
   titreFoncier: lot.titre_foncier,
   proprieteDite: lot.propriete_dite,
+  sourcePdfUrl: lot.source_pdf_url || "",
+  zone: lot.zone || "nord",
   surfaceDocumentM2: Number(lot.surface_document_m2),
   surfaceCalculeeM2: Number(lot.surface_calculee_m2),
   correctionLambertM2: Number(lot.correction_lambert_m2),
+  ajustementsM2: Number(lot.ajustements_m2 || 0),
   updatedAt: lot.updated_at,
   conforme: lot.conforme,
 });
@@ -124,6 +127,7 @@ export const getCadastreLot = async (id) => {
       calculeM: Number(dc.calcule_m),
       ecartM: Number(dc.ecart_m),
     })),
+    ajustements: (lot.ajustements || []).map((a) => ({ id: a.id, libelle: a.libelle, type: a.type, m2: Number(a.m2) })),
     referencePoints: (lot.reference_points || []).map((rp) => ({
       id: rp.id,
       label: rp.label,
@@ -149,6 +153,7 @@ const buildLotBody = (payload) => ({
   prestation: payload.prestation || null,
   titre_foncier: payload.titreFoncier,
   propriete_dite: payload.proprieteDite,
+  zone: payload.zone || "nord",
   lot_number: payload.lotNumber || "",
   affaire_ref: payload.affaireRef || "",
   geometre: payload.geometre || "",
@@ -171,6 +176,8 @@ const buildLotBody = (payload) => ({
     lat: rp.lat,
     lng: rp.lng,
   })),
+  // Omitted when the caller doesn't manage adjustments, so the server keeps the lot's existing ones.
+  ajustements: payload.ajustements?.map((a) => ({ libelle: a.libelle, type: a.type, m2: a.m2 })),
 });
 
 export const createCadastreLot = (payload) => apiPost("/cadastre/lots/", buildLotBody(payload));
