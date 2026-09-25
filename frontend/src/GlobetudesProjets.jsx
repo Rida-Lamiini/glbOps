@@ -230,7 +230,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
       natureDemandee: "nature_demandee", natureExecutee: "nature_executee",
       dateDebutExec: "date_debut_exec", dateFinExec: "date_fin_exec",
       cheminBureau: "chemin_bureau", ref: "ref", chemin: "chemin", cdN: "cd_n", disqueN: "disque_n",
-      stage: "stage", cycles: "cycles", reprogramme: "reprogramme", nonConformiteSource: "non_conformite_source",
+      stage: "stage", cycles: "cycles", reprogramme: "reprogramme", reprogPending: "reprog_en_attente", reprogDate: "reprog_date", reprogMotif: "reprog_motif", nonConformiteSource: "non_conformite_source",
     };
     const dates = {
       dateDebutDemande: "date_debut_demande", dateFinDemande: "date_fin_demande",
@@ -850,6 +850,13 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     if (removed?.id) apiDelete(`/attachments/${removed.id}/`).catch(() => notifyError("La pièce jointe n'a pas pu être supprimée."));
   };
 
+  // Cadastre: agents review lots of the projets they are assigned to, not every lot.
+  const isOfficeUser = currentUser?.role === "Dispatcher" || currentUser?.role === "Directrice";
+  const cadastreProjets = useMemo(
+    () => (isOfficeUser ? projets : projets.filter((pr) => pr.prestations.some((p) => visibleToUser(p, currentUser)))),
+    [projets, currentUser, isOfficeUser]
+  );
+
   const filteredProjets = useMemo(() => {
     return projets
       .map((pr) => ({ ...pr, prestations: pr.prestations.filter((p) => visibleToUser(p, currentUser)) }))
@@ -1382,7 +1389,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
 
         {view === "cadastre" && (
           <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <CadastreTool projets={projets} currentUser={currentUser} getClient={getClient} initialLotId={cadastreLotId} onShowOnMap={(id) => { setMapFocusLotId(id); setView("carte"); }} />
+            <CadastreTool projets={cadastreProjets} scopeToProjets={!isOfficeUser} currentUser={currentUser} getClient={getClient} initialLotId={cadastreLotId} onShowOnMap={(id) => { setMapFocusLotId(id); setView("carte"); }} />
           </motion.div>
         )}
 
@@ -1573,6 +1580,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             key="new-client-modal"
             onClose={() => setShowNewClient(false)}
             onCreate={createClient}
+            clients={clients}
           />
         )}
       </AnimatePresence>

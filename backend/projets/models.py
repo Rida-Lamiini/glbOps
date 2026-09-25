@@ -87,6 +87,10 @@ class Prestation(models.Model):
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default="demande")
     cycles = models.PositiveIntegerField(default=0)
     reprogramme = models.BooleanField(default=False)
+    # The field agent's request to reschedule an unfinished visit, waiting for the dispatcher's decision.
+    reprog_en_attente = models.BooleanField(default=False)
+    reprog_date = models.CharField(max_length=30, blank=True)
+    reprog_motif = models.TextField(blank=True)
     non_conformite_source = models.CharField(max_length=20, choices=NON_CONFORMITY_SOURCE_CHOICES, blank=True)
 
     class Meta:

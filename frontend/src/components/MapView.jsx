@@ -148,7 +148,13 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const [importedPoints, setImportedPoints] = useState([]);
   const [importError, setImportError] = useState(null);
   const [exportingPdf, setExportingPdf] = useState(false);
-  const [cadastreGeojson, setCadastreGeojson] = useState(null);
+  const [cadastreRaw, setCadastreRaw] = useState(null);
+  // Agents only see the lots of the projets they can see; office sees every lot.
+  const cadastreGeojson = useMemo(() => {
+    if (!cadastreRaw || !currentUser || currentUser.role === "Dispatcher" || currentUser.role === "Directrice") return cadastreRaw;
+    const ids = new Set(projects.map((p) => p.id));
+    return { ...cadastreRaw, features: cadastreRaw.features.filter((f) => ids.has(f.properties.projetId)) };
+  }, [cadastreRaw, projects, currentUser]);
   const [showCadastreLots, setShowCadastreLots] = useState(true);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState("projets");
@@ -530,7 +536,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   // (not just hidden) for roles that shouldn't see this layer at all.
   useEffect(() => {
     if (!canSeeCadastre) return;
-    getAllCadastreLotsGeoJSON().then(setCadastreGeojson).catch(() => {});
+    getAllCadastreLotsGeoJSON().then(setCadastreRaw).catch(() => {});
   }, [canSeeCadastre]);
 
   // One entry per lot: what the pins, the search and the list need (centre, bounds, status…).

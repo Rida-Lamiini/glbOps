@@ -72,6 +72,7 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
   const [showReprog, setShowReprog] = useState(false);
   const [reprogDate, setReprogDate] = useState("");
   const [reprogMotif, setReprogMotif] = useState("");
+  const [decideDate, setDecideDate] = useState(null); // dispatcher's edit of the agent's proposed date
 
   const [refBureau, setRefBureau] = useState(prestation.ref);
   const [tachesSel, setTachesSel] = useState(prestation.taches || []);
@@ -153,6 +154,9 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
     setTachesSel(updated);
     const isNowDone = updated.find((t) => t.label === label)?.done;
     push({ taches: updated }, `Tâche ${isNowDone ? "terminée" : "réouverte"} — ${label}`);
+    if (isNowDone && updated.every((t) => t.done)) {
+      notifySuccess("Toutes les tâches sont terminées — renseignez la référence du livrable puis cliquez « Envoyer au contrôle » : le contrôle ne voit le dossier qu'après cet envoi.");
+    }
   };
 
   const stage = prestation.stage;
@@ -472,12 +476,15 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                       </button>
                     ) : "—"}
                   </div>
+                  {prestation.reprogramme && (
+                    <div style={{ color: "var(--amber)" }}>Visite précédente inachevée — reprise reprogrammée</div>
+                  )}
                   <div>Visite prévue le {prestation.dateDebutExec}</div>
                 </div>
                 {allowed ? (
                   <button
                     className="gt-btn gt-btn-primary"
-                    onClick={() => push({ stage: "execution" }, `Passage à l'exécution — visite du ${prestation.dateDebutExec}`)}
+                    onClick={() => push({ stage: "execution", reprogramme: false }, `Passage à l'exécution — visite du ${prestation.dateDebutExec}`)}
                   >
                     Démarrer l'exécution <ChevronRight size={14} />
                   </button>
@@ -509,7 +516,7 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                     disabled={!natureExecutee || !dateFinExec}
                     onClick={() =>
                       push(
-                        { stage: "bureau", natureExecutee, dateFinExec, reprogramme: false },
+                        { stage: "bureau", natureExecutee, dateFinExec, reprogramme: false, reprogPending: false, reprogDate: "", reprogMotif: "" },
                         `Exécution saisie — ${natureExecutee}`
                       )
                     }
@@ -517,7 +524,11 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                     Envoyer au bureau <ChevronRight size={14} />
                   </button>
 
-                  {prestation.reprogramme ? (
+                  {prestation.reprogPending ? (
+                    <div className="gt-readonly" style={{ borderColor: "var(--amber)", color: "var(--amber)" }}>
+                      <PauseCircle size={12} style={{ verticalAlign: -2 }} /> Reprogrammation demandée pour le {prestation.reprogDate} — en attente de validation du dispatcher.
+                    </div>
+                  ) : prestation.reprogramme ? (
                     <div className="gt-readonly">
                       <PauseCircle size={12} style={{ verticalAlign: -2 }} /> Reprise déjà programmée — terminez cette visite avant d'en signaler une autre.
                     </div>
@@ -541,15 +552,15 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                         rows={2}
                         placeholder="Ce qui a bloqué / reste à faire..."
                       />
-                      <label>Nouvelle date de visite proposée <span className="gt-hint">(suggestion — le dispatcher peut la modifier)</span></label>
+                      <label>Nouvelle date de visite proposée <span className="gt-hint">(suggestion — le dispatcher la valide ou la modifie)</span></label>
                       <DateTimeField value={reprogDate} onChange={setReprogDate} todayLabel="Maintenant" />
                       <button
                         className="gt-btn gt-btn-primary"
                         disabled={!reprogDate || !reprogMotif.trim()}
                         onClick={() => {
                           push(
-                            { dateDebutExec: reprogDate, reprogramme: true },
-                            `Visite partielle — ${reprogMotif.trim()}. Reprise prévue le ${reprogDate}`
+                            { reprogPending: true, reprogDate, reprogMotif: reprogMotif.trim() },
+                            `Reprogrammation demandée — ${reprogMotif.trim()}. Date proposée : ${reprogDate} (en attente de validation du dispatcher)`
                           );
                           setShowReprog(false);
                           setReprogMotif("");
@@ -562,6 +573,43 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                   )}
                 </div>
               ) : (
+                <>
+                {isOffice && prestation.reprogPending && (
+                  <div className="gt-form gt-reprogbox">
+                    <div className="gt-readonly" style={{ borderColor: "var(--amber)", color: "var(--amber)" }}>
+                      <PauseCircle size={12} style={{ verticalAlign: -2 }} /> L'agent chantier demande de reprogrammer la visite.
+                      <div style={{ marginTop: 4, color: "var(--ink)" }}>Motif : {prestation.reprogMotif || "—"}</div>
+                    </div>
+                    <label>Date de reprise <span className="gt-hint">(proposée par l'agent — modifiable)</span></label>
+                    <DateTimeField value={decideDate ?? prestation.reprogDate} onChange={setDecideDate} todayLabel="Maintenant" />
+                    <button
+                      className="gt-btn gt-btn-primary"
+                      disabled={!(decideDate ?? prestation.reprogDate)}
+                      onClick={() => {
+                        const date = decideDate ?? prestation.reprogDate;
+                        push(
+                          { stage: "affectation", dateDebutExec: date, reprogramme: true, reprogPending: false, reprogDate: "", reprogMotif: "" },
+                          `Reprogrammation validée — reprise le ${date}. Retour à l'affectation terrain`
+                        );
+                        setDecideDate(null);
+                      }}
+                    >
+                      Valider la reprogrammation <ChevronRight size={14} />
+                    </button>
+                    <button
+                      className="gt-btn gt-btn-neutral"
+                      onClick={() => {
+                        push(
+                          { reprogPending: false, reprogDate: "", reprogMotif: "" },
+                          `Reprogrammation refusée — l'agent doit terminer l'exécution (date demandée : ${prestation.reprogDate})`
+                        );
+                        setDecideDate(null);
+                      }}
+                    >
+                      Refuser
+                    </button>
+                  </div>
+                )}
                 <div className="gt-readonly gt-restricted">
                   <Lock size={12} /> Réservé à l'agent chantier assigné
                   {prestation.reprogramme && <div style={{ marginTop: 6 }}>Reprise prévue le {prestation.dateDebutExec}</div>}
@@ -571,6 +619,7 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                     </div>
                   )}
                 </div>
+                </>
               )
             )}
 
@@ -755,6 +804,11 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                         <input value={refBureau} onChange={(e) => setRefBureau(e.target.value)} placeholder="ex. LIV-0134" />
                         <label>Chemin du dossier de traitement</label>
                         <input value={cheminBureau} onChange={(e) => setCheminBureau(e.target.value)} placeholder="\\SERVEUR\Traitement\..." className="gt-mono" />
+                        {tachesSel.length > 0 && tachesSel.every((t) => t.done) && (
+                          <div className="gt-readonly" style={{ borderColor: "var(--amber)", color: "var(--amber)" }}>
+                            <AlertTriangle size={12} style={{ verticalAlign: -2 }} /> Toutes les tâches sont terminées, mais le dossier est encore au bureau : cliquez « Envoyer au contrôle » pour que l'agent contrôle puisse le traiter.
+                          </div>
+                        )}
                         <button
                           className="gt-btn gt-btn-primary"
                           disabled={tachesSel.length === 0 || tachesSel.some((t) => t.agents.length === 0) || !refBureau.trim()}
@@ -767,6 +821,7 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                         >
                           Envoyer au contrôle <ChevronRight size={14} />
                         </button>
+                        {!refBureau.trim() && tachesSel.length > 0 && <div className="gt-attach-note">Renseignez la référence du livrable pour pouvoir envoyer au contrôle.</div>}
 
                         <div className="gt-reprogbox" style={{ borderColor: "var(--bad)", background: "#FBEBE8" }}>
                           <label>Données insuffisantes — motif</label>
@@ -802,6 +857,13 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
               ) : (
                 <div className="gt-readonly gt-restricted">
                   <Lock size={12} /> Réservé à l'agent bureau assigné ({prestation.agentBureau})
+                  {(prestation.taches || []).length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      {(prestation.taches || []).filter((t) => t.done).length}/{prestation.taches.length} tâche(s) terminée(s) — {(prestation.taches || []).every((t) => t.done)
+                        ? "en attente de l'envoi au contrôle par l'agent bureau."
+                        : "traitement en cours au bureau."}
+                    </div>
+                  )}
                   {prestation.natureExecutee && <div className="gt-mono" style={{ marginTop: 6 }}>{prestation.natureExecutee}</div>}
                 </div>
               )

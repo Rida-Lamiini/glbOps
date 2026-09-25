@@ -48,6 +48,12 @@ export function buildNotifications(currentUser, { tasks = [], employees = [], ma
 
   if (office) {
     tasks.forEach((p) => {
+      if (p.stage === "bureau" && (p.taches || []).length > 0 && p.taches.every((t) => t.done)) {
+        notes.push({ id: `bureau-pret-${p.id}`, kind: "warn", label: `Tâches bureau terminées, non envoyé au contrôle — ${clientLabel(p, getClient)}`, detail: p.agentBureau ? `À envoyer par ${p.agentBureau}` : "", prestationId: p.id });
+      }
+      if (p.reprogPending) {
+        notes.push({ id: `reprog-${p.id}`, kind: "warn", label: `Reprogrammation à valider — ${clientLabel(p, getClient)}`, detail: `${p.reprogMotif || "—"} · date proposée ${p.reprogDate}`, prestationId: p.id });
+      }
       const reason = rejectionReason(p);
       if (reason) {
         notes.push({ id: `nc-${p.id}`, kind: "bad", label: `Non-conformité — ${clientLabel(p, getClient)}`, detail: reason, prestationId: p.id });
@@ -79,6 +85,9 @@ export function buildNotifications(currentUser, { tasks = [], employees = [], ma
 
   if (currentUser.role === "Agent Chantier") {
     tasks.forEach((p) => {
+      if (p.reprogPending) {
+        notes.push({ id: `reprogattente-${p.id}`, kind: "info", label: `Reprogrammation en attente — ${clientLabel(p, getClient)}`, detail: `Proposée pour le ${p.reprogDate}`, prestationId: p.id });
+      }
       if (p.reprogramme) {
         notes.push({ id: `reprog-${p.id}`, kind: "warn", label: `Reprise programmée — ${clientLabel(p, getClient)}`, detail: `Prévue le ${p.dateDebutExec}`, prestationId: p.id });
       }
@@ -98,6 +107,10 @@ export function buildNotifications(currentUser, { tasks = [], employees = [], ma
   if (currentUser.role === "Agent Bureau") {
     tasks.forEach((p) => {
       if (p.stage !== "bureau") return;
+      if ((p.taches || []).length > 0 && p.taches.every((t) => t.done)) {
+        notes.push({ id: `bureau-envoyer-${p.id}`, kind: "warn", label: `Toutes les tâches terminées — envoyer au contrôle — ${clientLabel(p, getClient)}`, detail: "Ouvrez la fiche, renseignez la référence du livrable puis « Envoyer au contrôle »", prestationId: p.id });
+        return;
+      }
       const reason = rejectionReason(p);
       notes.push({
         id: `bureau-${p.id}`,

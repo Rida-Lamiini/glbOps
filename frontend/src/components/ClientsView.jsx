@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import ResponsiveTableCard from "./ResponsiveTableCard";
 import { AlertTriangle } from "lucide-react";
 import { computeClientStats } from "../utils/stats";
+import { duplicateGroups } from "../utils/clientDuplicates";
 import { formatTimestamp } from "../utils/dates";
 import {
   Table,
@@ -53,10 +54,27 @@ export default function ClientsView({ clients, projects, query, onOpenClient, is
     return sorted;
   }, [clients, projects, query, isOffice, filterSecteur, nonConfOnly, sortKey]);
 
+  const doublons = useMemo(() => (isOffice ? duplicateGroups(clients) : []), [clients, isOffice]);
+
   const hasActiveFilters = filterSecteur !== "all" || nonConfOnly;
 
   return (
     <>
+      {doublons.length > 0 && (
+        <details className="gt-dup-banner">
+          <summary><AlertTriangle size={14} /> {doublons.length} doublon{doublons.length > 1 ? "s" : ""} possible{doublons.length > 1 ? "s" : ""} dans les clients</summary>
+          {doublons.map((g) => (
+            <div className="gt-dup-group" key={g.clients.map((c) => c.id).join("|")}>
+              {g.clients.map((c) => (
+                <button type="button" key={c.id} onClick={() => onOpenClient(c.id)}>
+                  {c.nom} <span className="gt-mono">{c.code}</span> · {computeClientStats(c, projects).nbProjects} projet(s)
+                </button>
+              ))}
+              <small>{g.reasons.join(" · ")}</small>
+            </div>
+          ))}
+        </details>
+      )}
       <div className="rg-ledger" role="group" aria-label="Synthèse">
         <div className="rg-ledger-cell"><span>Clients</span><strong>{summary.clients}</strong></div>
         <div className="rg-ledger-cell"><span>Projets</span><strong>{summary.projets}</strong></div>

@@ -1854,3 +1854,14 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
 
 /* Attachment cards right under an inline upload form (projet / resource drawers, projet fiche) */
 .gt-form + .gt-attach-grid { margin-top: 12px; }
+
+/* Possible duplicate clients (new-client form + Clients page banner) */
+.gt-dup-warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; margin: 4px 0 8px; border-radius: 10px; background: var(--status-warning-bg); color: var(--status-warning); font-size: 12.5px; line-height: 1.4; }
+.gt-dup-warn svg { flex: none; margin-top: 2px; }
+.gt-dup-warn ul { margin: 4px 0 0; padding-left: 16px; color: var(--ink); }
+.gt-dup-banner { margin-bottom: 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--status-warning-bg); padding: 10px 14px; font-size: 13px; }
+.gt-dup-banner summary { cursor: pointer; display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--status-warning); }
+.gt-dup-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0 2px; }
+.gt-dup-group button { border: 1px solid var(--border-subtle); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; color: var(--ink); }
+.gt-dup-group button:hover { border-color: var(--accent); }
+.gt-dup-group small { color: var(--muted); font-style: italic; }

@@ -34,7 +34,7 @@ class PrestationSerializer(serializers.ModelSerializer):
             "agent_bureau", "chemin_bureau", "date_debut_bureau", "date_fin_bureau",
             "agent_controle", "date_debut_controle", "date_fin_controle",
             "date_livraison", "ref", "chemin", "cd_n", "disque_n",
-            "stage", "cycles", "reprogramme", "non_conformite_source",
+            "stage", "cycles", "reprogramme", "reprog_en_attente", "reprog_date", "reprog_motif", "non_conformite_source",
             "taches", "history", "attachments", "comments",
         ]
 

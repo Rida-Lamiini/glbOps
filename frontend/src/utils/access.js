@@ -33,18 +33,13 @@ export function visibleToUser(prestation, currentUser) {
   if (office) return true;
   if (currentUser.role === "Agent Chantier") return (prestation.agentChantier || []).includes(currentUser.name);
   if (currentUser.role === "Agent Bureau") {
+    // Only what is assigned to them (as the dossier's bureau agent, or on one of its tâches) —
+    // for the whole life of the prestation, delivered ones included.
     if (prestation.agentBureau === currentUser.name) return true;
-    if ((prestation.taches || []).some((t) => (t.agents || []).includes(currentUser.name))) return true;
-    // A prestation lands on "bureau" with nobody assigned yet — it has to be visible to every
-    // bureau agent, or nobody can see the incoming work (terrain photos included) to claim it.
-    if (!prestation.agentBureau && ["bureau", "controle", "livraison"].includes(prestation.stage)) return true;
-    return false;
+    return (prestation.taches || []).some((t) => (t.agents || []).includes(currentUser.name));
   }
   if (currentUser.role === "Agent Contrôle") {
-    if (prestation.agentControle === currentUser.name) return true;
-    // Same gap as above, one stage further down the pipeline.
-    if (!prestation.agentControle && ["controle", "livraison"].includes(prestation.stage)) return true;
-    return false;
+    return prestation.agentControle === currentUser.name;
   }
   return true;
 }

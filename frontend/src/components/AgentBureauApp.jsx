@@ -90,7 +90,11 @@ function BureauCard({ prestation: task, tache, client, colKey, index, onOpen, on
             </span>
           ) : tache ? (
             tache.done ? (
-              <CheckCircle2 size={14} className="ab-card-taskicon is-done" aria-label="Tâche terminée" />
+              prestation.stage === "bureau" && taches.every((t) => t.done) ? (
+                <span className="gt-status-pill warning"><AlertTriangle size={11} /> À envoyer au contrôle</span>
+              ) : (
+                <CheckCircle2 size={14} className="ab-card-taskicon is-done" aria-label="Tâche terminée" />
+              )
             ) : (
               <Circle size={14} className="ab-card-taskicon" aria-label="Tâche en cours" />
             )
@@ -283,11 +287,12 @@ export default function AgentBureauApp({ currentUser, tasks, materiels, vehicule
       taches: updatedTaches,
       history: [
         ...task.history,
-        { date: today(), label: `Tâche envoyée au contrôle — ${tacheLabel}`, author: currentUser.name || currentUser.role },
+        { date: today(), label: `Tâche terminée — ${tacheLabel}`, author: currentUser.name || currentUser.role },
       ],
     });
     const remaining = updatedTaches.filter((t) => !t.done).length;
-    notifySuccess(remaining > 0 ? `Tâche envoyée au contrôle — ${remaining} restante${remaining > 1 ? "s" : ""}` : "Toutes les tâches sont prêtes — envoyez le dossier au contrôle depuis sa fiche");
+    notifySuccess(remaining > 0 ? `Tâche terminée — ${remaining} restante${remaining > 1 ? "s" : ""}` : "Toutes les tâches sont prêtes — envoyez le dossier au contrôle depuis sa fiche");
+    if (remaining === 0) openDrawer(prestationId);
   };
 
   const openTask = openId ? tasks.find((t) => t.id === openId) : null;

@@ -229,11 +229,14 @@ function TaskDetail({ task, client, materiels, vehicules, currentUser, onUpdate,
             <div className="ac-card-row"><Users size={15} /> {(prestation.agentChantier || []).join(", ") || "—"}</div>
             <div className="ac-card-row"><Wrench size={15} /> {materielObjs.map((m) => m.nom).join(", ") || "—"}</div>
             <div className="ac-card-row"><Truck size={15} /> {vehiculeObj?.nom || "—"}</div>
+            {prestation.reprogramme && (
+              <div className="ac-notice ac-notice-amber">Visite précédente inachevée — reprise reprogrammée</div>
+            )}
             <div className="ac-card-row"><Clock size={15} /> Visite prévue le {prestation.dateDebutExec}</div>
             {allowed ? (
               <button
                 className="ac-btn ac-btn-primary"
-                onClick={() => push({ stage: "execution" }, `Passage à l'exécution — visite du ${prestation.dateDebutExec}`)}
+                onClick={() => push({ stage: "execution", reprogramme: false }, `Passage à l'exécution — visite du ${prestation.dateDebutExec}`)}
               >
                 Démarrer l'exécution
               </button>
@@ -261,12 +264,16 @@ function TaskDetail({ task, client, materiels, vehicules, currentUser, onUpdate,
               <button
                 className="ac-btn ac-btn-primary"
                 disabled={!natureExecutee || !dateFinExec}
-                onClick={() => push({ stage: "bureau", natureExecutee, dateFinExec, reprogramme: false }, `Exécution saisie — ${natureExecutee}`)}
+                onClick={() => push({ stage: "bureau", natureExecutee, dateFinExec, reprogramme: false, reprogPending: false, reprogDate: "", reprogMotif: "" }, `Exécution saisie — ${natureExecutee}`)}
               >
                 Envoyer au bureau
               </button>
 
-              {prestation.reprogramme ? (
+              {prestation.reprogPending ? (
+                <div className="ac-notice ac-notice-amber">
+                  <PauseCircle size={14} style={{ verticalAlign: -2 }} /> Reprogrammation demandée pour le {prestation.reprogDate} — en attente de validation du dispatcher.
+                </div>
+              ) : prestation.reprogramme ? (
                 <div className="ac-readonly">
                   <PauseCircle size={14} style={{ verticalAlign: -2 }} /> Reprise déjà programmée — terminez cette visite avant d'en signaler une autre.
                 </div>
@@ -291,22 +298,22 @@ function TaskDetail({ task, client, materiels, vehicules, currentUser, onUpdate,
                     onChange={(e) => setReprogMotif(e.target.value)}
                     placeholder="Ce qui a bloqué / reste à faire..."
                   />
-                  <label className="ac-label">Nouvelle date de visite proposée <span className="ac-label-hint">(suggestion — modifiable, à valider par le dispatcher)</span></label>
+                  <label className="ac-label">Nouvelle date de visite proposée <span className="ac-label-hint">(suggestion — le dispatcher la valide ou la modifie)</span></label>
                   <DateTimeField value={reprogDate} onChange={setReprogDate} className="ac-dateinput" todayLabel="Maintenant" />
                   <button
                     className="ac-btn ac-btn-primary"
                     disabled={!reprogDate || !reprogMotif.trim()}
                     onClick={() => {
                       push(
-                        { dateDebutExec: reprogDate, reprogramme: true },
-                        `Visite partielle — ${reprogMotif.trim()}. Reprise prévue le ${reprogDate}`
+                        { reprogPending: true, reprogDate, reprogMotif: reprogMotif.trim() },
+                        `Reprogrammation demandée — ${reprogMotif.trim()}. Date proposée : ${reprogDate} (en attente de validation du dispatcher)`
                       );
                       setShowReprog(false);
                       setReprogMotif("");
                       setReprogDate("");
                     }}
                   >
-                    Reprogrammer
+                    Demander la reprogrammation
                   </button>
                 </div>
               )}
