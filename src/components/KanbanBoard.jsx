@@ -54,6 +54,7 @@ export default function KanbanBoard({ projects, getClient, onOpenProjet, getProj
                       </span>
                     </div>
                     <div className="gt-kanban-card-client">{client?.nom || "—"}</div>
+                    {pr.planCote && <div className="gt-kanban-card-meta gt-mono">{pr.planCote}</div>}
                     <div className="gt-kanban-card-meta">{pr.referenceFonciere}</div>
                     <div className="gt-kanban-card-bottom">
                       <span className="gt-kanban-card-meta">

@@ -95,7 +95,78 @@ export const blankClient = (overrides = {}) => ({
   ...overrides,
 });
 
-export const seedClients = () => [];
+// Raw "lots" list transcribed from the client's platform export (CODI / CLIENT / PLAN COTE /
+// PROJET table). PLAN COTE is their internal survey-plan reference (REF5PCxxxx); PROJET holds
+// either a Titre Foncier reference or a free-text project name. CODI "132" is used for both "FM6"
+// and its full name "FONDATION MOHAMMED VI DES SCIENCES ET DE LA SANTÉ" in the source — same
+// client, so it's merged into one record below.
+const LOTS_RAW = [
+  { codi: "106", client: "CGI", planCote: "REF5PC0001", projet: "TF199608/04" },
+  { codi: "307", client: "MR CHENOUF", planCote: "REF5PC0002", projet: "TF49424-16" },
+  { codi: "164", client: "ENGIE CONSEIL", planCote: "REF5PC0004", projet: "TF27492/C" },
+  { codi: "297", client: "ZOWN", planCote: "REF5PC0003", projet: "TF67022/64" },
+  { codi: "166", client: "REDA TAZI", planCote: "REF5PC0005", projet: "TF5950/13" },
+  { codi: "1", client: "PRIMARIOS", planCote: "REF5PC0006", projet: "TF26481C" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0007", projet: "TF9713_58" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0008", projet: "TF4150/M" },
+  { codi: "164", client: "ENGIE CONSEIL", planCote: "REF5PC0009", projet: "TF43330/C" },
+  { codi: "315", client: "ARCHI GUDIRA", planCote: "REF5PC0010", projet: "TF10334/20" },
+  { codi: "127", client: "MFADEL", planCote: "REF5PC0011", projet: "TF1900/48" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0012", projet: "TF27298M-ISTA" },
+  { codi: "308", client: "ALLIANCE", planCote: "REF5PC0013", projet: "TF10959_25" },
+  { codi: "127", client: "MFADEL", planCote: "REF5PC0015", projet: "TF22702/64" },
+  { codi: "308", client: "ALLIANCE", planCote: "REF5PC0016", projet: "TF29027/C" },
+  { codi: "164", client: "ENGIE CONSEIL", planCote: "REF5PC0017", projet: "T5152_34" },
+  { codi: "155", client: "SUZNET", planCote: "REF5PC0018", projet: "TF136780-06" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0019", projet: "TF21839_50" },
+  { codi: "272", client: "STE RAHTNA", planCote: "REF5PC0021", projet: "TF66912_58" },
+  { codi: "169", client: "HASSAN KHALILI", planCote: "REF5PC0022", projet: "TF74051/58" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0022-BIS", projet: "HUM6-AGADIR" },
+  { codi: "118", client: "PICTOGRAMME", planCote: "REF5PC0023", projet: "TF152760/04 & TF152761/04" },
+  { codi: "103", client: "MACOBAT", planCote: "REF5PC0024", projet: "TF32293_78" },
+  { codi: "195", client: "CITRUS VALLY VILLAGE", planCote: "REF5PC0025", projet: "TF27147R" },
+  { codi: "164", client: "ENGIE CONSEIL", planCote: "REF5PC0026", projet: "MAFODER -TF5152_34" },
+  { codi: "326", client: "Cooperative agricole Copag", planCote: "REF5PC0029", projet: "TF81781/03" },
+  { codi: "204", client: "SAKAN BENAMAR", planCote: "REF5PC0032", projet: "TF22204/38" },
+  { codi: "204", client: "SAKAN BENAMAR", planCote: "REF5PC0033", projet: "TF22202/38" },
+  { codi: "128", client: "TENOR", planCote: "REF5PC0035", projet: "TF184447-03" },
+  { codi: "118", client: "PICTOGRAMME", planCote: "REF5PC0036", projet: "TF140963-63" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0037", projet: "SOINS DE SUITE ET DE REEDUCATION" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0038", projet: "EXTENSION DE L'HUIM6-BOUSKOURA" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0039", projet: "TF16162-C CENTRE DE LA SANTE MKANSA" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0040", projet: "Ecôle des metiers de la santé hopital panoramic" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0041", projet: "Hup dar bouazza" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0042", projet: "C lub des ouevres sociales FM6SS" },
+  { codi: "316", client: "AUTO HALL-LALA YAKOUT", planCote: "REF5PC0043", projet: "TF13311-C" },
+  { codi: "106", client: "CGI", planCote: "REF5PC0044", projet: "TF68266/64" },
+  { codi: "234", client: "MARBIO", planCote: "REF5PC0045", projet: "TF84838/25" },
+  { codi: "132", client: "FM6", planCote: "REF5PC0049", projet: "TF114533/03" },
+  { codi: "132", client: "FM6", planCote: "REF5PC00492025-1", projet: "HM5" },
+  { codi: "", client: "HUIM6", planCote: "REF5PC0050", projet: "AGADIR" },
+  { codi: "247", client: "AGASTUDIO", planCote: "REF5PC0051", projet: "TF83102/43" },
+  { codi: "346", client: "Mme khadouj chakara", planCote: "REF5PC0052", projet: "TF10398/78" },
+  { codi: "118", client: "PICTOGRAMME", planCote: "REF5PC0053", projet: "TF30301/C" },
+  { codi: "359", client: "KAROUCH", planCote: "REF5PC0055", projet: "TF12117/50" },
+  { codi: "156", client: "TUYATO", planCote: "REF5PC0058", projet: "6TF" },
+];
+
+const clientIdFor = (row) =>
+  row.codi ? `CLI-${row.codi.padStart(4, "0")}` : `CLI-${row.client.replace(/\s+/g, "").toUpperCase()}`;
+
+export const seedClients = () => {
+  const byId = new Map();
+  LOTS_RAW.forEach((row) => {
+    const id = clientIdFor(row);
+    if (!byId.has(id)) {
+      byId.set(id, { id, nom: row.client, code: row.codi, ...blankClient() });
+    }
+  });
+  // Source list spells this client's name two ways ("FM6" / "FONDATION MOHAMMED VI DES
+  // SCIENCES ET DE LA SANTÉ") under the same CODI — keep the short name, note the full one.
+  const fm6 = byId.get("CLI-0132");
+  if (fm6) fm6.notes = "Fondation Mohammed VI des Sciences et de la Santé";
+  return [...byId.values()];
+};
 
 export const blankResource = (overrides = {}) => ({
   type: "autre",
@@ -174,4 +245,19 @@ export const seedVehicules = () => [
   },
 ];
 
-export const seedProjets = () => [];
+// No situation/coordinates in the source list — situation falls back to the client name so
+// records render sensibly; these lots simply won't appear on the Carte until geolocated.
+export const seedProjets = () => LOTS_RAW.map((row, i) => ({
+  id: `LOT-${String(i + 1).padStart(4, "0")}`,
+  clientId: clientIdFor(row),
+  referenceFonciere: row.projet,
+  planCote: row.planCote,
+  situation: row.client,
+  lat: null,
+  lng: null,
+  naturePrestationProjet: "",
+  dateDebut: "",
+  notes: "",
+  attachments: [],
+  prestations: [],
+}));

@@ -52,6 +52,7 @@ export default function ProjetDrawer({
   const [nature, setNature] = useState(NATURES[0]);
   const [editing, setEditing] = useState(false);
   const [refDraft, setRefDraft] = useState(projet.referenceFonciere);
+  const [planCoteDraft, setPlanCoteDraft] = useState(projet.planCote || "");
   const [situationDraft, setSituationDraft] = useState(projet.situation);
   const [natureProjetDraft, setNatureProjetDraft] = useState(projet.naturePrestationProjet);
   const [latDraft, setLatDraft] = useState(projet.lat ?? "");
@@ -101,6 +102,7 @@ export default function ProjetDrawer({
 
   const startEdit = () => {
     setRefDraft(projet.referenceFonciere);
+    setPlanCoteDraft(projet.planCote || "");
     setSituationDraft(projet.situation);
     setNatureProjetDraft(projet.naturePrestationProjet);
     setLatDraft(projet.lat ?? "");
@@ -113,6 +115,7 @@ export default function ProjetDrawer({
     const lngNum = parseFloat(String(lngDraft).replace(",", "."));
     onEditProjet(projet.id, {
       referenceFonciere: refDraft.trim() || projet.referenceFonciere,
+      planCote: planCoteDraft.trim(),
       situation: situationDraft.trim() || projet.situation,
       naturePrestationProjet: natureProjetDraft.trim(),
       lat: Number.isFinite(latNum) ? latNum : null,
@@ -170,6 +173,7 @@ export default function ProjetDrawer({
         {!editing ? (
           <div className="gt-drawer-meta">
             <span className="gt-chip">Code {client?.id || "—"}</span>
+            {projet.planCote && <span className="gt-chip">Plan coté {projet.planCote}</span>}
             <span className="gt-chip">Réf. foncière {projet.referenceFonciere}</span>
             <span className="gt-chip"><MapPin size={12} /> {projet.situation}</span>
             <span className="gt-chip">{projet.naturePrestationProjet}</span>
@@ -183,6 +187,8 @@ export default function ProjetDrawer({
           <div className="gt-form" style={{ padding: "14px 20px", borderBottom: "1px solid var(--line)" }}>
             <Label>Référence foncière</Label>
             <Input value={refDraft} onChange={(e) => setRefDraft(e.target.value)} />
+            <Label>Plan coté</Label>
+            <Input value={planCoteDraft} onChange={(e) => setPlanCoteDraft(e.target.value)} placeholder="ex. REF5PC0001" />
             <Label>Situation / localisation</Label>
             <Input value={situationDraft} onChange={(e) => setSituationDraft(e.target.value)} />
             <Label>Nature du projet</Label>
