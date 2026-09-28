@@ -5,6 +5,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.permissions import OfficeWriteOrReadOnly
+
 from .models import MaintenanceLogEntry, Resource, ResourceMovement
 from .serializers import (
     MaintenanceLogEntrySerializer,
@@ -24,6 +26,7 @@ def _display_name(user):
 class ResourceViewSet(viewsets.ModelViewSet):
     queryset = Resource.objects.prefetch_related("maintenance_log", "mouvements").all()
     serializer_class = ResourceSerializer
+    permission_classes = [OfficeWriteOrReadOnly]
 
     @action(detail=True, methods=["get", "post"], url_path="movements", permission_classes=[IsAuthenticated])
     def movements(self, request, pk=None):
@@ -83,3 +86,4 @@ class ResourceViewSet(viewsets.ModelViewSet):
 class MaintenanceLogEntryViewSet(viewsets.ModelViewSet):
     queryset = MaintenanceLogEntry.objects.select_related("resource").all()
     serializer_class = MaintenanceLogEntrySerializer
+    permission_classes = [OfficeWriteOrReadOnly]

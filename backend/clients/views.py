@@ -2,6 +2,8 @@ from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from core.permissions import OfficeWriteOrReadOnly
+
 from .models import Client
 from .serializers import ClientSerializer
 
@@ -9,6 +11,7 @@ from .serializers import ClientSerializer
 class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
+    permission_classes = [OfficeWriteOrReadOnly]
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()

@@ -194,3 +194,103 @@ class ProfileTests(TestCase):
         self.assertEqual(api.post("/api/auth/change-password/", {"current_password": "Ancien-mdp-2026!", "new_password": "Nouveau-mdp-2026!"}, format="json").status_code, 200)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("Nouveau-mdp-2026!"))
+
+
+class AnonymousAccessTests(TestCase):
+    """Nothing but the login endpoints is reachable without a token: reads used to be open."""
+
+    ENDPOINTS = [
+        "/api/projets/",
+        "/api/prestations/",
+        "/api/clients/",
+        "/api/employees/",
+        "/api/resources/",
+        "/api/comments/",
+        "/api/attachments/",
+    ]
+
+    def test_reads_require_authentication(self):
+        api = APIClient(SERVER_NAME="localhost")
+        for url in self.ENDPOINTS:
+            with self.subTest(url=url):
+                self.assertEqual(api.get(url).status_code, 401)
+
+    def test_health_stays_public(self):
+        # The container healthcheck calls it without a token.
+        self.assertEqual(APIClient(SERVER_NAME="localhost").get("/api/health/").status_code, 200)
+
+    def test_login_stays_public(self):
+        User.objects.create_user("someone", password="pw12345!")
+        api = APIClient(SERVER_NAME="localhost")
+        res = api.post("/api/auth/token/", {"username": "someone", "password": "pw12345!"}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("access", res.data)
+
+
+class RolePermissionTests(TestCase):
+    """Server-side role rules that used to exist only in the UI (frontend/src/utils/access.js)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.office_user = User.objects.create_user("dispatcher", password="x")
+        cls.office = Employee.objects.create(id="EMP-001", user=cls.office_user, nom="Salma Idrissi", role="Dispatcher")
+        cls.agent_user = User.objects.create_user("chantier", password="x")
+        cls.agent = Employee.objects.create(id="EMP-002", user=cls.agent_user, nom="Karim", role="Agent Chantier")
+        cls.other_user = User.objects.create_user("bureau", password="x")
+        Employee.objects.create(id="EMP-003", user=cls.other_user, nom="Nadia", role="Agent Bureau")
+        cls.client_obj = Client.objects.create(id="CLI-0001", nom="SOMADIR")
+        cls.projet = Projet.objects.create(id="PRJ-2026-001", client=cls.client_obj)
+        cls.prestation = Prestation.objects.create(id="PRS-2026-001", projet=cls.projet)
+
+    def api_as(self, user):
+        api = APIClient(SERVER_NAME="localhost")
+        api.force_authenticate(user)
+        return api
+
+    def test_agent_can_read_but_not_write_office_resources(self):
+        api = self.api_as(self.agent_user)
+        for url in ("/api/clients/", "/api/employees/", "/api/resources/", "/api/conges/"):
+            self.assertEqual(api.get(url).status_code, 200, url)
+        self.assertEqual(api.post("/api/clients/", {"id": "CLI-0002", "nom": "X"}, format="json").status_code, 403)
+        self.assertEqual(api.patch("/api/clients/CLI-0001/", {"nom": "Y"}, format="json").status_code, 403)
+        self.assertEqual(api.delete("/api/clients/CLI-0001/").status_code, 403)
+        self.assertEqual(api.post("/api/resources/", {"id": "MAT-1", "nom": "GPS", "type": "materiel"}, format="json").status_code, 403)
+
+    def test_agent_cannot_promote_themselves(self):
+        res = self.api_as(self.agent_user).patch("/api/employees/EMP-002/", {"role": "Directrice"}, format="json")
+        self.assertEqual(res.status_code, 403)
+        self.agent.refresh_from_db()
+        self.assertEqual(self.agent.role, "Agent Chantier")
+
+    def test_office_can_edit_employees_and_clients(self):
+        api = self.api_as(self.office_user)
+        self.assertEqual(api.patch("/api/employees/EMP-002/", {"poste": "Topographe"}, format="json").status_code, 200)
+        self.assertEqual(api.patch("/api/clients/CLI-0001/", {"nom": "SOMADIR SA"}, format="json").status_code, 200)
+
+    def test_only_office_creates_and_deletes_projets(self):
+        agent = self.api_as(self.agent_user)
+        self.assertEqual(agent.post("/api/projets/", {"id": "PRJ-2026-002", "client": "CLI-0001"}, format="json").status_code, 403)
+        self.assertEqual(agent.delete("/api/projets/PRJ-2026-001/").status_code, 403)
+        self.assertEqual(agent.delete("/api/prestations/PRS-2026-001/").status_code, 403)
+        office = self.api_as(self.office_user)
+        self.assertEqual(office.post("/api/projets/", {"id": "PRJ-2026-002", "client": "CLI-0001"}, format="json").status_code, 201)
+
+    def test_agent_can_still_edit_a_prestation(self):
+        res = self.api_as(self.agent_user).patch("/api/prestations/PRS-2026-001/", {"stage": "affectation"}, format="json")
+        self.assertEqual(res.status_code, 200)
+
+    def test_comment_only_its_author_edits_and_office_deletes(self):
+        res = self.api_as(self.agent_user).post(
+            "/api/comments/",
+            {"content_type_model_input": "prestation", "object_id": self.prestation.pk, "text": "Vu"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        url = f"/api/comments/{res.data['id']}/"
+        stranger = self.api_as(self.other_user)
+        self.assertEqual(stranger.patch(url, {"text": "Modifié"}, format="json").status_code, 403)
+        self.assertEqual(stranger.delete(url).status_code, 403)
+        # Reading and marking as read stay open to everyone.
+        self.assertEqual(stranger.post(f"{url}mark_read/", {}, format="json").status_code, 200)
+        self.assertEqual(self.api_as(self.agent_user).patch(url, {"text": "Vu, ok"}, format="json").status_code, 200)
+        self.assertEqual(self.api_as(self.office_user).delete(url).status_code, 204)

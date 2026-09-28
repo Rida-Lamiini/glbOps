@@ -4,16 +4,18 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import validate_email
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import ocr
 from .models import Attachment, Comment
+from .permissions import AuthorOrOfficeCanChange
 from .serializers import AttachmentSerializer, CommentSerializer, UserSerializer
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def health(request):
     return Response({'status': 'ok'})
 
@@ -117,6 +119,8 @@ def change_password(request):
 class AttachmentViewSet(viewsets.ModelViewSet):
     queryset = Attachment.objects.select_related('content_type', 'uploaded_by').all()
     serializer_class = AttachmentSerializer
+    permission_classes = [AuthorOrOfficeCanChange]
+    owner_field = 'uploaded_by'
 
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
@@ -129,6 +133,8 @@ class AttachmentViewSet(viewsets.ModelViewSet):
 class CommentViewSet(viewsets.ModelViewSet):
     queryset = Comment.objects.select_related("content_type", "created_by").all()
     serializer_class = CommentSerializer
+    permission_classes = [AuthorOrOfficeCanChange]
+    owner_field = 'created_by'
 
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None

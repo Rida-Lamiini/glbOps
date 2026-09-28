@@ -5,6 +5,8 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from core.permissions import OFFICE_ROLES, OfficeCreateDelete
+
 from .models import HistoryEntry, Prestation, Projet, Tache
 from .pv import build_pv
 from .report_monthly import build_monthly_report, parse_month
@@ -14,6 +16,7 @@ from .serializers import HistoryEntrySerializer, PrestationSerializer, ProjetSer
 class ProjetViewSet(viewsets.ModelViewSet):
     queryset = Projet.objects.select_related("client").prefetch_related("prestations").all()
     serializer_class = ProjetSerializer
+    permission_classes = [OfficeCreateDelete]
 
 
 class PrestationViewSet(viewsets.ModelViewSet):
@@ -21,6 +24,7 @@ class PrestationViewSet(viewsets.ModelViewSet):
         "agent_chantier", "materiels", "taches", "history",
     ).all()
     serializer_class = PrestationSerializer
+    permission_classes = [OfficeCreateDelete]
 
     @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
     def pv(self, request, pk=None):
@@ -39,9 +43,6 @@ class TacheViewSet(viewsets.ModelViewSet):
 class HistoryEntryViewSet(viewsets.ModelViewSet):
     queryset = HistoryEntry.objects.select_related("prestation").all()
     serializer_class = HistoryEntrySerializer
-
-
-OFFICE_ROLES = {"Dispatcher", "Directrice"}
 
 
 @api_view(["GET"])
