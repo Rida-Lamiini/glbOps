@@ -311,9 +311,6 @@
 .gt-map-note { position: absolute; right: 12px; bottom: 12px; background: var(--surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 9px 13px; font-size: 11px; color: var(--status-neutral); z-index: 1; max-width: 260px; }
 
 .gt-map-toolbar { position: absolute; top: 50px; left: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 1; }
-.gt-map-toolbtn { display: flex; align-items: center; gap: 6px; background: var(--surface); border: none; border-radius: var(--radius-sm); box-shadow: var(--shadow-card); padding: 7px 11px; font-size: 11.5px; font-weight: 500; color: var(--ink); cursor: pointer; font-family: var(--font-body); white-space: nowrap; }
-.gt-map-toolbtn:hover { background: var(--surface-muted); }
-.gt-map-toolbtn.active { background: var(--accent); color: #fff; }
 
 .gt-map-search { position: absolute; top: 12px; right: 60px; display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: 8px 12px; font-size: 12.5px; z-index: 1; width: 240px; }
 .gt-map-search input { border: none; outline: none; font-size: 12.5px; width: 100%; background: transparent; color: var(--ink); font-family: var(--font-body); }
@@ -791,7 +788,6 @@
 /* Touch targets */
 @media (pointer: coarse) {
   .gt-app button, .gt-app select { min-height: 40px; }
-  .gt-map-toolbtn { min-height: 44px; }
 }
 
 /* ===== Carte on phones: horizontal tool strip, compact legend, full-height map ===== */
@@ -800,7 +796,6 @@
   .gt-map-search { top: 8px; left: 8px; right: 56px; width: auto; }
   .gt-map-toolbar { top: 58px; left: 8px; right: 8px; flex-direction: row; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
   .gt-map-toolbar::-webkit-scrollbar { display: none; }
-  .gt-map-toolbtn { flex: none; white-space: nowrap; }
   .gt-map-legend { left: 8px; right: 8px; bottom: 8px; flex-direction: row; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px; }
   .gt-map-legend-title { width: 100%; margin: 0; }
   .gt-map-measure-badge { top: 104px; }
@@ -989,20 +984,8 @@
 .gt-map-kpi b { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1; }
 .gt-map-kpi i { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
 .gt-map-toolbar { gap: 4px; padding: 5px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: var(--shadow-card); align-items: stretch; }
-.gt-map-toolbar .gt-map-toolbtn { box-shadow: none; background: transparent; border-radius: 8px; padding: 0; height: 34px; min-width: 34px; justify-content: center; }
-.gt-map-toolbar .gt-map-toolbtn .lbl { display: none; }
-.gt-map-toolbar .gt-map-toolbtn:hover, .gt-map-toolbar .gt-map-toolbtn:focus-visible { background: var(--surface-muted); }
-.gt-map-toolbar .gt-map-toolbtn.active { background: var(--accent); color: #fff; }
-.gt-map-toolbar .gt-map-toolbtn:hover .lbl, .gt-map-toolbar .gt-map-toolbtn:focus-visible .lbl { display: inline; }
-.gt-map-toolbar .gt-map-toolbtn:hover, .gt-map-toolbar .gt-map-toolbtn:focus-visible { position: relative; z-index: 3; padding: 0 12px 0 10px; justify-content: flex-start; box-shadow: var(--shadow-card-hover); background: var(--surface); }
-.gt-map-toolbar .gt-map-toolbtn.active:hover { background: var(--accent); }
-.gt-map-toolsep { height: 1px; margin: 2px 6px; background: var(--border-subtle); }
 @media (max-width: 720px) {
   .gt-map-toolbar { flex-direction: row; overflow-x: auto; }
-  .gt-map-toolsep { width: 1px; height: auto; margin: 6px 2px; flex: none; }
-  .gt-map-toolbar .gt-map-toolbtn { flex: none; }
-  .gt-map-toolbar .gt-map-toolbtn:hover .lbl { display: none; }
-  .gt-map-toolbar .gt-map-toolbtn:hover { padding: 0; justify-content: center; }
   .gt-map-kpis { gap: 4px 16px; }
 }
 
@@ -1865,3 +1848,143 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
 .gt-dup-group button { border: 1px solid var(--border-subtle); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; cursor: pointer; color: var(--ink); }
 .gt-dup-group button:hover { border-color: var(--accent); }
 .gt-dup-group small { color: var(--muted); font-style: italic; }
+
+/* Agent agendas: legend under the month toolbar */
+.ab-cal-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: -4px 0 12px; font-size: 11.5px; color: var(--muted); }
+.ab-cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ab-cal-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+/* ---- Administrative limits on the Carte (régions / provinces / communes) --------------------------
+   Line work in sepia ink like a printed map; the level switch reads as index tabs on the sheet. */
+.gt-level-switch {
+  --tab: 100px;
+  position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: grid; grid-template-columns: repeat(3, var(--tab)); padding: 4px; gap: 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(6px);
+  border: 1px solid var(--border-subtle); border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset, 0 10px 28px rgba(29, 27, 24, .14);
+  animation: gtSwitchIn .45s cubic-bezier(.22, 1, .36, 1) both;
+}
+.gt-level-thumb {
+  position: absolute; top: 4px; bottom: 4px; left: 4px; width: var(--tab);
+  transform: translateX(calc(var(--i, 0) * var(--tab)));
+  border-radius: 10px; background: var(--surface-muted);
+  box-shadow: inset 0 -3px 0 var(--accent);
+  transition: transform .4s cubic-bezier(.22, 1, .36, 1);
+}
+.gt-level-switch button {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 6px 8px 8px; border: 0; background: transparent; cursor: pointer; color: var(--muted);
+  transition: color .2s;
+}
+.gt-level-switch button b { font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+.gt-level-switch button em { font-style: normal; font-family: "IBM Plex Mono", monospace; font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; opacity: .75; }
+.gt-level-switch button:hover { color: var(--ink); }
+.gt-level-switch button.is-on { color: var(--ink); }
+.gt-level-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+@keyframes gtSwitchIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (max-width: 720px) { .gt-level-switch { --tab: 84px; bottom: 96px; } .gt-level-switch button b { font-size: 12.5px; } }
+
+/* names printed on the map, one voice per level */
+.gt-commune-label { pointer-events: none; white-space: nowrap; animation: gtLabelIn .5s ease both; text-shadow: 0 0 2px #fbf7ee, 0 0 4px #fbf7ee, 0 0 8px #fbf7ee, 0 0 12px #fbf7ee; }
+.gt-commune-label.is-region { font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: .3em; text-transform: uppercase; color: #3b2a20; }
+.gt-commune-label.is-province { font-family: var(--font-display); font-size: 12.5px; font-style: italic; font-weight: 500; letter-spacing: .04em; color: #5a3d2b; }
+.gt-commune-label.is-commune { font-size: 10.5px; font-weight: 600; letter-spacing: .03em; color: #6b5a45; }
+/* opacity only: MapLibre positions markers with `transform`, which an animation would override */
+@keyframes gtLabelIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* hover card: a legend entry rather than a tooltip */
+.gt-commune-tip .maplibregl-popup-content { padding: 0; border-radius: 8px; overflow: hidden; pointer-events: none; background: #fbf7ee; border-top: 3px solid var(--accent); box-shadow: 0 12px 30px rgba(29, 27, 24, .22); }
+.gt-commune-tip .maplibregl-popup-tip { display: none; }
+.gt-commune-tip-body { display: flex; flex-direction: column; gap: 2px; padding: 9px 14px 11px; min-width: 150px; max-width: 250px; color: var(--ink); }
+.gt-tip-eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+.gt-commune-tip-body strong { font-family: var(--font-display); font-size: 18px; font-weight: 600; line-height: 1.15; margin-bottom: 2px; }
+.gt-tip-line { font-size: 12px; color: var(--muted); }
+.gt-tip-stats { display: flex; gap: 16px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--muted); }
+.gt-tip-stats b { font-family: var(--font-display); font-size: 16px; font-weight: 600; color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .gt-level-switch, .gt-commune-label { animation: none; } .gt-level-thumb { transition: none; } }
+.gt-tip-hint { margin-top: 7px; font-family: "IBM Plex Mono", monospace; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+
+/* ==== Carte tool rail — an instrument panel: grouped tiles, slide-out captions, a basemap chooser ==== */
+.gt-rail {
+  top: 50px; left: 12px; width: 54px; padding: 8px 7px 9px; gap: 2px; align-items: center;
+  background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(10px) saturate(1.15);
+  border: 1px solid var(--border-subtle); border-radius: 18px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .8) inset, 0 14px 34px rgba(29, 27, 24, .17);
+  animation: gtRailIn .55s cubic-bezier(.22, 1, .36, 1) both;
+}
+.gt-rail-group { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; animation: gtRailGroup .5s cubic-bezier(.22, 1, .36, 1) both; animation-delay: calc(var(--g, 0) * 70ms + 140ms); }
+.gt-rail-group + .gt-rail-group { margin-top: 5px; padding-top: 6px; border-top: 1px solid var(--border-subtle); }
+.gt-rail-cap { font-family: "IBM Plex Mono", monospace; font-size: 7.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); opacity: .8; line-height: 1; margin-bottom: 2px; }
+.gt-rail-item { position: relative; }
+
+.gt-rail-btn { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 12px; background: transparent; color: var(--ink); cursor: pointer; transition: background .18s, color .18s, transform .22s cubic-bezier(.22, 1, .36, 1), box-shadow .18s; }
+.gt-rail-btn:hover:not(:disabled) { background: var(--surface-muted); transform: translateY(-1px); }
+.gt-rail-btn:active:not(:disabled) { transform: scale(.93); }
+.gt-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gt-rail-btn:disabled { opacity: .55; cursor: progress; }
+.gt-rail-btn.active { background: color-mix(in srgb, var(--accent) 11%, var(--surface)); color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 26%, transparent); }
+.gt-rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); animation: gtNotch .35s cubic-bezier(.22, 1, .36, 1) both; }
+.gt-rail-badge { position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--ink); color: #fff; font: 600 9.5px/18px "IBM Plex Mono", monospace; font-style: normal; text-align: center; box-shadow: 0 0 0 2px var(--surface); animation: gtPop .4s cubic-bezier(.34, 1.56, .64, 1) both; }
+.gt-rail-btn.active .gt-rail-badge { background: var(--accent); }
+.gt-rail-spin { position: absolute; inset: 2px; border-radius: 11px; border: 2px solid transparent; border-top-color: var(--accent); animation: gtSpin .8s linear infinite; }
+.gt-rail-spin.is-inline { position: static; width: 17px; height: 17px; border-radius: 50%; border: 2px solid var(--border-subtle); border-top-color: var(--accent); }
+
+/* captions that slide out to the right, without moving any layout */
+.gt-tip { position: absolute; left: calc(100% + 15px); top: 50%; z-index: 8; display: flex; flex-direction: column; gap: 1px; padding: 7px 12px; white-space: nowrap; border-radius: 10px; background: #171412; color: #f3eee4; box-shadow: 0 10px 24px rgba(0, 0, 0, .3); opacity: 0; transform: translate(-8px, -50%); pointer-events: none; transition: opacity .16s, transform .24s cubic-bezier(.22, 1, .36, 1); }
+.gt-tip::before { content: ""; position: absolute; left: -4px; top: 50%; width: 8px; height: 8px; background: #171412; transform: translateY(-50%) rotate(45deg); }
+.gt-tip b { font-size: 12px; font-weight: 600; }
+.gt-tip em { font-style: normal; font-size: 10.5px; color: #b9b0a0; }
+.gt-rail-item:hover > .gt-tip, .gt-rail-item:focus-within > .gt-tip { opacity: 1; transform: translate(0, -50%); transition-delay: .1s; }
+
+/* basemap chooser: the current fond as a swatch; hover/focus opens the three choices */
+.gt-swatch { display: block; width: 100%; aspect-ratio: 4 / 3; border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14); }
+.gt-rail-btn .gt-swatch { width: 26px; height: 26px; aspect-ratio: auto; border-radius: 8px; }
+.gt-swatch.is-street { background: linear-gradient(118deg, transparent 43%, #fff 43% 50%, transparent 50%), linear-gradient(28deg, transparent 58%, #f1cf86 58% 66%, transparent 66%), radial-gradient(circle at 84% 20%, #a9cce6 0 21%, transparent 22%), #efe9dc; }
+.gt-swatch.is-satellite { background: radial-gradient(circle at 24% 30%, #557b3a 0 30%, transparent 32%), radial-gradient(circle at 72% 66%, #8a7642 0 27%, transparent 29%), radial-gradient(circle at 62% 18%, #25443c 0 24%, transparent 26%), linear-gradient(135deg, #2b3f2a, #1b2c36); }
+.gt-swatch.is-topo { background: repeating-radial-gradient(circle at 34% 62%, transparent 0 3px, rgba(122, 74, 42, .6) 3px 4px), repeating-radial-gradient(circle at 82% 24%, transparent 0 4px, rgba(122, 74, 42, .42) 4px 5px), #efe4c8; }
+.gt-basemap-fly { position: absolute; left: calc(100% + 14px); top: -6px; z-index: 9; display: flex; gap: 6px; padding: 9px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border-subtle); box-shadow: 0 16px 38px rgba(29, 27, 24, .24); opacity: 0; transform: translateX(-10px) scale(.96); transform-origin: left top; pointer-events: none; transition: opacity .18s, transform .3s cubic-bezier(.22, 1, .36, 1); }
+.gt-basemap-fly::before { content: ""; position: absolute; left: -16px; top: 0; bottom: 0; width: 16px; }
+.gt-basemap:hover .gt-basemap-fly, .gt-basemap:focus-within .gt-basemap-fly { opacity: 1; transform: none; pointer-events: auto; }
+.gt-basemap-fly button { display: flex; flex-direction: column; align-items: stretch; gap: 5px; width: 92px; padding: 7px 7px 8px; border: 1px solid transparent; border-radius: 11px; background: transparent; cursor: pointer; text-align: left; color: var(--ink); transition: background .16s, border-color .16s, transform .22s cubic-bezier(.22, 1, .36, 1); }
+.gt-basemap-fly button:hover { background: var(--surface-muted); transform: translateY(-2px); }
+.gt-basemap-fly button.is-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.gt-basemap-fly button b { font-size: 12px; font-weight: 600; }
+.gt-basemap-fly button em { font-style: normal; font-size: 9.5px; line-height: 1.25; color: var(--muted); }
+
+/* measuring: a live readout pill */
+.gt-map-measure-badge { animation: gtBadgeIn .38s cubic-bezier(.22, 1, .36, 1) both; }
+.gt-measure-pulse { position: relative; width: 8px; height: 8px; border-radius: 50%; background: #ff6b5e; flex: none; }
+.gt-measure-pulse::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #ff6b5e; animation: gtPing 1.6s ease-out infinite; }
+.gt-measure-value { font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.gt-measure-hint { font-size: 12px; opacity: .9; }
+
+@keyframes gtRailIn { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: none; } }
+@keyframes gtRailGroup { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes gtNotch { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes gtPop { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes gtSpin { to { transform: rotate(360deg); } }
+@keyframes gtPing { from { transform: scale(1); opacity: .7; } to { transform: scale(3.2); opacity: 0; } }
+@keyframes gtBadgeIn { from { opacity: 0; transform: translate(-50%, -12px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+
+@media (max-height: 760px) {
+  .gt-rail-cap { display: none; }
+  .gt-rail-btn { width: 34px; height: 34px; }
+  .gt-rail { width: 48px; padding: 6px 6px 7px; }
+  .gt-rail-group + .gt-rail-group { margin-top: 3px; padding-top: 4px; }
+}
+@media (max-width: 720px) {
+  .gt-rail { top: 58px; left: 8px; right: 8px; width: auto; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 4px 6px; padding: 6px 8px; }
+  .gt-rail-group { flex-direction: row; width: auto; gap: 2px; }
+  .gt-rail-group + .gt-rail-group { margin-top: 0; padding-top: 0; border-top: 0; padding-left: 6px; border-left: 1px solid var(--border-subtle); }
+  .gt-rail-cap, .gt-tip { display: none; }
+  .gt-rail-btn.active::before { left: 8px; right: 8px; top: auto; bottom: -7px; width: auto; height: 3px; border-radius: 3px 3px 0 0; }
+  .gt-basemap-fly { left: 0; top: calc(100% + 12px); }
+  .gt-basemap-fly::before { left: 0; right: 0; top: -14px; bottom: auto; width: auto; height: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gt-rail, .gt-rail-group, .gt-rail-badge, .gt-map-measure-badge, .gt-rail-btn.active::before { animation: none; }
+  .gt-rail-btn, .gt-tip, .gt-basemap-fly, .gt-basemap-fly button { transition: none; }
+  .gt-measure-pulse::after { animation: none; }
+}
+.gt-map-toolbar.gt-rail { overflow: visible; z-index: 4; }

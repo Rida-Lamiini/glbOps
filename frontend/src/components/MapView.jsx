@@ -29,6 +29,7 @@ import {
   List as ListIcon,
   ChevronDown,
   Crosshair,
+  Landmark,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import { projetStatus } from "../utils/stats";
@@ -43,6 +44,35 @@ const SOURCE_ID = "gt-projects";
 const BOUNDARY_SOURCE_ID = "gt-boundaries";
 const MEASURE_SOURCE_ID = "gt-measure";
 const CADASTRE_SOURCE_ID = "gt-cadastre-lots";
+const COMMUNES_SOURCE_ID = "gt-communes";
+const COMMUNE_TYPE_LABEL = { urban: "Commune urbaine", rural: "Commune rurale", arrondissement: "Arrondissement" };
+// Administrative divisions, from coarse to fine: 12 régions (Fès-Meknès…), 75 provinces/préfectures, 1,502 communes
+// (HCP codes, OSM geometry). Each file is fetched the first time its level is shown; régions is the default.
+const ADMIN_LEVELS = [
+  {
+    key: "region", next: { key: "province", label: "Provinces" }, label: "Régions", count: "12", url: "/data/regions.json", labelZoom: 0, maxLabels: 20,
+    // dash-dot, heavy: the convention for a région boundary on a printed map
+    line: { color: "#3b2a20", width: [4, 1.4, 12, 3], dash: [6, 2, 1, 2] },
+    eyebrow: () => "Région",
+    stats: (p) => [[p.n, "provinces"], [p.communes, "communes"]],
+    lines: () => [],
+  },
+  {
+    key: "province", next: { key: "commune", label: "Communes" }, label: "Provinces", count: "75", url: "/data/provinces.json", labelZoom: 6.5, maxLabels: 40,
+    line: { color: "#7a4a2a", width: [5, 0.9, 12, 2.2], dash: [4, 2] },
+    eyebrow: () => "Province · Préfecture",
+    stats: (p) => [[p.n, "communes"]],
+    lines: (p) => [p.region],
+  },
+  {
+    key: "commune", label: "Communes", count: "1 502", url: "/data/communes.json", labelZoom: 10, maxLabels: 80,
+    line: { color: "#8a6f4d", width: [6, 0.6, 13, 1.6], dash: [1.2, 1.6] },
+    eyebrow: (p) => COMMUNE_TYPE_LABEL[p.type] || "Commune",
+    stats: () => [],
+    lines: (p) => [p.province && `Province ${p.province}`, p.region].filter(Boolean),
+  },
+];
+
 const LOT_COLORS = { valide: "#1f7a55", verifie: "#2f6690", brouillon: "#b7791f" };
 const LOT_STATUT_LABEL = { valide: "Validé", verifie: "Vérifié", brouillon: "Brouillon" };
 const LOT_LABEL_ZOOM = 13;
@@ -156,6 +186,12 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     return { ...cadastreRaw, features: cadastreRaw.features.filter((f) => ids.has(f.properties.projetId)) };
   }, [cadastreRaw, projects, currentUser]);
   const [showCadastreLots, setShowCadastreLots] = useState(true);
+  const [showCommunes, setShowCommunes] = useState(false);
+  const [adminLevel, setAdminLevel] = useState("region");
+  const [adminData, setAdminData] = useState({}); // level key -> FeatureCollection
+  const [adminError, setAdminError] = useState(false);
+  const level = ADMIN_LEVELS.find((l) => l.key === adminLevel);
+  const communes = showCommunes ? adminData[adminLevel] || null : null;
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState("projets");
   const [legendOpen, setLegendOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth > 700));
@@ -554,6 +590,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
             projetId: p.projetId || "",
             statut: p.statut || "brouillon",
             conforme: p.conforme !== false,
+            approx: !!p.positionApproximative,
             surfaceCalculee: p.surfaceCalculeeM2,
             surfaceDocument: p.surfaceDocumentM2,
             ...shape,
@@ -580,6 +617,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     const badges = el("div", "gt-lot-popup-badges");
     badges.appendChild(el("span", `gt-lot-chip is-${lot.statut}`, LOT_STATUT_LABEL[lot.statut] || lot.statut));
     badges.appendChild(el("span", `gt-lot-chip ${lot.conforme ? "is-ok" : "is-bad"}`, lot.conforme ? "Surface conforme" : "Écart de surface"));
+    if (lot.approx) badges.appendChild(el("span", "gt-lot-chip is-bad", "Position approximative"));
     box.appendChild(badges);
     if (lot.surfaceCalculee != null) {
       box.appendChild(el("div", "gt-lot-popup-meta", `Calculée ${fmtM2(lot.surfaceCalculee)} · document ${fmtM2(lot.surfaceDocument)}`));
@@ -655,6 +693,173 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     else map.once("load", setup);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cadastreGeojson, showCadastreLots, style, attempt, loaded]);
+
+  // Administrative boundaries: dashed borders, the area under the pointer is outlined and named in a tooltip, and
+  // the names of the areas in view are printed on the map (more of them the further you zoom in).
+  useEffect(() => {
+    if (!showCommunes || adminData[adminLevel]) return;
+    setAdminError(false);
+    fetch(level.url)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
+      .then((data) => setAdminData((d) => ({ ...d, [adminLevel]: data })))
+      .catch(() => setAdminError(true));
+  }, [showCommunes, adminLevel, adminData, level.url]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !communes) return undefined;
+
+    const setup = () => {
+      if (!map.getSource(COMMUNES_SOURCE_ID)) {
+        map.addSource(COMMUNES_SOURCE_ID, { type: "geojson", data: communes, promoteId: "code", attribution: "Limites © OpenStreetMap contributors (ODbL) · codes HCP" });
+        // Under the cadastral lots, so a lot always stays clickable on top of its area.
+        const below = map.getLayer("gt-cadastre-halo") ? "gt-cadastre-halo" : undefined;
+        map.addLayer({ id: "gt-communes-fill", type: "fill", source: COMMUNES_SOURCE_ID, paint: { "fill-color": "#b3261e", "fill-opacity": 0.015 } }, below);
+        const hovered = ["boolean", ["feature-state", "hover"], false];
+        map.addLayer({ id: "gt-communes-hover", type: "fill", source: COMMUNES_SOURCE_ID, paint: { "fill-color": "#b3261e", "fill-opacity": ["case", hovered, 0.2, 0], "fill-opacity-transition": { duration: 160 } } }, below);
+        map.addLayer({ id: "gt-communes-halo", type: "line", source: COMMUNES_SOURCE_ID, paint: { "line-color": "#fbf7ee", "line-width": 4.2, "line-opacity": 0.8, "line-blur": 0.6 } }, below);
+        map.addLayer({ id: "gt-communes-hoverline", type: "line", source: COMMUNES_SOURCE_ID, paint: { "line-color": "#b3261e", "line-width": ["case", hovered, 3, 0], "line-opacity": 0.9 } }, below);
+        map.addLayer({ id: "gt-communes-line", type: "line", source: COMMUNES_SOURCE_ID, paint: { "line-color": "#3b2a20", "line-width": 1.5, "line-dasharray": [4, 2] } }, below);
+      } else {
+        map.getSource(COMMUNES_SOURCE_ID).setData(communes);
+      }
+      ["gt-communes-fill", "gt-communes-hover", "gt-communes-hoverline", "gt-communes-halo", "gt-communes-line"].forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, "visibility", "visible"));
+    };
+
+    if (loaded) setup();
+    else map.once("load", setup);
+    return undefined;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [communes, style, attempt, loaded]);
+
+  // Each level has its own line convention (weight, dash, ink) — applied whenever the level or the map style changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || !communes || !map.getLayer("gt-communes-line")) return;
+    const { color, width, dash } = level.line;
+    map.setPaintProperty("gt-communes-line", "line-color", color);
+    map.setPaintProperty("gt-communes-line", "line-width", ["interpolate", ["linear"], ["zoom"], width[0], width[1], width[2], width[3]]);
+    map.setPaintProperty("gt-communes-line", "line-dasharray", dash);
+    map.setPaintProperty("gt-communes-halo", "line-width", width[3] + 2.4);
+  }, [communes, level, style, attempt, loaded]);
+
+  // Toggled off: hide the layers (they stay in the map, so switching back on is instant).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loaded || showCommunes) return;
+    ["gt-communes-fill", "gt-communes-hover", "gt-communes-hoverline", "gt-communes-halo", "gt-communes-line"].forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, "visibility", "none"));
+  }, [showCommunes, loaded]);
+
+  // Hover: wash + outline the area under the pointer (feature-state, so nothing is re-filtered per move) and
+  // name it in a card that follows the pointer. Click zooms into the area and drops one level (région → provinces
+  // → communes). Lots and measuring keep priority: a click on a lot, or while measuring, is left to them.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !communes || !loaded || !showCommunes) return undefined;
+    const tip = new MaplibrePopup({ closeButton: false, closeOnClick: false, offset: 16, className: "gt-commune-tip", anchor: "top-left" });
+    let hoveredCode = null;
+    let frame = 0;
+    let last = null;
+
+    const setHover = (code) => {
+      if (code === hoveredCode) return;
+      if (hoveredCode != null) map.setFeatureState({ source: COMMUNES_SOURCE_ID, id: hoveredCode }, { hover: false });
+      if (code != null) map.setFeatureState({ source: COMMUNES_SOURCE_ID, id: code }, { hover: true });
+      hoveredCode = code;
+    };
+    const lotAt = (point) => map.getLayer("gt-cadastre-fill") && map.queryRenderedFeatures(point, { layers: ["gt-cadastre-fill"] }).length > 0;
+
+    const update = () => {
+      frame = 0;
+      const e = last;
+      if (!e || measureModeRef.current || !map.getLayer("gt-communes-fill")) return;
+      const f = map.queryRenderedFeatures(e.point, { layers: ["gt-communes-fill"] })[0];
+      if (!f) {
+        setHover(null);
+        tip.remove();
+        map.getCanvas().style.cursor = "";
+        return;
+      }
+      if (!lotAt(e.point)) map.getCanvas().style.cursor = "zoom-in";
+      if (f.properties.code !== hoveredCode) {
+        setHover(f.properties.code);
+        const p = f.properties;
+        const box = el("div", "gt-commune-tip-body");
+        box.appendChild(el("span", "gt-tip-eyebrow", level.eyebrow(p)));
+        box.appendChild(el("strong", "", p.nom));
+        level.lines(p).forEach((t) => box.appendChild(el("span", "gt-tip-line", t)));
+        const stats = level.stats(p);
+        if (stats.length) {
+          const row = el("div", "gt-tip-stats");
+          stats.forEach(([v, l]) => {
+            const cell = el("span", "");
+            cell.appendChild(el("b", "", String(v)));
+            cell.appendChild(document.createTextNode(` ${l}`));
+            row.appendChild(cell);
+          });
+          box.appendChild(row);
+        }
+        if (level.next) box.appendChild(el("span", "gt-tip-hint", `Cliquer pour zoomer · ${level.next.label.toLowerCase()}`));
+        tip.setDOMContent(box);
+      }
+      tip.setLngLat(e.lngLat).addTo(map);
+    };
+    const move = (e) => {
+      last = e;
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const leave = () => {
+      last = null;
+      setHover(null);
+      tip.remove();
+      map.getCanvas().style.cursor = "";
+    };
+    const click = (e) => {
+      if (measureModeRef.current || lotAt(e.point)) return;
+      const f = map.queryRenderedFeatures(e.point, { layers: ["gt-communes-fill"] })[0];
+      const full = f && communes.features.find((x) => x.properties.code === f.properties.code);
+      if (!full) return;
+      const pts = (full.geometry.type === "Polygon" ? [full.geometry.coordinates] : full.geometry.coordinates).flatMap((poly) => poly[0]);
+      const xs = pts.map((q) => q[0]);
+      const ys = pts.map((q) => q[1]);
+      map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: 60, duration: 900, maxZoom: 13 });
+      if (level.next) setAdminLevel(level.next.key);
+      leave();
+    };
+    map.on("mousemove", move);
+    map.on("click", click);
+    map.getCanvas().addEventListener("mouseleave", leave);
+    return () => {
+      map.off("mousemove", move);
+      map.off("click", click);
+      map.getCanvas()?.removeEventListener("mouseleave", leave);
+      if (frame) cancelAnimationFrame(frame);
+      leave();
+    };
+  }, [communes, showCommunes, loaded, level]);
+
+  // Names of the areas in view (capped, never blocking clicks).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !communes || !loaded || !showCommunes) return undefined;
+    let markers = [];
+    const clear = () => { markers.forEach((m) => m.remove()); markers = []; };
+    const draw = () => {
+      clear();
+      if (map.getZoom() < level.labelZoom) return;
+      const b = map.getBounds();
+      communes.features
+        .filter((f) => f.properties.c && b.contains(f.properties.c))
+        .slice(0, level.maxLabels)
+        .forEach((f) => {
+          const label = el("div", `gt-commune-label is-${level.key}`, f.properties.nom);
+          markers.push(new MaplibreMarker({ element: label, anchor: "center" }).setLngLat(f.properties.c).addTo(map));
+        });
+    };
+    draw();
+    map.on("moveend", draw);
+    return () => { map.off("moveend", draw); clear(); };
+  }, [communes, showCommunes, loaded, level]);
 
   // Pins at each lot's centre: a lot of 100 m is invisible at city zoom, so the pin is what you spot.
   useEffect(() => {
@@ -802,10 +1007,14 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     setAttempt((a) => a + 1);
   };
 
-  const BASEMAP_ORDER = ["street", "satellite", "topo"];
-  const cycleBasemap = () => {
+  const BASEMAPS = [
+    { key: "street", label: "Plan", sub: "Rues et toponymes" },
+    { key: "satellite", label: "Satellite", sub: "Imagerie aérienne" },
+    { key: "topo", label: "Topographie", sub: "Relief et courbes" },
+  ];
+  const chooseBasemap = (key) => {
     setRasterFallback(false);
-    setBasemap((b) => BASEMAP_ORDER[(BASEMAP_ORDER.indexOf(b) + 1) % BASEMAP_ORDER.length]);
+    setBasemap(key);
   };
 
   const toggleStatus = (key) => {
@@ -900,6 +1109,17 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       </div>
       <div className="gt-map-wrap">
         <div ref={containerRef} className="gt-map" />
+        {showCommunes && (
+          <div className="gt-level-switch" role="group" aria-label="Niveau de découpage administratif" style={{ "--i": ADMIN_LEVELS.findIndex((l) => l.key === adminLevel) }}>
+            <span className="gt-level-thumb" aria-hidden="true" />
+            {ADMIN_LEVELS.map((l) => (
+              <button key={l.key} type="button" className={adminLevel === l.key ? "is-on" : ""} onClick={() => setAdminLevel(l.key)} aria-pressed={adminLevel === l.key}>
+                <b>{l.label}</b>
+                <em>{l.count}</em>
+              </button>
+            ))}
+          </div>
+        )}
         {!loaded && !mapError && (
           <div className="gt-map-loading">
             <span className="gt-map-spinner" /> Chargement de la carte…
@@ -915,52 +1135,82 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           </div>
         )}
 
-        <div className="gt-map-toolbar" role="toolbar" aria-label="Outils de la carte">
-          <button className="gt-map-toolbtn" onClick={cycleBasemap} title="Changer de fond de carte" aria-label="Changer de fond de carte">
-            {basemap === "street" && <><Satellite size={14} /> <span className="lbl">Satellite</span></>}
-            {basemap === "satellite" && <><Mountain size={14} /> <span className="lbl">Topographie</span></>}
-            {basemap === "topo" && <><MapIcon size={14} /> <span className="lbl">Plan</span></>}
-          </button>
+        <div className="gt-map-toolbar gt-rail" role="toolbar" aria-label="Outils de la carte">
+          <div className="gt-rail-group" style={{ "--g": 0 }}>
+            <span className="gt-rail-cap">Fond</span>
+            <div className="gt-rail-item gt-basemap">
+              <button type="button" className="gt-rail-btn" aria-haspopup="menu" aria-label={`Fond de carte : ${BASEMAPS.find((b) => b.key === basemap).label}`}>
+                <span className={`gt-swatch is-${basemap}`} />
+              </button>
+              <div className="gt-basemap-fly" role="menu" aria-label="Fond de carte">
+                {BASEMAPS.map((b) => (
+                  <button key={b.key} type="button" role="menuitemradio" aria-checked={basemap === b.key} className={basemap === b.key ? "is-on" : ""} onClick={() => chooseBasemap(b.key)}>
+                    <span className={`gt-swatch is-${b.key}`} />
+                    <b>{b.label}</b>
+                    <em>{b.sub}</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
           {!minimal && (
             <>
-              <span className="gt-map-toolsep" />
-              <button className={`gt-map-toolbtn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} title="Mesurer une distance" aria-label="Mesurer une distance">
-                <Ruler size={14} /> <span className="lbl">Distance</span>
-              </button>
-              <button className={`gt-map-toolbtn ${measureMode === "area" ? "active" : ""}`} onClick={() => toggleMeasure("area")} title="Mesurer une surface" aria-label="Mesurer une surface">
-                <Shapes size={14} /> <span className="lbl">Surface</span>
-              </button>
-              <span className="gt-map-toolsep" />
-              <button className="gt-map-toolbtn" onClick={() => fileInputRef.current?.click()} title="Importer des points GPX ou CSV" aria-label="Importer des points GPX ou CSV">
-                <Upload size={14} /> <span className="lbl">Importer</span>
-              </button>
-            </>
-          )}
-          {canSeeCadastre && !minimal && (
-            <button
-              className={`gt-map-toolbtn ${showCadastreLots ? "active" : ""}`}
-              onClick={() => setShowCadastreLots((v) => !v)}
-              title="Afficher/masquer les lots cadastraux enregistrés" aria-label="Afficher/masquer les lots cadastraux enregistrés"
-            >
-              <FileScan size={14} /> <span className="lbl">Lots cadastraux{lots.length ? ` (${lots.length})` : ""}</span>
-            </button>
-          )}
-          {!minimal && (
-            <button
-              className={`gt-map-toolbtn ${panelOpen ? "active" : ""}`}
-              onClick={() => setPanelOpen((v) => !v)}
-              aria-expanded={panelOpen}
-              title="Liste des projets affichés" aria-label="Liste des projets affichés"
-            >
-              <ListIcon size={14} /> <span className="lbl">Projets ({visibleProjects.length})</span>
-            </button>
-          )}
-          {!minimal && (
-            <>
-              <span className="gt-map-toolsep" />
-              <button className="gt-map-toolbtn" onClick={exportPdf} disabled={exportingPdf} title="Exporter la carte en PDF" aria-label="Exporter la carte en PDF">
-                <Printer size={14} /> <span className="lbl">{exportingPdf ? "Export…" : "PDF"}</span>
-              </button>
+              <div className="gt-rail-group" style={{ "--g": 1 }}>
+                <span className="gt-rail-cap">Mesure</span>
+                <div className="gt-rail-item">
+                  <button type="button" className={`gt-rail-btn ${measureMode === "distance" ? "active" : ""}`} onClick={() => toggleMeasure("distance")} aria-pressed={measureMode === "distance"} aria-label="Mesurer une distance">
+                    <Ruler size={17} />
+                  </button>
+                  <span className="gt-tip"><b>Distance</b><em>Poser des points sur la carte</em></span>
+                </div>
+                <div className="gt-rail-item">
+                  <button type="button" className={`gt-rail-btn ${measureMode === "area" ? "active" : ""}`} onClick={() => toggleMeasure("area")} aria-pressed={measureMode === "area"} aria-label="Mesurer une surface">
+                    <Shapes size={17} />
+                  </button>
+                  <span className="gt-tip"><b>Surface</b><em>Tracer un polygone</em></span>
+                </div>
+              </div>
+              <div className="gt-rail-group" style={{ "--g": 2 }}>
+                <span className="gt-rail-cap">Couches</span>
+                {canSeeCadastre && (
+                  <div className="gt-rail-item">
+                    <button type="button" className={`gt-rail-btn ${showCadastreLots ? "active" : ""}`} onClick={() => setShowCadastreLots((v) => !v)} aria-pressed={showCadastreLots} aria-label="Afficher ou masquer les lots cadastraux">
+                      <FileScan size={17} />
+                      {lots.length > 0 && <i className="gt-rail-badge">{lots.length}</i>}
+                    </button>
+                    <span className="gt-tip"><b>Lots cadastraux</b><em>{showCadastreLots ? "Affichés" : "Masqués"} · {lots.length} lot{lots.length > 1 ? "s" : ""}</em></span>
+                  </div>
+                )}
+                <div className="gt-rail-item">
+                  <button type="button" className={`gt-rail-btn ${showCommunes ? "active" : ""}`} onClick={() => setShowCommunes((v) => !v)} aria-pressed={showCommunes} aria-label="Afficher ou masquer les limites administratives">
+                    <Landmark size={17} />
+                    {showCommunes && !communes && !adminError && <span className="gt-rail-spin" aria-hidden="true" />}
+                  </button>
+                  <span className="gt-tip"><b>Limites</b><em>{adminError ? "Indisponibles" : "Régions · provinces · communes"}</em></span>
+                </div>
+              </div>
+              <div className="gt-rail-group" style={{ "--g": 3 }}>
+                <span className="gt-rail-cap">Données</span>
+                <div className="gt-rail-item">
+                  <button type="button" className={`gt-rail-btn ${panelOpen ? "active" : ""}`} onClick={() => setPanelOpen((v) => !v)} aria-expanded={panelOpen} aria-label="Liste des projets affichés">
+                    <ListIcon size={17} />
+                    <i className="gt-rail-badge">{visibleProjects.length}</i>
+                  </button>
+                  <span className="gt-tip"><b>Projets</b><em>Liste des projets affichés</em></span>
+                </div>
+                <div className="gt-rail-item">
+                  <button type="button" className="gt-rail-btn" onClick={() => fileInputRef.current?.click()} aria-label="Importer des points GPX ou CSV">
+                    <Upload size={17} />
+                  </button>
+                  <span className="gt-tip"><b>Importer</b><em>Points GPX ou CSV</em></span>
+                </div>
+                <div className="gt-rail-item">
+                  <button type="button" className="gt-rail-btn" onClick={exportPdf} disabled={exportingPdf} aria-label="Exporter la carte en PDF">
+                    {exportingPdf ? <span className="gt-rail-spin is-inline" aria-hidden="true" /> : <Printer size={17} />}
+                  </button>
+                  <span className="gt-tip"><b>{exportingPdf ? "Export en cours…" : "Exporter en PDF"}</b><em>La vue actuelle de la carte</em></span>
+                </div>
+              </div>
             </>
           )}
           <input ref={fileInputRef} type="file" accept=".gpx,.csv,text/csv,application/gpx+xml" style={{ display: "none" }} onChange={handleImportFile} />
@@ -1008,8 +1258,10 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         </div>
 
         {measureMode && (
-          <div className="gt-map-measure-badge">
-            {measureTotal || (measureMode === "distance" ? "Cliquez pour placer des points" : "Cliquez pour tracer la surface")}
+          <div className="gt-map-measure-badge" role="status">
+            <span className="gt-measure-pulse" aria-hidden="true" />
+            {measureMode === "distance" ? <Ruler size={14} /> : <Shapes size={14} />}
+            <span className={measureTotal ? "gt-measure-value" : "gt-measure-hint"}>{measureTotal || (measureMode === "distance" ? "Cliquez pour placer des points" : "Cliquez pour tracer la surface")}</span>
             <button className="gt-iconbtn" onClick={clearMeasure} title="Effacer">
               <X size={13} />
             </button>
