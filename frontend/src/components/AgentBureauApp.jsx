@@ -247,6 +247,8 @@ function BureauAgenda({ cards, getClient, onOpen }) {
 
 export default function AgentBureauApp({ currentUser, tasks, materiels, vehicules, employees, allProjets, getClient, onUpdatePrestation, onMarkCommentRead, onSyncHistory }) {
   const [tab, setTab] = useState("kanban");
+  // Map and cadastre only cover the projets assigned to this agent (allProjets stays whole for the drawer's booking checks).
+  const myProjets = useMemo(() => allProjets.filter((p) => tasks.some((t) => t.projet.id === p.id)), [allProjets, tasks]);
   const [openId, setOpenId] = useState(null);
   const [focusTache, setFocusTache] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
@@ -385,7 +387,7 @@ export default function AgentBureauApp({ currentUser, tasks, materiels, vehicule
 
       {tab === "cadastre" && (
         <div className="ab-fullpane ab-fullpane-scroll">
-          <CadastreTool projets={allProjets} currentUser={currentUser} getClient={getClient} />
+          <CadastreTool projets={myProjets} scopeToProjets currentUser={currentUser} getClient={getClient} />
         </div>
       )}
 

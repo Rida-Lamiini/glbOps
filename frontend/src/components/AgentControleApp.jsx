@@ -8,6 +8,7 @@ import PrestationDrawer from "./PrestationDrawer";
 import NotificationBell from "./NotificationBell";
 import CadastreTool from "./cadastre/CadastreTool";
 import MapView from "./MapView";
+import MonthAgenda from "./MonthAgenda";
 
 const COLUMNS = [
   { key: "attente", label: "En attente", stages: ["demande", "prestation", "affectation", "execution", "bureau"] },
@@ -64,50 +65,39 @@ function ControleCard({ task, client, colKey, onOpen }) {
   );
 }
 
-function formatAgendaHeading(dateFR) {
-  const t = parseDateFR(dateFR);
-  if (t == null) return dateFR;
-  const label = new Date(t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
 function ControleAgenda({ tasks, getClient, onOpen }) {
-  const groups = useMemo(() => {
-    const map = new Map();
-    tasks.forEach((t) => {
-      const colKey = columnOf(t.stage);
-      const date = colKey && dateForColumn(t, colKey);
-      if (!date) return;
-      if (!map.has(date)) map.set(date, []);
-      map.get(date).push(t);
-    });
-    return [...map.entries()].sort((a, b) => (parseDateFR(a[0]) || 0) - (parseDateFR(b[0]) || 0));
-  }, [tasks]);
-
-  return (
-    <div className="ab-agenda">
-      {groups.map(([dateFR, items]) => (
-        <div className="ab-agenda-group" key={dateFR}>
-          <div className="ab-agenda-date">{formatAgendaHeading(dateFR)}</div>
-          {items.map((t) => (
-            <button key={t.id} className="ab-agenda-item" onClick={() => onOpen(t.id)}>
-              <span className="ab-agenda-dot" style={{ background: STAGE_COLORS[t.stage] }} />
-              <span className="ab-agenda-item-body">
-                <span className="ab-agenda-item-title">{getClient(t.projet.clientId)?.nom || t.projet.id}</span>
-                <span className="ab-agenda-item-meta">{stageLabel(t.stage)} · {t.natureExecutee || t.natureDemandee || "Prestation"}</span>
-              </span>
-              <ChevronRight size={16} className="ab-agenda-chevron" />
-            </button>
-          ))}
-        </div>
-      ))}
-      {groups.length === 0 && <div className="ab-col-empty">Aucun dossier à afficher.</div>}
-    </div>
+  const items = useMemo(
+    () =>
+      tasks
+        .map((t) => {
+          const colKey = columnOf(t.stage);
+          const date = colKey && dateForColumn(t, colKey);
+          if (!date) return null;
+          const client = getClient(t.projet.clientId)?.nom || t.projet.id;
+          return {
+            id: t.id,
+            date,
+            title: client,
+            color: colKey === "controler" ? STAGE_COLORS.controle : colKey === "livre" ? STAGE_COLORS.livraison : STAGE_COLORS[t.stage],
+            tooltip: `${client} — ${stageLabel(t.stage)} · ${t.natureExecutee || t.natureDemandee || "Prestation"}`,
+            onClick: () => onOpen(t.id),
+          };
+        })
+        .filter(Boolean),
+    [tasks, getClient, onOpen]
   );
+  const legend = [
+    { label: "À contrôler", color: STAGE_COLORS.controle },
+    { label: "En attente (bureau)", color: STAGE_COLORS.bureau },
+    { label: "Livré", color: STAGE_COLORS.livraison },
+  ];
+  return <MonthAgenda items={items} legend={legend} countLabel={(n) => `${n} dossier${n > 1 ? "s" : ""}`} />;
 }
 
 export default function AgentControleApp({ currentUser, tasks, materiels, vehicules, employees, allProjets, getClient, onUpdatePrestation, onMarkCommentRead, onSyncHistory }) {
   const [tab, setTab] = useState("kanban");
+  // Map and cadastre only cover the projets assigned to this agent (allProjets stays whole for the drawer's booking checks).
+  const myProjets = useMemo(() => allProjets.filter((p) => tasks.some((t) => t.projet.id === p.id)), [allProjets, tasks]);
   const [openId, setOpenId] = useState(null);
 
   const grouped = useMemo(() => {
@@ -180,7 +170,7 @@ export default function AgentControleApp({ currentUser, tasks, materiels, vehicu
       {tab === "carte" && (
         <div className="ab-fullpane">
           <MapView
-            projects={allProjets}
+            projects={myProjets}
             getClient={getClient}
             currentUser={currentUser}
             onOpenProjet={(projetId) => {
@@ -194,7 +184,7 @@ export default function AgentControleApp({ currentUser, tasks, materiels, vehicu
 
       {tab === "cadastre" && (
         <div className="ab-fullpane ab-fullpane-scroll">
-          <CadastreTool projets={allProjets} currentUser={currentUser} getClient={getClient} />
+          <CadastreTool projets={myProjets} scopeToProjets currentUser={currentUser} getClient={getClient} />
         </div>
       )}
 
