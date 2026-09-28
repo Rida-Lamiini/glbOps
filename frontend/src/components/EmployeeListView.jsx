@@ -3,6 +3,7 @@ import ResponsiveTableCard from "./ResponsiveTableCard";
 import CongeCalendar from "./CongeCalendar";
 import { Palmtree, List, CalendarDays } from "lucide-react";
 import { computeEmployeeStats } from "../utils/stats";
+import PersonAvatar from "./PersonAvatar";
 import { activeCongeOn, today } from "../utils/dates";
 import { EMPLOYEE_STATUSES, ROLES } from "../constants";
 import {
@@ -14,7 +15,6 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-const initials = (nom) => nom.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
 export default function EmployeeListView({ items, projects, query, onOpenItem }) {
   const [filterRole, setFilterRole] = useState("all");
@@ -107,7 +107,7 @@ export default function EmployeeListView({ items, projects, query, onOpenItem })
                 <TableRow key={item.id} className={`cursor-pointer ${item.status === "inactif" ? "is-dim" : ""}`} onClick={() => onOpenItem(item.id)}>
                   <TableCell>
                     <span className="rg-cellmain">
-                      <span className="rg-mono" aria-hidden="true">{initials(item.nom)}</span>
+                      <PersonAvatar name={item.nom} size={38} />
                       <span className="rg-celltext">
                         <span className="rg-cellname">{item.nom}</span>
                         <span className="rg-cellsub"><span className="gt-mono">{item.id}</span>{item.email ? ` · ${item.email}` : ""}</span>

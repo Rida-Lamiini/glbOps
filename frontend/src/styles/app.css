@@ -1988,3 +1988,9 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
   .gt-measure-pulse::after { animation: none; }
 }
 .gt-map-toolbar.gt-rail { overflow: visible; z-index: 4; }
+
+/* ===== Person avatars (blobatar) ===== */
+.gt-person-avatar { flex: none; display: inline-block; border-radius: 50%; overflow: hidden; line-height: 0; background: var(--canvas); border: 1px solid var(--border-subtle); }
+.gt-person-avatar > svg { width: 100%; height: 100%; display: block; }
+.gt-sidebar-footer-avatar:has(.gt-person-avatar) { background: transparent; padding: 0; overflow: hidden; }
+.gt-sidebar-footer-avatar .gt-person-avatar { border: 0; }

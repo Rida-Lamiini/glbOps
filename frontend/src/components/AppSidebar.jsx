@@ -2,6 +2,7 @@ import React from "react";
 import { LogOut } from "lucide-react";
 import { ROLES } from "../constants";
 import { NAV_GROUPS } from "../constants/nav";
+import PersonAvatar from "./PersonAvatar";
 import {
   Sidebar,
   SidebarHeader,
@@ -64,7 +65,7 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
       <SidebarFooter>
         <div className="gt-sidebar-footer">
           <button type="button" className="gt-sidebar-footer-avatar gt-sidebar-profilebtn" onClick={onOpenProfile} title="Mon profil" aria-label="Mon profil">
-            {(currentUser.name || "?").split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
+            <PersonAvatar name={currentUser.name} size={34} />
           </button>
           <div className="gt-sidebar-footer-text">
             <div className="gt-sidebar-footer-name">{(currentUser.name || "").charAt(0).toUpperCase() + (currentUser.name || "").slice(1)}</div>

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, AlertTriangle, Palmtree } from "lucide-react";
 import { STAGES, STAGE_COLORS, WEEKDAY_LABELS } from "../constants";
+import PersonAvatar from "./PersonAvatar";
 import { today, activeCongeOn } from "../utils/dates";
 import { bookingsFromProjets, groupBookingsByDate, conflictingIds } from "../utils/bookings";
 import { buildMonthGrid, buildWeekGrid } from "../utils/calendarGrid";
@@ -16,7 +17,6 @@ const shortName = (nom) => {
   const [first, ...rest] = nom.trim().split(/\s+/);
   return rest.length ? `${first} ${rest[rest.length - 1][0]}.` : first;
 };
-const initials = (nom) => nom.split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 const stageLabel = (key) => STAGES.find((s) => s.key === key)?.label || key;
 
 function Chip({ prestation, projet, conflicts, getClient, onOpenPrestation, compact }) {
@@ -205,7 +205,7 @@ export default function CalendarView({ projects, employees, getClient, onOpenPre
             {visibleAgents.map((agent) => (
               <div className="cv-lane-row" key={agent.name}>
                 <div className="cv-lane-label">
-                  <span className="rg-mono gt-dash-mono" aria-hidden="true">{initials(agent.name)}</span>
+                  <PersonAvatar name={agent.name} size={32} />
                   <span className="rg-celltext"><span className="rg-cellname">{agent.name}</span><span className="rg-cellsub">{agent.role}</span></span>
                 </div>
                 {weekCells.map(({ date }) => {
