@@ -1,4 +1,7 @@
+from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import validate_email
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -47,21 +50,68 @@ class LockedTokenObtainPairView(TokenObtainPairView):
         return response
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def me(request):
-    user = request.user
+def _profile(user):
     data = UserSerializer(user).data
     employee = getattr(user, 'employee', None)
     if employee is not None:
         data['role'] = employee.role
         data['name'] = employee.nom
         data['employee_id'] = employee.id
+        data['poste'] = employee.poste
+        data['telephone'] = employee.telephone
+        data['email'] = employee.email or user.email
+        data['date_embauche'] = employee.date_embauche
     else:
         data['role'] = 'Directrice' if user.is_superuser else 'Dispatcher'
         data['name'] = user.first_name or user.username
         data['employee_id'] = None
-    return Response(data)
+        data['poste'] = ''
+        data['telephone'] = ''
+        data['date_embauche'] = None
+    return data
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def me(request):
+    """The signed-in user's profile. PATCH edits only the contact details (email, phone) — role,
+    name and status stay with the office."""
+    user = request.user
+    if request.method == 'PATCH':
+        email = (request.data.get('email') or '').strip()
+        telephone = (request.data.get('telephone') or '').strip()
+        try:
+            if email:
+                validate_email(email)
+        except DjangoValidationError:
+            return Response({'email': ['Adresse e-mail invalide.']}, status=status.HTTP_400_BAD_REQUEST)
+        if len(telephone) > 30:
+            return Response({'telephone': ['30 caractères maximum.']}, status=status.HTTP_400_BAD_REQUEST)
+        user.email = email
+        user.save(update_fields=['email'])
+        employee = getattr(user, 'employee', None)
+        if employee is not None:
+            employee.email = email
+            employee.telephone = telephone
+            employee.save(update_fields=['email', 'telephone'])
+    return Response(_profile(user))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    user = request.user
+    current = request.data.get('current_password') or ''
+    new = request.data.get('new_password') or ''
+    if not user.check_password(current):
+        return Response({'current_password': ['Mot de passe actuel incorrect.']}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(new, user)
+    except DjangoValidationError as error:
+        return Response({'new_password': list(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
+    user.set_password(new)
+    user.save(update_fields=['password'])
+    return Response({'detail': 'Mot de passe modifié.'})
 
 
 class AttachmentViewSet(viewsets.ModelViewSet):

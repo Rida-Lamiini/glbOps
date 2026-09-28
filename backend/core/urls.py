@@ -10,4 +10,5 @@ router.register('comments', views.CommentViewSet)
 urlpatterns = [
     path('health/', views.health, name='health'),
     path('auth/me/', views.me, name='me'),
+    path('auth/change-password/', views.change_password, name='change-password'),
 ] + router.urls

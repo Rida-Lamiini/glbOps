@@ -50,6 +50,7 @@ import AgentChantierApp from "./components/AgentChantierApp";
 import AgentBureauApp from "./components/AgentBureauApp";
 import AgentControleApp from "./components/AgentControleApp";
 import FieldTopstrip from "./components/FieldTopstrip";
+import ProfileView from "./components/ProfileView";
 import NotificationBell from "./components/NotificationBell";
 import CadastreTool from "./components/cadastre/CadastreTool";
 import AnalyticsView from "./components/AnalyticsView";
@@ -85,6 +86,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const [mapFocusLotId, setMapFocusLotId] = useState(null); // lot to zoom on in Carte (from Cadastre)
   const [openPrestationId, setOpenPrestationId] = useState(null);
   const [openClientId, setOpenClientId] = useState(null);
+  const [showProfile, setShowProfile] = useState(false);
   const [openMaterielId, setOpenMaterielId] = useState(null);
   const [openVehiculeId, setOpenVehiculeId] = useState(null);
   const [openEmployeeId, setOpenEmployeeId] = useState(null);
@@ -999,6 +1001,15 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     );
   }
 
+  if (showProfile) {
+    return (
+      <div className="gt-profile-shell">
+        <Toaster />
+        <ProfileView projets={projets} employees={employees} onBack={() => setShowProfile(false)} />
+      </div>
+    );
+  }
+
   if (currentUser.role === "Agent Chantier") {
     return (
       <div className="ac-shell">
@@ -1009,6 +1020,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
           onRoleChange={handleRoleChange}
           onNameChange={(name) => setCurrentUser({ role: currentUser.role, name })}
           onLogout={onLogout}
+          onOpenProfile={() => setShowProfile(true)}
         />
         <AgentChantierApp
           currentUser={currentUser}
@@ -1036,6 +1048,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
           onRoleChange={handleRoleChange}
           onNameChange={(name) => setCurrentUser({ role: currentUser.role, name })}
           onLogout={onLogout}
+          onOpenProfile={() => setShowProfile(true)}
         />
         <AgentBureauApp
           currentUser={currentUser}
@@ -1066,6 +1079,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
           onRoleChange={handleRoleChange}
           onNameChange={(name) => setCurrentUser({ role: currentUser.role, name })}
           onLogout={onLogout}
+          onOpenProfile={() => setShowProfile(true)}
         />
         <AgentControleApp
           currentUser={currentUser}
@@ -1097,6 +1111,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
         currentUser={currentUser}
         onRoleChange={handleRoleChange}
         onLogout={onLogout}
+        onOpenProfile={() => setShowProfile(true)}
       />
       <SidebarInset className="gt-app">
       <Toaster />

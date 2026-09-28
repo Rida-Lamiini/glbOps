@@ -159,3 +159,38 @@ class CommentMentionTests(TestCase):
         response = self.api.patch(f"/api/comments/{comment_id}/", {"text": "@Salma Idrissi finalement"}, format="json")
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual([m["nom"] for m in response.data["mentions"]], ["Salma Idrissi"])
+
+
+class ProfileTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from employees.models import Employee
+
+        cls.user = User.objects.create_user("agent", password="Ancien-mdp-2026!")
+        cls.employee = Employee.objects.create(
+            id="EMP-P1", nom="Sara Test", role="Agent Chantier", poste="Topographe", user=cls.user,
+        )
+
+    def _api(self):
+        api = APIClient(SERVER_NAME="localhost")
+        api.force_authenticate(self.user)
+        return api
+
+    def test_profile_carries_the_employee_details(self):
+        d = self._api().get("/api/auth/me/").json()
+        self.assertEqual((d["name"], d["role"], d["poste"], d["username"]), ("Sara Test", "Agent Chantier", "Topographe", "agent"))
+
+    def test_patch_updates_only_contact_details(self):
+        r = self._api().patch("/api/auth/me/", {"email": "sara@example.com", "telephone": "0600000000", "role": "Dispatcher"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.employee.refresh_from_db()
+        self.assertEqual((self.employee.email, self.employee.telephone, self.employee.role), ("sara@example.com", "0600000000", "Agent Chantier"))
+        self.assertEqual(self._api().patch("/api/auth/me/", {"email": "pas-un-mail"}, format="json").status_code, 400)
+
+    def test_change_password(self):
+        api = self._api()
+        self.assertEqual(api.post("/api/auth/change-password/", {"current_password": "faux", "new_password": "Nouveau-mdp-2026!"}, format="json").status_code, 400)
+        self.assertEqual(api.post("/api/auth/change-password/", {"current_password": "Ancien-mdp-2026!", "new_password": "123"}, format="json").status_code, 400)
+        self.assertEqual(api.post("/api/auth/change-password/", {"current_password": "Ancien-mdp-2026!", "new_password": "Nouveau-mdp-2026!"}, format="json").status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("Nouveau-mdp-2026!"))

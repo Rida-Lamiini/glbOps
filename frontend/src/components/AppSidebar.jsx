@@ -17,7 +17,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 
-export default function AppSidebar({ visibleTabs, view, setView, currentUser, onRoleChange, onLogout }) {
+export default function AppSidebar({ visibleTabs, view, setView, currentUser, onRoleChange, onLogout, onOpenProfile }) {
   const { isMobile, setOpenMobile } = useSidebar();
   const go = (key) => {
     setView(key);
@@ -63,9 +63,9 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
       </SidebarContent>
       <SidebarFooter>
         <div className="gt-sidebar-footer">
-          <div className="gt-sidebar-footer-avatar">
+          <button type="button" className="gt-sidebar-footer-avatar gt-sidebar-profilebtn" onClick={onOpenProfile} title="Mon profil" aria-label="Mon profil">
             {(currentUser.name || "?").split(/\s+/).filter((w) => /^\p{L}/u.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?"}
-          </div>
+          </button>
           <div className="gt-sidebar-footer-text">
             <div className="gt-sidebar-footer-name">{(currentUser.name || "").charAt(0).toUpperCase() + (currentUser.name || "").slice(1)}</div>
             <select
