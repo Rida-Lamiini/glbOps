@@ -72,6 +72,18 @@ class Lot(models.Model):
     # Sum of the lot's signed Ajustement rows (appoints add or remove, déductions remove),
     # kept here so every conformity check reads one number.
     ajustements_m2 = models.DecimalField(max_digits=14, decimal_places=4, default=0)
+    # Shift (metres, Lambert) applied only when placing the lot on the map. Some old plans carry local
+    # or truncated coordinates that land far from the real parcel; the office then drops the lot at its
+    # true place on the map and this offset records that move. The bornes keep the document's X/Y.
+    # Marks drawn on the plan in the review workspace (pen strokes, boxes, notes, pins) — a JSON list
+    # in the plan image's own pixel space, so they stay put at any zoom.
+    annotations = models.JSONField(default=list, blank=True)
+    decalage_x = models.FloatField(default=0)
+    decalage_y = models.FloatField(default=0)
+
+    @property
+    def position_approximative(self):
+        return bool(self.decalage_x or self.decalage_y)
 
     source_pdf_url = models.CharField(max_length=500, blank=True)
 

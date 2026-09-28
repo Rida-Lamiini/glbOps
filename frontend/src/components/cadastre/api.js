@@ -92,6 +92,7 @@ const toLotSummary = (lot) => ({
   surfaceCalculeeM2: Number(lot.surface_calculee_m2),
   correctionLambertM2: Number(lot.correction_lambert_m2),
   ajustementsM2: Number(lot.ajustements_m2 || 0),
+  positionApproximative: !!lot.position_approximative,
   updatedAt: lot.updated_at,
   conforme: lot.conforme,
 });
@@ -127,6 +128,7 @@ export const getCadastreLot = async (id) => {
       calculeM: Number(dc.calcule_m),
       ecartM: Number(dc.ecart_m),
     })),
+    annotations: Array.isArray(lot.annotations) ? lot.annotations : [],
     ajustements: (lot.ajustements || []).map((a) => ({ id: a.id, libelle: a.libelle, type: a.type, m2: Number(a.m2) })),
     referencePoints: (lot.reference_points || []).map((rp) => ({
       id: rp.id,
@@ -138,6 +140,19 @@ export const getCadastreLot = async (id) => {
     })),
   };
 };
+
+// Puts the lot at a chosen place on the map ({ lat, lng }) or back at the document's coordinates ({ reset: true }).
+export const repositionCadastreLot = (id, body) => apiPost(`/cadastre/lots/${id}/reposition/`, body);
+
+// The review workspace draws on the source plan: one page as an image, plus the marks saved with the lot.
+export const getLotPlanInfo = (id) => apiGet(`/cadastre/lots/${id}/plan-info/`);
+export const getLotPlanImage = async (id, page = 1, dpi = 130) =>
+  URL.createObjectURL(await apiBlob(`/cadastre/lots/${id}/plan/?page=${page}&dpi=${dpi}`));
+export const saveLotAnnotations = (id, annotations) =>
+  apiFetch(`/cadastre/lots/${id}/annotations/`, { method: "PUT", body: JSON.stringify({ annotations }) });
+
+// One point between the map and the lot's document coordinates ({ lat, lng } -> { x, y } or { x, y } -> { lat, lng }).
+export const convertLotPoint = (id, body) => apiPost(`/cadastre/lots/${id}/convert/`, body);
 
 export const getCadastreLotGeoJSON = (id) => apiGet(`/cadastre/lots/${id}/geojson/`);
 

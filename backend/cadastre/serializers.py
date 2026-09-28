@@ -39,6 +39,7 @@ def _person_name(user):
 
 class LotListSerializer(serializers.ModelSerializer):
     conforme = serializers.SerializerMethodField()
+    position_approximative = serializers.BooleanField(read_only=True)
     created_by_name = serializers.SerializerMethodField()
     statut_par_name = serializers.SerializerMethodField()
 
@@ -60,6 +61,7 @@ class LotListSerializer(serializers.ModelSerializer):
             "surface_calculee_m2",
             "correction_lambert_m2",
             "ajustements_m2",
+            "position_approximative",
             "updated_at",
             "conforme",
         ]
@@ -98,6 +100,7 @@ class LotDetailSerializer(LotListSerializer):
             "distance_checks",
             "reference_points",
             "ajustements",
+            "annotations",
         ]
 
 

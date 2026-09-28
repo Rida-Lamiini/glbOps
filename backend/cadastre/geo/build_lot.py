@@ -69,17 +69,18 @@ def build_lot_geometry(
     distance_checks_input: list[dict],
     reference_points_input: list[dict],
     zone: str = "nord",
+    offset: tuple[float, float] = (0.0, 0.0),
 ) -> BuiltLotGeometry:
     ordered = sorted(bornes_input, key=lambda b: b["sequence"])
     ring = [(b["x_lambert"], b["y_lambert"]) for b in ordered]
 
     surface_calculee_m2 = planar_shoelace_area_m2(ring)
     perimeter_m = planar_perimeter_m(ring)
-    centroid = centroid_of_lambert_ring(ring, zone)
+    centroid = centroid_of_lambert_ring([(x + offset[0], y + offset[1]) for x, y in ring], zone)
 
     bornes = []
     for b in ordered:
-        lat, lng = lambert_to_wgs84(b["x_lambert"], b["y_lambert"], zone)
+        lat, lng = lambert_to_wgs84(b["x_lambert"] + offset[0], b["y_lambert"] + offset[1], zone)
         bornes.append(
             BuiltBorne(
                 name=b["name"],

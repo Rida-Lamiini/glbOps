@@ -6,10 +6,10 @@ import {
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
-  downloadLotsExcel, downloadLotReport,
+  downloadLotsExcel, downloadLotReport, repositionCadastreLot,
 } from "./api";
 import LotMap from "./LotMap";
-import LotPlanViewer from "./LotPlanViewer";
+import LotWorkspace from "./LotWorkspace";
 import ExcelImportScreen from "./ExcelImport";
 import { notifyError, notifySuccess } from "../../utils/notify";
 import "./cadastre.css";
@@ -510,7 +510,11 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
   const [reporting, setReporting] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [statutBusy, setStatutBusy] = useState(false);
-  const [compare, setCompare] = useState(false);
+  const [workspace, setWorkspace] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [placing, setPlacing] = useState(false);
+  const [target, setTarget] = useState(null);
+  const [placeBusy, setPlaceBusy] = useState(false);
   const [focusBorne, setFocusBorne] = useState(null);
 
   const makeReport = async () => {
@@ -548,7 +552,25 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
       .then(([l, g]) => !cancelled && (setLot(l), setGeojson(g)))
       .catch((e) => !cancelled && setError(readApiError(e, "Échec du chargement.")));
     return () => { cancelled = true; };
-  }, [lotId]);
+  }, [lotId, refreshKey]);
+
+  const reposition = async (body) => {
+    setPlaceBusy(true);
+    setActionError(null);
+    try {
+      await repositionCadastreLot(lotId, body);
+      const [l, g] = await Promise.all([getCadastreLot(lotId), getCadastreLotGeoJSON(lotId)]);
+      setLot(l);
+      setGeojson(g);
+      setPlacing(false);
+      setTarget(null);
+      notifySuccess(body.reset ? "Position du document rétablie" : "Lot repositionné sur la carte");
+    } catch (e) {
+      setActionError(readApiError(e, "Repositionnement refusé."));
+    } finally {
+      setPlaceBusy(false);
+    }
+  };
 
   const remove = async () => {
     setDeleting(true);
@@ -575,8 +597,11 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
           {onShowOnMap && (
             <button className="cad-btn" onClick={() => onShowOnMap(lotId)}><MapPin size={16} /> Voir sur la carte</button>
           )}
-          <button className={`cad-btn${compare ? " primary" : ""}`} onClick={() => setCompare((c) => !c)} aria-pressed={compare}>
-            <Columns2 size={16} /> {compare ? "Fermer la comparaison" : "Comparer avec le plan"}
+          <button className={`cad-btn${placing ? " primary" : ""}`} onClick={() => { setPlacing((p) => !p); setTarget(null); }} aria-pressed={placing}>
+            <MapPin size={16} /> Repositionner sur la carte
+          </button>
+          <button className="cad-btn primary" onClick={() => setWorkspace(true)}>
+            <Columns2 size={16} /> Comparer avec le plan
           </button>
           <button className="cad-btn primary" disabled={reporting} onClick={makeReport}>
             {reporting ? <Loader2 size={16} className="gt-spin-icon" /> : <FileDown size={16} />} Rapport PDF
@@ -602,10 +627,26 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
         {[lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`, lot.prestation && `Prestation ${lot.prestation}`, lot.createdByName && `Saisi par ${lot.createdByName}`].filter(Boolean).join(" · ")}
       </Hero>
 
-      <div className={compare ? "cad-layout cad-layout-compare" : "cad-layout"}>
-        {compare && <LotPlanViewer url={lot.sourcePdfUrl} />}
+      {workspace && <LotWorkspace lotId={lotId} onClose={() => setWorkspace(false)} onChanged={() => setRefreshKey((k) => k + 1)} />}
+
+      <div className="cad-layout">
         <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-          <LotMap geojson={geojson} focusName={focusBorne} />
+          {lot.positionApproximative && !placing && (
+            <div className="cad-check todo" role="status"><i>!</i>
+              <span>Position approximative : le lot a été placé à la main sur la carte, ses coordonnées Lambert du document restent inchangées.{" "}
+                <button className="cad-linkbtn" disabled={placeBusy} onClick={() => reposition({ reset: true })}>Rétablir la position du document</button></span>
+            </div>
+          )}
+          {placing && (
+            <div className="cad-place-bar" role="status">
+              <span>{target ? "Cliquez ailleurs pour corriger, ou validez." : "Cliquez sur la carte à l'endroit où se trouve le lot."}</span>
+              <button className="cad-btn primary" disabled={!target || placeBusy} onClick={() => reposition(target)}>
+                {placeBusy ? <Loader2 size={16} className="gt-spin-icon" /> : <MapPin size={16} />} Placer ici
+              </button>
+              <button className="cad-btn" onClick={() => { setPlacing(false); setTarget(null); }}>Annuler</button>
+            </div>
+          )}
+          <LotMap geojson={geojson} focusName={focusBorne} placing={placing} onPlace={setTarget} />
           <section className="cad-panel">
             <h2>Bornes · {lot.bornes.length}</h2>
             <div style={{ overflowX: "auto" }}>

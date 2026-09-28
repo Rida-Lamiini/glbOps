@@ -1,3 +1,10 @@
+import contextlib
+import json
+from pathlib import Path
+from urllib.parse import unquote
+
+import pymupdf
+from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
@@ -15,6 +22,7 @@ from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygon
 from .db.lot_features import get_lot_feature_collection
 from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_lots_export, build_template, parse_lots_workbook
 from .geo.build_lot import build_lot_geometry
+from .geo.proj import lambert_to_wgs84, wgs84_to_lambert
 from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
 from .report import build_lot_report, report_filename
@@ -57,6 +65,7 @@ def _save_lot(data, existing_lot=None, user=None):
     built = build_lot_geometry(
         data["bornes"], data.get("distance_checks") or [], data.get("reference_points") or [],
         data.get("zone", "nord"),
+        (existing_lot.decalage_x, existing_lot.decalage_y) if existing_lot else (0.0, 0.0),
     )
 
     field_values = dict(
@@ -259,6 +268,8 @@ def lot_reuse(request, pk):
             date_leve=source.date_leve,
             service_cadastre=source.service_cadastre,
             zone=source.zone,
+            decalage_x=source.decalage_x,
+            decalage_y=source.decalage_y,
             surface_document_m2=source.surface_document_m2,
             surface_calculee_m2=source.surface_calculee_m2,
             correction_lambert_m2=source.correction_lambert_m2,
@@ -357,6 +368,132 @@ def lot_report(request, pk):
     return response
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def lot_reposition(request, pk):
+    """Places the lot on the map without touching its bornes: ``{lat, lng}`` moves the lot's centre to
+    that point (keeping its shape and surface), ``{reset: true}`` goes back to the document's coordinates."""
+    lot = get_object_or_404(Lot.objects.prefetch_related("bornes"), pk=pk)
+    bornes = [
+        {"name": b.name, "sequence": b.sequence, "x_lambert": float(b.x_lambert), "y_lambert": float(b.y_lambert)}
+        for b in lot.bornes.all()
+    ]
+    if request.data.get("reset"):
+        dx = dy = 0.0
+    else:
+        try:
+            lat, lng = float(request.data["lat"]), float(request.data["lng"])
+        except (KeyError, TypeError, ValueError):
+            return Response({"detail": "lat et lng requis."}, status=status.HTTP_400_BAD_REQUEST)
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            return Response({"detail": "Coordonnées hors limites."}, status=status.HTTP_400_BAD_REQUEST)
+        target_x, target_y = wgs84_to_lambert(lat, lng, lot.zone)
+        cx = sum(b["x_lambert"] for b in bornes) / len(bornes)
+        cy = sum(b["y_lambert"] for b in bornes) / len(bornes)
+        dx, dy = target_x - cx, target_y - cy
+    built = build_lot_geometry(bornes, [], [], lot.zone, (dx, dy))
+    with transaction.atomic():
+        for b in lot.bornes.all():
+            match = next(x for x in built.bornes if x.sequence == b.sequence)
+            b.lat, b.lng = match.lat, match.lng
+            b.save(update_fields=["lat", "lng"])
+        lot.decalage_x, lot.decalage_y = dx, dy
+        lot.save(update_fields=["decalage_x", "decalage_y"])
+        set_lot_geometry(lot.id, built.polygon_ring_lat_lng, built.centroid)
+        _log_on_prestation(lot, "Position du lot modifiée sur la carte" if (dx or dy) else "Position du lot rétablie (coordonnées du document)", request.user)
+    return Response({"position_approximative": lot.position_approximative})
+
+
+MAX_ANNOTATIONS_BYTES = 400_000
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def lot_convert(request, pk):
+    """Converts one point between the map and this lot's document coordinates, honouring its Lambert zone
+    and any manual placement offset: ``{lat, lng}`` -> ``{x, y}`` (a dragged borne) and ``{x, y}`` -> ``{lat, lng}``
+    (a typed one)."""
+    lot = get_object_or_404(Lot, pk=pk)
+    try:
+        if "lat" in request.data:
+            lat, lng = float(request.data["lat"]), float(request.data["lng"])
+            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+                raise ValueError
+            x, y = wgs84_to_lambert(lat, lng, lot.zone)
+            return Response({"x": round(x - lot.decalage_x, 3), "y": round(y - lot.decalage_y, 3)})
+        x, y = float(request.data["x"]), float(request.data["y"])
+    except (KeyError, TypeError, ValueError):
+        return Response({"detail": "Point invalide."}, status=status.HTTP_400_BAD_REQUEST)
+    lat, lng = lambert_to_wgs84(x + lot.decalage_x, y + lot.decalage_y, lot.zone)
+    return Response({"lat": lat, "lng": lng})
+
+
+def _plan_document(lot):
+    """The lot's source plan as an open PyMuPDF document (PDF or image), or None."""
+    url = lot.source_pdf_url or ""
+    media = settings.MEDIA_URL
+    if not url.startswith(media):
+        return None
+    root = Path(settings.MEDIA_ROOT).resolve()
+    path = (root / unquote(url[len(media):])).resolve()
+    if root not in path.parents or not path.is_file():
+        return None
+    try:
+        return pymupdf.open(path)
+    except Exception:  # noqa: BLE001 - unreadable file: treated as "no plan"
+        return None
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def lot_plan_info(request, pk):
+    lot = get_object_or_404(Lot, pk=pk)
+    with contextlib.closing(_plan_document(lot) or _EmptyDoc()) as doc:
+        return Response({"pages": len(doc)})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def lot_plan(request, pk):
+    """One page of the source plan as a PNG (``?page=1&dpi=110``), so the workspace can zoom and draw on it."""
+    lot = get_object_or_404(Lot, pk=pk)
+    try:
+        page_no = max(1, int(request.query_params.get("page", 1)))
+        dpi = min(220, max(60, int(request.query_params.get("dpi", 110))))
+    except ValueError:
+        return Response({"detail": "Paramètres invalides."}, status=status.HTTP_400_BAD_REQUEST)
+    doc = _plan_document(lot)
+    if doc is None:
+        return Response({"detail": "Aucun plan lié à ce lot."}, status=status.HTTP_404_NOT_FOUND)
+    with contextlib.closing(doc):
+        if page_no > len(doc):
+            return Response({"detail": "Page introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        png = doc[page_no - 1].get_pixmap(dpi=dpi).tobytes("png")
+    response = HttpResponse(png, content_type="image/png")
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def lot_annotations(request, pk):
+    lot = get_object_or_404(Lot, pk=pk)
+    items = request.data.get("annotations")
+    if not isinstance(items, list) or len(json.dumps(items)) > MAX_ANNOTATIONS_BYTES:
+        return Response({"detail": "Annotations invalides ou trop volumineuses."}, status=status.HTTP_400_BAD_REQUEST)
+    lot.annotations = items
+    lot.save(update_fields=["annotations"])
+    return Response({"annotations": lot.annotations})
+
+
+class _EmptyDoc:
+    def __len__(self):
+        return 0
+
+    def close(self):
+        pass
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def lot_geojson(request, pk):
@@ -385,6 +522,7 @@ def lots_geojson(request):
                     "conforme": LotListSerializer().get_conforme(lot),
                     "surfaceCalculeeM2": float(lot.surface_calculee_m2),
                     "surfaceDocumentM2": float(lot.surface_document_m2),
+                    "positionApproximative": lot.position_approximative,
                 }
             )
         features.append({"type": "Feature", "geometry": row["polygon"], "properties": props})

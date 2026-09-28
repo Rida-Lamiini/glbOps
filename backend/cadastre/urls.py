@@ -15,5 +15,10 @@ urlpatterns = [
     path("cadastre/lots/<uuid:pk>/report/", views.lot_report, name="cadastre-lot-report"),
     path("cadastre/lots/<uuid:pk>/statut/", views.lot_statut, name="cadastre-lot-statut"),
     path("cadastre/lots/<uuid:pk>/reuse/", views.lot_reuse, name="cadastre-lot-reuse"),
+    path("cadastre/lots/<uuid:pk>/reposition/", views.lot_reposition, name="cadastre-lot-reposition"),
+    path("cadastre/lots/<uuid:pk>/convert/", views.lot_convert, name="cadastre-lot-convert"),
+    path("cadastre/lots/<uuid:pk>/plan-info/", views.lot_plan_info, name="cadastre-lot-plan-info"),
+    path("cadastre/lots/<uuid:pk>/plan/", views.lot_plan, name="cadastre-lot-plan"),
+    path("cadastre/lots/<uuid:pk>/annotations/", views.lot_annotations, name="cadastre-lot-annotations"),
     path("cadastre/lots/<uuid:pk>/geojson/", views.lot_geojson, name="cadastre-lot-geojson"),
 ]

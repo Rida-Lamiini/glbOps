@@ -157,7 +157,7 @@ from employees.models import Employee  # noqa: E402
 from projets.models import HistoryEntry, Prestation  # noqa: E402
 
 
-class LotReviewTests(TestCase):
+class LotApiBase(TestCase):
     @classmethod
     def setUpTestData(cls):
         client = Client.objects.create(id="CLI-T2", nom="Client test")
@@ -182,6 +182,8 @@ class LotReviewTests(TestCase):
         self.assertEqual(r.status_code, 201, r.content)
         return r.json()["id"]
 
+
+class LotReviewTests(LotApiBase):
     def test_lot_records_prestation_and_author(self):
         lot_id = self._lot(self._as(self.bureau_user))
         d = self._as(self.bureau_user).get(f"/api/cadastre/lots/{lot_id}/").json()
@@ -515,3 +517,67 @@ class AjustementConformityTests(SimpleTestCase):
         # 4 144 383 + 0 - 328 400 (deductions) vs the 3 815 983 the document declares.
         self.assertFalse(is_surface_conforme(4144383.0, 0.0, 3815983.0))
         self.assertTrue(is_surface_conforme(4144383.0, 0.0, 3815983.0, -328400.0))
+
+
+class RepositionTests(LotApiBase):
+    def test_reposition_moves_the_lot_but_not_its_bornes(self):
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api)
+        url = f"/api/cadastre/lots/{lot_id}/"
+        before = api.get(url).json()
+        r = api.post(url + "reposition/", {"lat": 30.0, "lng": -9.0}, format="json")
+        self.assertEqual((r.status_code, r.json()["position_approximative"]), (200, True))
+        after = api.get(url).json()
+        self.assertEqual([b["x_lambert"] for b in after["bornes"]], [b["x_lambert"] for b in before["bornes"]])  # document X/Y untouched
+        self.assertEqual(after["surface_calculee_m2"], before["surface_calculee_m2"])
+        lats = [float(b["lat"]) for b in after["bornes"]]
+        self.assertAlmostEqual(sum(lats) / len(lats), 30.0, delta=0.01)
+        # editing the lot keeps the placement; reset goes back to the document's coordinates
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id}
+        self.assertEqual(api.put(url, body, format="json").status_code, 200)
+        self.assertTrue(api.get(url).json()["position_approximative"])
+        r = api.post(url + "reposition/", {"reset": True}, format="json")
+        self.assertFalse(r.json()["position_approximative"])
+        self.assertEqual(api.post(url + "reposition/", {"lat": "x"}, format="json").status_code, 400)
+
+
+class PlanAndAnnotationTests(LotApiBase):
+    def test_annotations_are_stored_and_the_plan_is_served(self):
+        import pymupdf
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api)
+        url = f"/api/cadastre/lots/{lot_id}/"
+        notes = [{"id": "a1", "type": "pin", "x": 10, "y": 20, "text": "Borne douteuse"}]
+        self.assertEqual(api.put(url + "annotations/", {"annotations": notes}, format="json").status_code, 200)
+        self.assertEqual(api.get(url).json()["annotations"], notes)
+        self.assertEqual(api.put(url + "annotations/", {"annotations": "x"}, format="json").status_code, 400)
+        self.assertEqual(api.get(url + "plan/").status_code, 404)  # no source file
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            doc = pymupdf.open()
+            doc.new_page()
+            doc.save(f"{media}/plan.pdf")
+            Lot.objects.filter(pk=lot_id).update(source_pdf_url="/media/plan.pdf")
+            self.assertEqual(api.get(url + "plan-info/").json(), {"pages": 1})
+            r = api.get(url + "plan/?dpi=72")
+            self.assertEqual((r.status_code, r["Content-Type"], r.content[:4]), (200, "image/png", b"\x89PNG"))
+            Lot.objects.filter(pk=lot_id).update(source_pdf_url="/media/../secret.pdf")
+            self.assertEqual(api.get(url + "plan/").status_code, 404)  # path traversal refused
+
+
+class ConvertTests(LotApiBase):
+    def test_a_dragged_borne_round_trips_through_the_lot_coordinates(self):
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api)
+        url = f"/api/cadastre/lots/{lot_id}/"
+        b = api.get(url).json()["bornes"][0]
+        xy = api.post(url + "convert/", {"lat": float(b["lat"]), "lng": float(b["lng"])}, format="json").json()
+        self.assertAlmostEqual(xy["x"], float(b["x_lambert"]), places=1)  # the map point maps back to the borne's own X/Y
+        self.assertAlmostEqual(xy["y"], float(b["y_lambert"]), places=1)
+        back = api.post(url + "convert/", {"x": xy["x"], "y": xy["y"]}, format="json").json()
+        self.assertAlmostEqual(back["lat"], float(b["lat"]), places=5)
+        # with a manual placement the same map point corresponds to the *document* X/Y, not the shifted one
+        api.post(url + "reposition/", {"lat": 30.0, "lng": -9.0}, format="json")
+        moved = api.get(url).json()["bornes"][0]
+        xy2 = api.post(url + "convert/", {"lat": float(moved["lat"]), "lng": float(moved["lng"])}, format="json").json()
+        self.assertAlmostEqual(xy2["x"], float(b["x_lambert"]), places=1)
+        self.assertEqual(api.post(url + "convert/", {"lat": "x"}, format="json").status_code, 400)
