@@ -40,7 +40,8 @@ npm --prefix frontend run dev                                 # :5173
   → controle → livraison), agents (chantier M2M, bureau, contrôle FKs), tâches, history entries, attachments.
   A projet is always created with a first prestation at stage `demande`. Projet has lat/lng and a GeoJSON `boundary`.
 - **Ids are strings** (`PRJ-2026-028`, `PRS-2026-107`, `CLI-0231`), minted client-side from the server maxima
-  (`refreshSequences` in `GlobetudesProjets.jsx`) — never from list length.
+  (`refreshSequences` in `GlobetudesProjets.jsx`) — never from list length. Projet/prestation ids embed the current
+  year and their counter restarts each January (`lastNumberOfYear` in `utils/ids.js`); client ids carry no year.
 - `core.Attachment` is generic (projet / prestation / resource): an uploaded `file` **or** a network `chemin`.
 - `cadastre.Lot` (+ `Borne`, `DistanceCheck`, `ReferencePoint`): linked to `projet` (nullable), optionally `prestation`;
   `created_by`; review `statut` brouillon → verifie → valide (bureau/contrôle/office; editing resets to brouillon).
@@ -132,8 +133,7 @@ aujourd'hui" count is.
 ## Client code (code interne)
 
 `NewClientModal` lets you type a client's `id`/"code interne" instead of auto-generating `CLI-XXXX`
-(`nextClientId` in `utils/ids.js` — note it's `clients.length`-based, not max-suffix-based like the other
-`next*Id` helpers, so it can collide after a deletion). `ClientDrawer`'s pencil icon lets you rename it later
+(`createClient` in `GlobetudesProjets.jsx` mints it from the highest existing suffix via `utils/ids.js`). `ClientDrawer`'s pencil icon lets you rename it later
 too, but only while the client has no projets yet: `Client.id` is a real FK target (`projets.client_id`,
 `on_delete=PROTECT`), and a plain `instance.save()` after mutating a Django primary key doesn't rename the
 row — it silently inserts a second one under the new id and leaves the old row behind. `ClientViewSet.update`

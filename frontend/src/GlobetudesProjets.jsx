@@ -19,7 +19,10 @@ import { activeAgentsByRole } from "./utils/employees";
 import { buildNotifications } from "./utils/notifications";
 import { NAV_ITEMS_FLAT } from "./constants/nav";
 import { matchesMateriel, matchesVehicule } from "./utils/stats";
-import { nextMaterielId, nextVehiculeId, nextEmployeeId, nextCongeId } from "./utils/ids";
+import {
+  nextMaterielId, nextVehiculeId, nextEmployeeId, nextCongeId,
+  lastNumber, lastNumberOfYear, currentYear, clientId as formatClientId, projetId as formatProjetId, prestationId as formatPrestationId,
+} from "./utils/ids";
 import { downloadFile, buildGeoJSON, buildKML } from "./utils/geo";
 import { blankPrestation, blankResource, blankEmployee, blankClient } from "./data/seed";
 import { apiGet, apiPost, apiPatch, apiDelete } from "./lib/api";
@@ -64,13 +67,6 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/sonner";
-
-// Highest numeric suffix among ids like "PRJ-2026-008" / "CLI-0231" / "PRS-2026-107".
-const lastNumber = (ids) =>
-  ids.reduce((max, id) => {
-    const n = parseInt(String(id).split("-").pop(), 10);
-    return Number.isFinite(n) && n > max ? n : max;
-  }, 0);
 
 export default function GlobetudesProjets({ authUser, onLogout, initialResource = null }) {
   const [clients, setClients] = useState([]);
@@ -130,8 +126,9 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
         setProjets(adaptedProjets);
 
         clientSeqRef.current = lastNumber(clientsRaw.map((c) => c.id));
-        projetSeqRef.current = lastNumber(projetsRaw.map((p) => p.id));
-        prestationSeqRef.current = lastNumber(projetsRaw.flatMap((p) => (p.prestations || []).map((x) => x.id)));
+        seqYearRef.current = currentYear();
+        projetSeqRef.current = lastNumberOfYear(projetsRaw.map((p) => p.id), seqYearRef.current);
+        prestationSeqRef.current = lastNumberOfYear(projetsRaw.flatMap((p) => (p.prestations || []).map((x) => x.id)), seqYearRef.current);
       } catch (err) {
         if (!cancelled) setDataError(err.message || "Impossible de charger les données");
       } finally {
@@ -155,6 +152,8 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const clientSeqRef = useRef(0);
   const projetSeqRef = useRef(0);
   const prestationSeqRef = useRef(0);
+  // The year the projet/prestation counters belong to: they restart when the calendar year turns.
+  const seqYearRef = useRef(currentYear());
 
   // The counters above are seeded when the page loads, but other sessions (or earlier creations)
   // keep adding rows afterwards. Re-reading the real maxima right before minting an id is what
@@ -162,11 +161,18 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const refreshSequences = async () => {
     try {
       const [projetsRaw, clientsRaw] = await Promise.all([apiGet("/projets/"), apiGet("/clients/")]);
-      projetSeqRef.current = Math.max(projetSeqRef.current, lastNumber(projetsRaw.map((p) => p.id)));
+      // A tab left open over New Year's Eve must not keep counting from last year's numbers.
+      const year = currentYear();
+      if (seqYearRef.current !== year) {
+        seqYearRef.current = year;
+        projetSeqRef.current = 0;
+        prestationSeqRef.current = 0;
+      }
+      projetSeqRef.current = Math.max(projetSeqRef.current, lastNumberOfYear(projetsRaw.map((p) => p.id), year));
       clientSeqRef.current = Math.max(clientSeqRef.current, lastNumber(clientsRaw.map((c) => c.id)));
       prestationSeqRef.current = Math.max(
         prestationSeqRef.current,
-        lastNumber(projetsRaw.flatMap((p) => (p.prestations || []).map((x) => x.id))),
+        lastNumberOfYear(projetsRaw.flatMap((p) => (p.prestations || []).map((x) => x.id)), year),
       );
     } catch {
       // Offline or API hiccup: fall back to the counters we already have.
@@ -461,7 +467,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const addPrestation = async (projetId, nature) => {
     await refreshSequences();
     prestationSeqRef.current += 1;
-    const newId = `PRS-2026-${prestationSeqRef.current}`;
+    const newId = formatPrestationId(seqYearRef.current, prestationSeqRef.current);
     const newP = blankPrestation({ id: newId, natureDemandee: nature, dateDebutDemande: today() });
     setProjets((prev) =>
       prev.map((pr) => (pr.id === projetId ? { ...pr, prestations: [...pr.prestations, newP] } : pr))
@@ -476,7 +482,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     let id = manualId?.trim();
     if (!id) {
       clientSeqRef.current += 1;
-      id = `CLI-0${clientSeqRef.current}`;
+      id = formatClientId(clientSeqRef.current);
     }
     const client = { id, nom, code: id, ...blankClient(rest) };
     setClients((prev) => [...prev, client]);
@@ -745,12 +751,12 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     let cid = clientId;
     if (!cid && newClientNom) cid = createClient({ nom: newClientNom });
     projetSeqRef.current += 1;
-    const id = `PRJ-2026-${String(projetSeqRef.current).padStart(3, "0")}`;
+    const id = formatProjetId(seqYearRef.current, projetSeqRef.current);
     // A projet always starts with its first prestation, at the "Demande" stage — that is the
     // pipeline's entry point, so a projet is never left with "0 prestation".
     prestationSeqRef.current += 1;
     const firstPrestation = blankPrestation({
-      id: `PRS-2026-${prestationSeqRef.current}`,
+      id: formatPrestationId(seqYearRef.current, prestationSeqRef.current),
       natureDemandee: nature,
       dateDebutDemande: today(),
     });
