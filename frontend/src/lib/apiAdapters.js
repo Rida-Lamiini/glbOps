@@ -147,6 +147,11 @@ export const adaptPrestation = (p, employeesById) => ({
   cdN: p.cd_n || "",
   disqueN: p.disque_n || "",
   stage: p.stage,
+  // Time in the current stage against its allowance, worked out by the server (working days).
+  stageSince: p.stage_since || null,
+  stageAgeDays: p.stage_age_days ?? null,
+  slaDays: p.sla_days ?? null,
+  slaStatus: p.sla_status || null,
   cycles: p.cycles || 0,
   reprogramme: p.reprogramme || false,
   reprogPending: p.reprog_en_attente || false,

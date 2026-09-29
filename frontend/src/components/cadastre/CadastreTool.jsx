@@ -76,7 +76,15 @@ function Stepper({ step }) {
   );
 }
 
-function ConformiteBadge({ conforme }) {
+function ConformiteBadge({ conforme, verifiable = true }) {
+  if (!verifiable) {
+    return (
+      <span className="gt-status-pill info" title="La feuille ne donne pas la surface : rien à comparer">
+        <span className="gt-status-pill-dot" />
+        Surface non vérifiable
+      </span>
+    );
+  }
   return (
     <span className={`gt-status-pill ${conforme ? "success" : "danger"}`}>
       <span className="gt-status-pill-dot" />
@@ -225,7 +233,7 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
                   <span className="cad-ref">Titre {l.titreFoncier}</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
-                  <ConformiteBadge conforme={l.conforme} />
+                  <ConformiteBadge conforme={l.conforme} verifiable={l.surfaceVerifiable} />
                   <StatutBadge statut={l.statut} />
                 </div>
               </div>
@@ -682,14 +690,18 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
             <small style={{ color: "var(--muted)" }}>Le bureau vérifie ; le contrôle valide. Modifier un lot le remet en brouillon.</small>
           </section>
           <section className="cad-panel">
-            <div className="cad-top"><h2>Surface</h2><ConformiteBadge conforme={lot.conforme} /></div>
+            <div className="cad-top"><h2>Surface</h2><ConformiteBadge conforme={lot.conforme} verifiable={lot.surfaceVerifiable} /></div>
             <div className="cad-figure"><span>Calculée (bornes)</span><strong>{fmt(lot.surfaceCalculeeM2)} m²</strong></div>
             <div className="cad-figure"><span>Document</span><strong>{fmt(lot.surfaceDocumentM2)} m²</strong></div>
             <div className="cad-figure"><span>Correction Lambert</span><strong>{fmt(lot.correctionLambertM2)} m²</strong></div>
             {lot.ajustements.map((a) => (
               <div className="cad-figure" key={a.id}><span>{a.libelle}</span><strong>{a.m2 > 0 ? "+" : ""}{fmt(a.m2)} m²</strong></div>
             ))}
-            <div className="cad-figure"><span>Écart</span><strong style={{ color: lot.conforme ? "var(--status-success)" : "var(--status-danger)" }}>{ecart > 0 ? "+" : ""}{fmt(ecart)} m²</strong></div>
+            {lot.surfaceVerifiable ? (
+              <div className="cad-figure"><span>Écart</span><strong style={{ color: lot.conforme ? "var(--status-success)" : "var(--status-danger)" }}>{ecart > 0 ? "+" : ""}{fmt(ecart)} m²</strong></div>
+            ) : (
+              <div className="cad-note">Cette feuille ne donne pas la contenance : renseignez-la (Modifier) ou vérifiez les bornes avec le total 2S imprimé (Comparer avec le plan → Vérifier).</div>
+            )}
           </section>
           {lot.distanceChecks.length > 0 && (
             <section className="cad-panel">

@@ -241,6 +241,15 @@ export default function OverviewDashboard({
         view: ["projets", { stage: "nonconforme" }],
       };
     }
+    const slaLate = allPrestationsFlat.filter((p) => p.slaStatus === "retard").length;
+    if (slaLate > 0) {
+      return {
+        title: `${slaLate} prestation${slaLate > 1 ? "s" : ""} au-delà du délai prévu pour leur étape`,
+        sub: "Temps passé à l'étape actuelle supérieur à l'objectif (jours ouvrés)",
+        cta: "Voir les dossiers",
+        view: ["projets"],
+      };
+    }
     const curr = nonConfRateForMonth(allPrestationsFlat, 0);
     const prev = nonConfRateForMonth(allPrestationsFlat, 1);
     if (curr && curr.rate >= 0.2 && (!prev || curr.rate >= prev.rate + 0.1)) {

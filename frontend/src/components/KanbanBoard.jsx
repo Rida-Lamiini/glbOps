@@ -150,6 +150,8 @@ export default function KanbanBoard({ projects, getClient, onOpenProjet, getProj
                 const client = getClient(pr.clientId);
                 const status = projetStatus(pr);
                 const nonConfCount = pr.prestations.filter((p) => rejectionReason(p)).length;
+                const lateCount = pr.prestations.filter((p) => p.slaStatus === "retard").length;
+                const riskCount = pr.prestations.filter((p) => p.slaStatus === "risque").length;
                 const shown = pr.prestations.slice(0, MAX_PRESTATIONS_SHOWN);
                 const hidden = pr.prestations.length - shown.length;
                 const selectable = selectMode && BULK_ASSIGNABLE_STAGES.has(stage.key);
@@ -184,6 +186,16 @@ export default function KanbanBoard({ projects, getClient, onOpenProjet, getProj
                     {nonConfCount > 0 && (
                       <span className="gt-status-pill danger">
                         <span className="gt-status-pill-dot" />{nonConfCount} non-conforme{nonConfCount > 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {lateCount > 0 && (
+                      <span className="gt-status-pill danger" title="Temps passé à cette étape au-delà du délai prévu (jours ouvrés)">
+                        <span className="gt-status-pill-dot" />{lateCount} hors délai
+                      </span>
+                    )}
+                    {lateCount === 0 && riskCount > 0 && (
+                      <span className="gt-status-pill warning" title="Le délai prévu pour cette étape est presque écoulé">
+                        <span className="gt-status-pill-dot" />{riskCount} à risque
                       </span>
                     )}
                     {pr.prestations.length > 1 && <ProjectProgress prestations={pr.prestations} />}

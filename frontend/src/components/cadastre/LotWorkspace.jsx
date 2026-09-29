@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, CheckCircle2, Layers, Move, Loader2, Map as MapIcon, MapPin, Maximize2, Minimize2, Plus, Rows3, Save, ScanLine, Trash2, Undo2, X,
+  AlertTriangle, CheckCircle2, Layers, Move, ShieldCheck, Loader2, Map as MapIcon, MapPin, Maximize2, Minimize2, Plus, Rows3, Save, ScanLine, Trash2, Undo2, X,
 } from "lucide-react";
 import {
-  convertLotPoint, getCadastreLot, getCadastreLotGeoJSON, readApiError, repositionCadastreLot, saveLotAnnotations, setLotStatut, updateCadastreLot,
+  checkLotChecksum, convertLotPoint, getCadastreLot, getCadastreLotGeoJSON, readApiError, repositionCadastreLot, saveLotAnnotations, setLotStatut, updateCadastreLot,
 } from "./api";
 import LotMap from "./LotMap";
 import PlanAnnotator from "./PlanAnnotator";
@@ -49,8 +49,9 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
   const [statutBusy, setStatutBusy] = useState(false);
   const [focusBorne, setFocusBorne] = useState(null);
   const [satellite, setSatellite] = useState(false);
-  const [placing, setPlacing] = useState(false);
-  const [target, setTarget] = useState(null);
+  const [xform, setXform] = useState(null); // move/turn the whole lot: { base: [[lng, lat]…], lat, lng, deg } while active
+  const [xLive, setXLive] = useState(null);
+  const [check, setCheck] = useState({ open: false, kind: "s", value: "", busy: false, result: null });
   const [placeBusy, setPlaceBusy] = useState(false);
   const [show, setShow] = useState({ plan: true, map: true, bornes: true });
   const [layout, setLayout] = useState(readLayout);
@@ -257,17 +258,51 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
     }
   };
 
+  // ---- checking the bornes against the total printed on the sheet ----------------------------------------------------
+  const runCheck = async () => {
+    const value = Number(String(check.value).replace(/\s/g, "").replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) return;
+    setCheck((c) => ({ ...c, busy: true, result: null }));
+    try {
+      const result = await checkLotChecksum({ bornes: rows.map((r) => ({ name: r.name, x: Number(r.x), y: Number(r.y) })), [check.kind === "s" ? "s" : "two_s"]: value });
+      setCheck((c) => ({ ...c, busy: false, result }));
+    } catch (e) {
+      setCheck((c) => ({ ...c, busy: false, result: { error: readApiError(e, "Vérification impossible.") } }));
+    }
+  };
+  const applySuggestion = (sg) => {
+    setRows((p) => p.map((r, k) => (k === sg.index ? { ...r, [sg.axis]: sg.to } : r)));
+    setTimeout(() => syncHandle(sg.index), 0);
+    setCheck((c) => ({ ...c, result: null }));
+  };
+
+  // ---- moving / turning the whole lot ---------------------------------------------------------------------------
+  const toggleXform = () => {
+    if (xform) {
+      setXform(null);
+      setXLive(null);
+      return;
+    }
+    if (bornePoints.length < 3) return;
+    const ring = bornePoints.map((p) => [p.lng, p.lat]);
+    setEditBornes(false);
+    setXform({ base: ring, lat: ring.reduce((s, p) => s + p[1], 0) / ring.length, lng: ring.reduce((s, p) => s + p[0], 0) / ring.length, deg: 0 });
+  };
+  // The rotation field shows the lot's total turn; the map works in the turn added on top of it.
+  const setAngle = (total) => setXform((x) => x && { ...x, deg: Math.round((((total - lot.rotationDeg) + 540) % 360 - 180) * 10) / 10 });
+  const applyXform = () => reposition({ lat: xform.lat, lng: xform.lng, rotation_deg: lot.rotationDeg + xform.deg });
+
   const reposition = async (body) => {
     setPlaceBusy(true);
     setError(null);
     try {
       await repositionCadastreLot(lotId, body);
       await load();
-      setPlacing(false);
-      setTarget(null);
+      setXform(null);
+      setXLive(null);
       changed.current = true;
       onChanged?.();
-      notifySuccess(body.reset ? "Position du document rétablie" : "Lot repositionné sur la carte");
+      notifySuccess(body.reset ? "Position du document rétablie" : "Lot déplacé et orienté sur la carte");
     } catch (e) {
       setError(readApiError(e, "Repositionnement refusé."));
       notifyError("Repositionnement refusé.");
@@ -297,23 +332,33 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
       <header className="lw-panehead">
         <h2><MapIcon size={14} /> Carte</h2>
         <div className="lw-panetools">
-          {lot.positionApproximative && !placing && (
+          {lot.positionApproximative && !xform && (
             <button type="button" className="lw-chip is-warn" disabled={placeBusy} onClick={() => reposition({ reset: true })} title="Revenir aux coordonnées du document">
               <Undo2 size={13} /> Position approximative — rétablir
             </button>
           )}
-          <button type="button" className={`lw-chip${editBornes ? " is-on" : ""}`} onClick={() => { setEditBornes((v) => !v); setPlacing(false); setTarget(null); }} aria-pressed={editBornes} title="Glisser les bornes sur la carte pour les corriger"><Move size={13} /> Corriger les bornes</button>
+          <button type="button" className={`lw-chip${editBornes ? " is-on" : ""}`} onClick={() => { setEditBornes((v) => !v); setXform(null); setXLive(null); }} aria-pressed={editBornes} title="Glisser les bornes sur la carte pour les corriger"><Move size={13} /> Corriger les bornes</button>
           <button type="button" className={`lw-chip${satellite ? " is-on" : ""}`} onClick={() => setSatellite((v) => !v)}><Layers size={13} /> Satellite</button>
-          <button type="button" className={`lw-chip${placing ? " is-on" : ""}`} onClick={() => { setPlacing((p) => !p); setTarget(null); }}><MapPin size={13} /> Repositionner</button>
+          <button type="button" className={`lw-chip${xform ? " is-on" : ""}`} onClick={toggleXform} aria-pressed={Boolean(xform)} title="Déplacer et pivoter tout le lot sur la carte"><MapPin size={13} /> Déplacer / pivoter</button>
         </div>
       </header>
-      {placing && (
-        <div className="lw-placebar" role="status">
-          <span>{target ? "Cliquez ailleurs pour corriger, ou validez." : "Cliquez sur la carte à l'endroit où se trouve le lot."}</span>
-          <button type="button" className="lw-btn primary" disabled={!target || placeBusy} onClick={() => reposition(target)}>
-            {placeBusy ? <Loader2 size={14} className="gt-spin-icon" /> : <CheckCircle2 size={14} />} Placer ici
-          </button>
-          <button type="button" className="lw-btn" onClick={() => { setPlacing(false); setTarget(null); }}>Annuler</button>
+      {xform && (
+        <div className="lw-xbar" role="group" aria-label="Déplacer et pivoter le lot">
+          <p>Glissez <b>✥</b> pour déplacer le lot, la poignée <b>↻</b> pour le pivoter — ou cliquez sur la carte pour placer son centre.</p>
+          <div className="lw-xrow">
+            <label className="lw-xangle">
+              Rotation
+              <input type="number" step="0.1" value={Math.round(((lot.rotationDeg + (xLive ?? xform).deg) * 10)) / 10} onChange={(e) => setAngle(Number(e.target.value))} aria-label="Rotation en degrés" />
+              <span>°</span>
+            </label>
+            {[-5, -1, 1, 5].map((d) => <button key={d} type="button" className="lw-btn" onClick={() => setAngle(lot.rotationDeg + xform.deg + d)}>{d > 0 ? "+" : "−"}{Math.abs(d)}°</button>)}
+            <button type="button" className="lw-btn" onClick={() => setAngle(0)} title="Orientation du document">0°</button>
+            <span className="lw-xspacer" />
+            <button type="button" className="lw-btn primary" disabled={placeBusy} onClick={applyXform}>
+              {placeBusy ? <Loader2 size={14} className="gt-spin-icon" /> : <CheckCircle2 size={14} />} Appliquer
+            </button>
+            <button type="button" className="lw-btn" onClick={() => { setXform(null); setXLive(null); }}>Annuler</button>
+          </div>
         </div>
       )}
       {editBornes && (
@@ -324,8 +369,10 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
         </div>
       )}
       <div className="lw-mapbox">
-        <LotMap geojson={geojson} focusName={focusBorne} placing={placing} onPlace={setTarget} satellite={satellite}
-          bornePoints={bornePoints} editable={editBornes && !placing} onBorneDrag={onBorneDrag} onBorneDrop={onBorneDrop} />
+        <LotMap geojson={geojson} focusName={focusBorne} satellite={satellite}
+          bornePoints={bornePoints} editable={editBornes && !xform} onBorneDrag={onBorneDrag} onBorneDrop={onBorneDrop}
+          transformMode={Boolean(xform)} transformBase={xform?.base} transform={xform && { lat: xform.lat, lng: xform.lng, deg: xform.deg }}
+          onTransformChange={(t) => { setXform((x) => x && { ...x, lat: t.lat, lng: t.lng, deg: t.deg }); setXLive(null); }} onTransformLive={setXLive} />
       </div>
     </section>
   );
@@ -335,6 +382,7 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
       <header className="lw-panehead">
         <h2><Rows3 size={14} /> Bornes · {rows.length}</h2>
         <div className="lw-panetools">
+          <button type="button" className={`lw-chip${check.open ? " is-on" : ""}`} onClick={() => setCheck((c) => ({ ...c, open: !c.open }))} title="Comparer les bornes au total imprimé sur la feuille" aria-pressed={check.open}><ShieldCheck size={13} /> Vérifier</button>
           <button type="button" className="lw-chip" onClick={() => { setRows((p) => [...p, { name: "", x: 0, y: 0 }]); setPts((p) => [...p, null]); }}><Plus size={13} /> Ajouter</button>
           <button type="button" className="lw-chip" disabled={!dirty || saving} onClick={() => { setRows(original); setPts(lot.bornes.map((b) => ({ lat: b.lat, lng: b.lng }))); }}><Undo2 size={13} /> Annuler</button>
           <button type="button" className="lw-btn primary" disabled={!dirty || saving || rows.length < 3} onClick={saveBornes}>
@@ -349,6 +397,39 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
           <span>écart</span>
           <strong className={conforme ? "ok" : "bad"}>{ecart == null ? "—" : `${ecart > 0 ? "+" : ""}${fmt(ecart)} m²`}</strong>
           <small>Enregistrer remet le lot en brouillon.</small>
+        </div>
+      )}
+      {check.open && (
+        <div className="lw-check">
+          <p>Saisissez le total imprimé sur la feuille : les bornes doivent le reproduire. S'il manque, l'app cherche le chiffre mal lu.</p>
+          <div className="lw-checkrow">
+            <select value={check.kind} onChange={(e) => setCheck((c) => ({ ...c, kind: e.target.value, result: null }))} aria-label="Type de total">
+              <option value="s">S =</option>
+              <option value="two_s">2 S =</option>
+            </select>
+            <input inputMode="decimal" placeholder="ex. 314379,45" value={check.value} onChange={(e) => setCheck((c) => ({ ...c, value: e.target.value, result: null }))} onKeyDown={(e) => e.key === "Enter" && runCheck()} />
+            <span>m²</span>
+            <button type="button" className="lw-btn primary" disabled={check.busy || !check.value} onClick={runCheck}>{check.busy ? <Loader2 size={14} className="gt-spin-icon" /> : <ShieldCheck size={14} />} Vérifier</button>
+          </div>
+          {check.result?.error && <div className="lw-checkres is-bad">{check.result.error}</div>}
+          {check.result && !check.result.error && (check.result.ok ? (
+            <div className="lw-checkres is-ok"><CheckCircle2 size={14} /> Les bornes reproduisent le total de la feuille (écart {fmt(check.result.ecart, 4)} sur 2S). Les coordonnées sont bonnes.</div>
+          ) : (
+            <div className="lw-checkres is-bad">
+              <AlertTriangle size={14} />
+              <div>
+                Écart de <b>{fmt(check.result.ecart, 2)}</b> sur 2S : une valeur est mal lue.
+                {check.result.suggestions.length === 0 && " Aucune correction à un seul chiffre ne l'explique : plusieurs valeurs sont à revoir sur la feuille."}
+                {check.result.suggestions.map((sg) => (
+                  <div key={`${sg.index}${sg.axis}${sg.to}`} className="lw-sugg">
+                    <span><b>{sg.name}</b> · {sg.axis.toUpperCase()} · <s>{fmt(sg.from, 2)}</s> → <b>{fmt(sg.to, 2)}</b></span>
+                    <button type="button" className="lw-btn" onClick={() => applySuggestion(sg)}>Appliquer</button>
+                  </div>
+                ))}
+                {check.result.suggestions.length > 1 && <small>Plusieurs lectures reproduisent le total : vérifiez sur le plan laquelle est la bonne.</small>}
+              </div>
+            </div>
+          ))}
         </div>
       )}
       <div className="lw-tablewrap">
@@ -386,9 +467,9 @@ export default function LotWorkspace({ lotId, onClose, onChanged }) {
         <div className="lw-figures" aria-label="Surface">
           <div><span>Calculée</span><strong>{fmt(area ?? lot.surfaceCalculeeM2)} m²</strong></div>
           <div><span>Document</span><strong>{fmt(lot.surfaceDocumentM2)} m²</strong></div>
-          <div className={dirty ? (conforme ? "ok" : "bad") : lot.conforme ? "ok" : "bad"}>
+          <div className={!lot.surfaceVerifiable ? "" : dirty ? (conforme ? "ok" : "bad") : lot.conforme ? "ok" : "bad"}>
             <span>Écart</span>
-            <strong>{(() => { const v = dirty ? ecart : lot.surfaceCalculeeM2 + lot.correctionLambertM2 + lot.ajustementsM2 - lot.surfaceDocumentM2; return v == null ? "—" : `${v > 0 ? "+" : ""}${fmt(v)} m²`; })()}</strong>
+            <strong>{!lot.surfaceVerifiable ? "non vérifiable" : (() => { const v = dirty ? ecart : lot.surfaceCalculeeM2 + lot.correctionLambertM2 + lot.ajustementsM2 - lot.surfaceDocumentM2; return v == null ? "—" : `${v > 0 ? "+" : ""}${fmt(v)} m²`; })()}</strong>
           </div>
         </div>
 

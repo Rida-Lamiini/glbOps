@@ -22,6 +22,8 @@ from .db.geometry import copy_lot_geometry, find_lots_near, list_all_lot_polygon
 from .db.lot_features import get_lot_feature_collection
 from .excel_import import MAX_BYTES as MAX_XLSX_BYTES, build_lots_export, build_template, parse_lots_workbook
 from .geo.build_lot import build_lot_geometry
+from .geo.checksum import find_single_digit_fixes, twice_area
+from .geo.placement import place, unplace
 from .geo.proj import lambert_to_wgs84, wgs84_to_lambert
 from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
@@ -65,7 +67,7 @@ def _save_lot(data, existing_lot=None, user=None):
     built = build_lot_geometry(
         data["bornes"], data.get("distance_checks") or [], data.get("reference_points") or [],
         data.get("zone", "nord"),
-        (existing_lot.decalage_x, existing_lot.decalage_y) if existing_lot else (0.0, 0.0),
+        **(existing_lot.placement if existing_lot else {}),
     )
 
     field_values = dict(
@@ -270,6 +272,9 @@ def lot_reuse(request, pk):
             zone=source.zone,
             decalage_x=source.decalage_x,
             decalage_y=source.decalage_y,
+            rotation_deg=source.rotation_deg,
+            pivot_x=source.pivot_x,
+            pivot_y=source.pivot_y,
             surface_document_m2=source.surface_document_m2,
             surface_calculee_m2=source.surface_calculee_m2,
             correction_lambert_m2=source.correction_lambert_m2,
@@ -371,40 +376,78 @@ def lot_report(request, pk):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def lot_reposition(request, pk):
-    """Places the lot on the map without touching its bornes: ``{lat, lng}`` moves the lot's centre to
-    that point (keeping its shape and surface), ``{reset: true}`` goes back to the document's coordinates."""
+    """Places the lot on the map without touching its bornes. ``{lat, lng}`` moves the lot's centre to that point,
+    ``{rotation_deg}`` turns it (counter-clockwise, about that centre), either or both; ``{reset: true}`` goes back
+    to the document's coordinates. The shape and the surface never change."""
     lot = get_object_or_404(Lot.objects.prefetch_related("bornes"), pk=pk)
     bornes = [
         {"name": b.name, "sequence": b.sequence, "x_lambert": float(b.x_lambert), "y_lambert": float(b.y_lambert)}
         for b in lot.bornes.all()
     ]
+    cx = sum(b["x_lambert"] for b in bornes) / len(bornes)
+    cy = sum(b["y_lambert"] for b in bornes) / len(bornes)
     if request.data.get("reset"):
-        dx = dy = 0.0
+        offset, rotation, pivot = (0.0, 0.0), 0.0, (0.0, 0.0)
     else:
         try:
-            lat, lng = float(request.data["lat"]), float(request.data["lng"])
+            rotation = float(request.data.get("rotation_deg", lot.rotation_deg))
+            has_target = "lat" in request.data
+            lat = float(request.data["lat"]) if has_target else None
+            lng = float(request.data["lng"]) if has_target else None
         except (KeyError, TypeError, ValueError):
-            return Response({"detail": "lat et lng requis."}, status=status.HTTP_400_BAD_REQUEST)
-        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            return Response({"detail": "Paramètres invalides."}, status=status.HTTP_400_BAD_REQUEST)
+        if has_target and not (-90 <= lat <= 90 and -180 <= lng <= 180):
             return Response({"detail": "Coordonnées hors limites."}, status=status.HTTP_400_BAD_REQUEST)
-        target_x, target_y = wgs84_to_lambert(lat, lng, lot.zone)
-        cx = sum(b["x_lambert"] for b in bornes) / len(bornes)
-        cy = sum(b["y_lambert"] for b in bornes) / len(bornes)
-        dx, dy = target_x - cx, target_y - cy
-    built = build_lot_geometry(bornes, [], [], lot.zone, (dx, dy))
+        if not has_target and "rotation_deg" not in request.data:
+            return Response({"detail": "lat/lng ou rotation_deg requis."}, status=status.HTTP_400_BAD_REQUEST)
+        rotation = ((rotation + 180) % 360) - 180  # keep it in (-180, 180]
+        pivot = (cx, cy)
+        if has_target:
+            target_x, target_y = wgs84_to_lambert(lat, lng, lot.zone)
+        else:
+            # rotate in place: keep the lot's current centre on the map
+            target_x, target_y = place(cx, cy, (lot.decalage_x, lot.decalage_y), lot.rotation_deg, (lot.pivot_x, lot.pivot_y))
+        offset = (target_x - cx, target_y - cy)
+    built = build_lot_geometry(bornes, [], [], lot.zone, offset, rotation, pivot)
     with transaction.atomic():
         for b in lot.bornes.all():
             match = next(x for x in built.bornes if x.sequence == b.sequence)
             b.lat, b.lng = match.lat, match.lng
             b.save(update_fields=["lat", "lng"])
-        lot.decalage_x, lot.decalage_y = dx, dy
-        lot.save(update_fields=["decalage_x", "decalage_y"])
+        lot.decalage_x, lot.decalage_y = offset
+        lot.rotation_deg = rotation
+        lot.pivot_x, lot.pivot_y = pivot
+        lot.save(update_fields=["decalage_x", "decalage_y", "rotation_deg", "pivot_x", "pivot_y"])
         set_lot_geometry(lot.id, built.polygon_ring_lat_lng, built.centroid)
-        _log_on_prestation(lot, "Position du lot modifiée sur la carte" if (dx or dy) else "Position du lot rétablie (coordonnées du document)", request.user)
-    return Response({"position_approximative": lot.position_approximative})
+        _log_on_prestation(lot, "Position du lot modifiée sur la carte" if lot.position_approximative else "Position du lot rétablie (coordonnées du document)", request.user)
+    return Response({"position_approximative": lot.position_approximative, "rotation_deg": lot.rotation_deg})
 
 
 MAX_ANNOTATIONS_BYTES = 400_000
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def lot_checksum(request):
+    """Checks bornes as read against the total printed on the sheet. ``{bornes: [{name, x, y}], two_s | s}`` ->
+    whether they reproduce it and, when they don't, the single-digit corrections that would. Nothing is saved."""
+    try:
+        bornes = [(str(b["name"]), float(b["x"]), float(b["y"])) for b in request.data["bornes"]]
+        printed = float(request.data["two_s"]) if request.data.get("two_s") not in (None, "") else 2 * float(request.data["s"])
+    except (KeyError, TypeError, ValueError):
+        return Response({"detail": "bornes et s (ou two_s) requis."}, status=status.HTTP_400_BAD_REQUEST)
+    if len(bornes) < 3 or printed <= 0:
+        return Response({"detail": "Au moins 3 bornes et un total positif."}, status=status.HTTP_400_BAD_REQUEST)
+    points = [(x, y) for _, x, y in bornes]
+    read = twice_area(points)
+    fixes = find_single_digit_fixes(points, printed)
+    return Response({
+        "two_s_read": round(read, 4),
+        "two_s_printed": printed,
+        "ecart": round(read - printed, 4),
+        "ok": abs(read - printed) <= 0.02,
+        "suggestions": [{**f, "name": bornes[f["index"]][0]} for f in fixes],
+    })
 
 
 @api_view(["POST"])
@@ -420,11 +463,12 @@ def lot_convert(request, pk):
             if not (-90 <= lat <= 90 and -180 <= lng <= 180):
                 raise ValueError
             x, y = wgs84_to_lambert(lat, lng, lot.zone)
-            return Response({"x": round(x - lot.decalage_x, 3), "y": round(y - lot.decalage_y, 3)})
+            dx, dy = unplace(x, y, **lot.placement)
+            return Response({"x": round(dx, 3), "y": round(dy, 3)})
         x, y = float(request.data["x"]), float(request.data["y"])
     except (KeyError, TypeError, ValueError):
         return Response({"detail": "Point invalide."}, status=status.HTTP_400_BAD_REQUEST)
-    lat, lng = lambert_to_wgs84(x + lot.decalage_x, y + lot.decalage_y, lot.zone)
+    lat, lng = lambert_to_wgs84(*place(x, y, **lot.placement), lot.zone)
     return Response({"lat": lat, "lng": lng})
 
 

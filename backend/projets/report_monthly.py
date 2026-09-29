@@ -305,8 +305,9 @@ def build_monthly_report(year, month, author=""):
     # ---- Cadastre
     r.section("Cadastre", keep=28)
     lots = list(Lot.objects.all())
+    verifiables = [lot for lot in lots if lot.surface_verifiable]
     conformes = sum(
-        1 for lot in lots
+        1 for lot in verifiables
         if is_surface_conforme(float(lot.surface_calculee_m2), float(lot.correction_lambert_m2), float(lot.surface_document_m2), float(lot.ajustements_m2))
     )
     by_statut = {s: sum(1 for lot in lots if lot.statut == s) for s in ("brouillon", "verifie", "valide")}
@@ -315,7 +316,7 @@ def build_monthly_report(year, month, author=""):
     r.kpis([
         {"label": "Lots enregistrés", "value": str(len(lots)), "sub": f"{touched} créé{s} ou modifié{s} ce mois"},
         {"label": "Conformes", "value": str(conformes), "sub": "écart de surface ≤ 1 m²", "tone": "good"},
-        {"label": "Avec écart", "value": str(len(lots) - conformes), "sub": "à examiner", "tone": "bad" if len(lots) - conformes else None},
+        {"label": "Avec écart", "value": str(len(verifiables) - conformes), "sub": f"à examiner · {len(lots) - len(verifiables)} sans surface au document" if len(lots) != len(verifiables) else "à examiner", "tone": "bad" if len(verifiables) - conformes else None},
         {"label": "Validés", "value": str(by_statut["valide"]), "sub": f"{by_statut['verifie']} vérifié(s), {by_statut['brouillon']} brouillon(s)"},
     ])
 

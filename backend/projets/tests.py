@@ -12,6 +12,7 @@ from employees.models import Employee
 from resources.models import Resource
 
 from .models import HistoryEntry, Prestation, Projet, Tache
+from .stages import sla_info
 
 LOT_BODY = {
     "titre_foncier": "TF/52310-C",
@@ -163,3 +164,100 @@ class MonthlyReportTests(TestCase):
         self.assertEqual(self._get(self.office, "?month=2026-13").status_code, 400)
         self.assertEqual(self._get(self.office, "?month=sept").status_code, 400)
         self.assertEqual(self._get(self.office, "").status_code, 200)
+
+
+class StageTransitionTests(TestCase):
+    """Server-side stage machine: valid moves, who may make them, the entry timestamp and SLA."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.office_user = User.objects.create_user("dispatcher", password="x")
+        Employee.objects.create(id="EMP-001", user=cls.office_user, nom="Salma Idrissi", role="Dispatcher")
+        cls.chantier_user = User.objects.create_user("chantier", password="x")
+        Employee.objects.create(id="EMP-002", user=cls.chantier_user, nom="Karim Alaoui", role="Agent Chantier")
+        cls.bureau_user = User.objects.create_user("bureau", password="x")
+        Employee.objects.create(id="EMP-003", user=cls.bureau_user, nom="Nadia Chraibi", role="Agent Bureau")
+        client = Client.objects.create(id="CLI-0001", nom="SOMADIR")
+        cls.projet = Projet.objects.create(id="PRJ-2026-001", client=client)
+
+    def make(self, stage, **extra):
+        return Prestation.objects.create(id=f"PRS-2026-{Prestation.objects.count() + 1:03d}", projet=self.projet, stage=stage, **extra)
+
+    def api_as(self, user):
+        api = APIClient(SERVER_NAME="localhost")
+        api.force_authenticate(user)
+        return api
+
+    def move(self, user, prestation, stage):
+        return self.api_as(user).patch(f"/api/prestations/{prestation.id}/", {"stage": stage}, format="json")
+
+    def test_owner_moves_forward_and_entry_time_is_stamped(self):
+        p = self.make("execution")
+        self.assertIsNone(p.stage_since)
+        res = self.move(self.chantier_user, p, "bureau")
+        self.assertEqual(res.status_code, 200)
+        p.refresh_from_db()
+        self.assertEqual(p.stage, "bureau")
+        self.assertIsNotNone(p.stage_since)
+
+    def test_unchanged_stage_keeps_entry_time(self):
+        p = self.make("bureau", stage_since=datetime.datetime(2026, 9, 1, 8, tzinfo=datetime.timezone.utc))
+        self.api_as(self.bureau_user).patch(f"/api/prestations/{p.id}/", {"chemin_bureau": "srv/plan"}, format="json")
+        p.refresh_from_db()
+        self.assertEqual(p.stage_since.day, 1)
+
+    def test_cannot_skip_a_stage(self):
+        p = self.make("affectation")
+        self.assertEqual(self.move(self.office_user, p, "livraison").status_code, 400)
+        p.refresh_from_db()
+        self.assertEqual(p.stage, "affectation")
+
+    def test_agent_cannot_move_a_stage_that_is_not_theirs(self):
+        p = self.make("bureau")
+        self.assertEqual(self.move(self.chantier_user, p, "controle").status_code, 403)
+        self.assertEqual(self.move(self.bureau_user, p, "controle").status_code, 200)
+
+    def test_non_conformity_and_reprogramming_go_back(self):
+        p = self.make("bureau")
+        self.assertEqual(self.move(self.bureau_user, p, "execution").status_code, 200)
+        # The dispatcher approves a reprogramming: execution -> affectation.
+        self.assertEqual(self.move(self.office_user, p, "affectation").status_code, 200)
+
+    def test_delivered_is_final(self):
+        p = self.make("livraison")
+        self.assertEqual(self.move(self.office_user, p, "controle").status_code, 400)
+
+    def test_history_author_comes_from_the_session(self):
+        p = self.make("execution")
+        res = self.api_as(self.chantier_user).post(
+            "/api/history/", {"prestation": p.id, "date": "28/09/2026", "label": "Passage", "author": "Directrice"}, format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["author"], "Karim Alaoui")
+
+    def test_sla_status_follows_time_in_stage(self):
+        now = datetime.datetime(2026, 9, 30, 9, tzinfo=datetime.timezone.utc)  # a Wednesday
+        # "controle" allows 3 working days; risk starts at 75% (>= 2.25, i.e. 3 with whole days).
+        cases = [
+            (datetime.datetime(2026, 9, 30, 8, tzinfo=datetime.timezone.utc), "ok"),      # same day
+            (datetime.datetime(2026, 9, 28, 8, tzinfo=datetime.timezone.utc), "ok"),      # 2 days
+            (datetime.datetime(2026, 9, 25, 8, tzinfo=datetime.timezone.utc), "risque"),  # Fri->Wed = 3
+            (datetime.datetime(2026, 9, 24, 8, tzinfo=datetime.timezone.utc), "retard"),  # 4
+        ]
+        for since, expected in cases:
+            with self.subTest(since=since):
+                self.assertEqual(sla_info("controle", since, now)[2], expected)
+        self.assertEqual(sla_info("livraison", now, now), (None, None, None))
+        self.assertEqual(sla_info("bureau", None, now), (None, 10, None))
+
+    def test_weekends_do_not_count(self):
+        fri = datetime.datetime(2026, 9, 25, 8, tzinfo=datetime.timezone.utc)
+        mon = datetime.datetime(2026, 9, 28, 9, tzinfo=datetime.timezone.utc)
+        self.assertEqual(sla_info("controle", fri, mon)[0], 1)
+
+    def test_api_exposes_sla_fields(self):
+        p = self.make("controle", stage_since=datetime.datetime(2020, 1, 6, 8, tzinfo=datetime.timezone.utc))
+        row = self.api_as(self.office_user).get(f"/api/prestations/{p.id}/").data
+        self.assertEqual(row["sla_status"], "retard")
+        self.assertEqual(row["sla_days"], 3)
+        self.assertGreater(row["stage_age_days"], 3)

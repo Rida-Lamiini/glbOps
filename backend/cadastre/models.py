@@ -80,10 +80,25 @@ class Lot(models.Model):
     annotations = models.JSONField(default=list, blank=True)
     decalage_x = models.FloatField(default=0)
     decalage_y = models.FloatField(default=0)
+    # ...and the turn (degrees, counter-clockwise) about a fixed document point, for a lot that has to be oriented
+    # to match the ground.
+    rotation_deg = models.FloatField(default=0)
+    pivot_x = models.FloatField(default=0)
+    pivot_y = models.FloatField(default=0)
+
+    @property
+    def surface_verifiable(self):
+        """False when the document gives no surface to compare with (a sheet without its totals page)."""
+        return float(self.surface_document_m2 or 0) > 0
 
     @property
     def position_approximative(self):
-        return bool(self.decalage_x or self.decalage_y)
+        return bool(self.decalage_x or self.decalage_y or self.rotation_deg)
+
+    @property
+    def placement(self):
+        """Keyword arguments for build_lot_geometry / placement.place."""
+        return {"offset": (self.decalage_x, self.decalage_y), "rotation_deg": self.rotation_deg, "pivot": (self.pivot_x, self.pivot_y)}
 
     source_pdf_url = models.CharField(max_length=500, blank=True)
 

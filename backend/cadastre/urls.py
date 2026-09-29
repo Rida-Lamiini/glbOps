@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("cadastre/lots/", views.lots, name="cadastre-lots"),
     # Declared before the <uuid:pk> routes so the literal segments win.
+    path("cadastre/lots/checksum/", views.lot_checksum, name="cadastre-lot-checksum"),
     path("cadastre/lots/parse-pdf/", views.parse_pdf, name="cadastre-parse-pdf"),
     path("cadastre/lots/parse-excel/", views.parse_excel, name="cadastre-parse-excel"),
     path("cadastre/lots/excel-template/", views.excel_template, name="cadastre-excel-template"),

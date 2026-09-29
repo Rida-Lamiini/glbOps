@@ -93,6 +93,8 @@ const toLotSummary = (lot) => ({
   correctionLambertM2: Number(lot.correction_lambert_m2),
   ajustementsM2: Number(lot.ajustements_m2 || 0),
   positionApproximative: !!lot.position_approximative,
+  surfaceVerifiable: lot.surface_verifiable !== false,
+  rotationDeg: Number(lot.rotation_deg || 0),
   updatedAt: lot.updated_at,
   conforme: lot.conforme,
 });
@@ -153,6 +155,9 @@ export const saveLotAnnotations = (id, annotations) =>
 
 // One point between the map and the lot's document coordinates ({ lat, lng } -> { x, y } or { x, y } -> { lat, lng }).
 export const convertLotPoint = (id, body) => apiPost(`/cadastre/lots/${id}/convert/`, body);
+
+// Checks the bornes as read against the S (or 2S) printed on the sheet; suggests the single digit to change.
+export const checkLotChecksum = (body) => apiPost("/cadastre/lots/checksum/", body);
 
 export const getCadastreLotGeoJSON = (id) => apiGet(`/cadastre/lots/${id}/geojson/`);
 

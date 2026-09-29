@@ -356,6 +356,13 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     });
   };
 
+  // The server restarts the SLA clock on a stage change; mirror that locally (no badge until the
+  // next load brings the new stage's allowance) so the old stage's "en retard" doesn't linger.
+  const enteredNewStage = (prestation, patch) =>
+    patch.stage && patch.stage !== prestation.stage
+      ? { stageSince: new Date().toISOString(), stageAgeDays: 0, slaDays: null, slaStatus: null }
+      : {};
+
   const updatePrestation = (projetId, prestationId, patch) => {
     const before = projets.find((pr) => pr.id === projetId)?.prestations.find((p) => p.id === prestationId);
     setProjets((prev) =>
@@ -364,7 +371,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
           ? pr
           : {
               ...pr,
-              prestations: pr.prestations.map((p) => (p.id === prestationId ? { ...p, ...patch } : p)),
+              prestations: pr.prestations.map((p) => (p.id === prestationId ? { ...p, ...patch, ...enteredNewStage(p, patch) } : p)),
             }
       )
     );

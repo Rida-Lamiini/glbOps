@@ -106,13 +106,14 @@ def build_pv(prestation):
     if lot:
         calculee, document, correction = (float(v) for v in (lot.surface_calculee_m2, lot.surface_document_m2, lot.correction_lambert_m2))
         ecart = round(calculee + correction + float(lot.ajustements_m2) - document, 2)
-        conforme = abs(ecart) <= 1
+        verifiable = lot.surface_verifiable
+        conforme = verifiable and abs(ecart) <= 1
         r.section("Lot cadastral", note=f"Titre foncier {lot.titre_foncier}", keep=106)
         r.kpis([
             {"label": "Surface calculée", "value": f"{num(calculee)} m²", "sub": "à partir des bornes"},
             {"label": "Surface du document", "value": f"{num(document)} m²", "sub": "contenance adoptée"},
-            {"label": "Écart", "value": f"{'+' if ecart > 0 else ''}{num(ecart)} m²",
-             "sub": "conforme (≤ 1 m²)" if conforme else "au-delà de 1 m²", "tone": "good" if conforme else "bad"},
+            {"label": "Écart", "value": f"{'+' if ecart > 0 else ''}{num(ecart)} m²" if verifiable else "—",
+             "sub": ("conforme (≤ 1 m²)" if conforme else "au-delà de 1 m²") if verifiable else "surface du document manquante", "tone": None if not verifiable else ("good" if conforme else "bad")},
         ])
         plan_top = r.y
         r.plot([(b.name, float(b.x_lambert), float(b.y_lambert)) for b in lot.bornes.all()], w=92, h=66)

@@ -85,6 +85,9 @@ class Prestation(models.Model):
     disque_n = models.CharField(max_length=50, blank=True)
 
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default="demande")
+    # When the prestation entered its current stage; set by the server on every stage change
+    # (see PrestationViewSet) and the basis of the SLA badges. Null = unknown.
+    stage_since = models.DateTimeField(null=True, blank=True)
     cycles = models.PositiveIntegerField(default=0)
     reprogramme = models.BooleanField(default=False)
     # The field agent's request to reschedule an unfinished visit, waiting for the dispatcher's decision.

@@ -40,6 +40,7 @@ def _person_name(user):
 class LotListSerializer(serializers.ModelSerializer):
     conforme = serializers.SerializerMethodField()
     position_approximative = serializers.BooleanField(read_only=True)
+    surface_verifiable = serializers.BooleanField(read_only=True)
     created_by_name = serializers.SerializerMethodField()
     statut_par_name = serializers.SerializerMethodField()
 
@@ -62,6 +63,8 @@ class LotListSerializer(serializers.ModelSerializer):
             "correction_lambert_m2",
             "ajustements_m2",
             "position_approximative",
+            "surface_verifiable",
+            "rotation_deg",
             "updated_at",
             "conforme",
         ]
@@ -72,7 +75,10 @@ class LotListSerializer(serializers.ModelSerializer):
     def get_statut_par_name(self, lot: Lot) -> str:
         return _person_name(lot.statut_par)
 
-    def get_conforme(self, lot: Lot) -> bool:
+    def get_conforme(self, lot: Lot) -> bool | None:
+        # None = not verifiable (no surface on the document), which is neither conforme nor an écart
+        if not lot.surface_verifiable:
+            return None
         return is_surface_conforme(
             float(lot.surface_calculee_m2),
             float(lot.correction_lambert_m2),

@@ -276,7 +276,7 @@ class RolePermissionTests(TestCase):
         self.assertEqual(office.post("/api/projets/", {"id": "PRJ-2026-002", "client": "CLI-0001"}, format="json").status_code, 201)
 
     def test_agent_can_still_edit_a_prestation(self):
-        res = self.api_as(self.agent_user).patch("/api/prestations/PRS-2026-001/", {"stage": "affectation"}, format="json")
+        res = self.api_as(self.agent_user).patch("/api/prestations/PRS-2026-001/", {"nature_executee": "Bornage"}, format="json")
         self.assertEqual(res.status_code, 200)
 
     def test_comment_only_its_author_edits_and_office_deletes(self):

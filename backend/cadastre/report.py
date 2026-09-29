@@ -46,7 +46,8 @@ def build_lot_report(lot):
         b.x_lambert, b.y_lambert = float(b.x_lambert), float(b.y_lambert)
     calculee, document, correction = (float(v) for v in (lot.surface_calculee_m2, lot.surface_document_m2, lot.correction_lambert_m2))
     ecart = round(calculee + correction + float(lot.ajustements_m2) - document, 2)
-    conforme = abs(ecart) <= SURFACE_TOLERANCE_M2
+    verifiable = lot.surface_verifiable
+    conforme = verifiable and abs(ecart) <= SURFACE_TOLERANCE_M2
     projet = lot.projet
     client = projet.client if projet else None
     prestation = lot.prestation
@@ -60,7 +61,9 @@ def build_lot_report(lot):
         ref=f"Lot {lot.titre_foncier}" + (f" / {lot.lot_number}" if lot.lot_number else ""),
     )
 
-    if conforme:
+    if not verifiable:
+        r.callout("Surface non vérifiable", "La feuille ne donne pas la contenance : la surface recalculée à partir des bornes ne peut pas être comparée. Renseignez la contenance adoptée (ou le total 2S) pour contrôler le lot.", "warn")
+    elif conforme:
         r.callout("Lot conforme", f"La surface recalculée à partir des bornes concorde avec le document (écart de {num(ecart)} m², tolérance {SURFACE_TOLERANCE_M2} m²).", "good")
     else:
         r.callout("Écart de surface à examiner", f"L'écart entre la surface recalculée et le document est de {num(ecart)} m², au-delà de la tolérance de {SURFACE_TOLERANCE_M2} m².", "bad")
@@ -69,7 +72,7 @@ def build_lot_report(lot):
         {"label": "Surface calculée", "value": _m2(calculee), "sub": "à partir des bornes"},
         {"label": "Surface du document", "value": _m2(document), "sub": "contenance adoptée"},
         {"label": "Correction Lambert", "value": _m2(correction), "sub": "altération linéaire"},
-        {"label": "Écart", "value": f"{'+' if ecart > 0 else ''}{num(ecart)} m²", "sub": f"tolérance {SURFACE_TOLERANCE_M2} m²", "tone": "good" if conforme else "bad"},
+        {"label": "Écart", "value": f"{'+' if ecart > 0 else ''}{num(ecart)} m²" if verifiable else "—", "sub": f"tolérance {SURFACE_TOLERANCE_M2} m²" if verifiable else "surface du document manquante", "tone": None if not verifiable else ("good" if conforme else "bad")},
     ])
 
     r.section("Identification")

@@ -11,6 +11,7 @@ from .models import HistoryEntry, Prestation, Projet, Tache
 from .pv import build_pv
 from .report_monthly import build_monthly_report, parse_month
 from .serializers import HistoryEntrySerializer, PrestationSerializer, ProjetSerializer, TacheSerializer
+from .stages import check_transition
 
 
 class ProjetViewSet(viewsets.ModelViewSet):
@@ -25,6 +26,17 @@ class PrestationViewSet(viewsets.ModelViewSet):
     ).all()
     serializer_class = PrestationSerializer
     permission_classes = [OfficeCreateDelete]
+
+    def perform_create(self, serializer):
+        serializer.save(stage_since=timezone.now())
+
+    def perform_update(self, serializer):
+        new_stage = serializer.validated_data.get("stage")
+        if new_stage is not None and new_stage != serializer.instance.stage:
+            check_transition(self.request.user, serializer.instance.stage, new_stage)
+            serializer.save(stage_since=timezone.now())
+        else:
+            serializer.save()
 
     @action(detail=True, methods=["get"], permission_classes=[IsAuthenticated])
     def pv(self, request, pk=None):
@@ -43,6 +55,12 @@ class TacheViewSet(viewsets.ModelViewSet):
 class HistoryEntryViewSet(viewsets.ModelViewSet):
     queryset = HistoryEntry.objects.select_related("prestation").all()
     serializer_class = HistoryEntrySerializer
+
+    def perform_create(self, serializer):
+        # The trail says who did it, so the author comes from the session, not from the client.
+        user = self.request.user
+        employee = getattr(user, "employee", None)
+        serializer.save(author=employee.nom if employee else (user.get_full_name() or user.username))
 
 
 @api_view(["GET"])

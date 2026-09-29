@@ -581,3 +581,71 @@ class ConvertTests(LotApiBase):
         xy2 = api.post(url + "convert/", {"lat": float(moved["lat"]), "lng": float(moved["lng"])}, format="json").json()
         self.assertAlmostEqual(xy2["x"], float(b["x_lambert"]), places=1)
         self.assertEqual(api.post(url + "convert/", {"lat": "x"}, format="json").status_code, 400)
+
+
+class RotationTests(LotApiBase):
+    def test_rotating_a_lot_keeps_its_centre_shape_and_document_coordinates(self):
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api)
+        url = f"/api/cadastre/lots/{lot_id}/"
+        api.post(url + "reposition/", {"lat": 30.0, "lng": -9.0}, format="json")
+        before = api.get(url).json()
+        r = api.post(url + "reposition/", {"rotation_deg": 90}, format="json")
+        self.assertEqual((r.status_code, r.json()["rotation_deg"]), (200, 90.0))
+        after = api.get(url).json()
+        centre = lambda d: (sum(float(b["lat"]) for b in d["bornes"]) / len(d["bornes"]), sum(float(b["lng"]) for b in d["bornes"]) / len(d["bornes"]))
+        self.assertAlmostEqual(centre(before)[0], centre(after)[0], places=5)  # turned about its own centre
+        self.assertAlmostEqual(centre(before)[1], centre(after)[1], places=5)
+        self.assertNotAlmostEqual(float(before["bornes"][0]["lat"]), float(after["bornes"][0]["lat"]), places=5)  # ...but the corners moved
+        self.assertEqual([b["x_lambert"] for b in before["bornes"]], [b["x_lambert"] for b in after["bornes"]])  # document X/Y untouched
+        self.assertEqual(after["surface_calculee_m2"], before["surface_calculee_m2"])
+        # dragging a borne on the turned lot converts back to the same document X/Y
+        b0 = after["bornes"][0]
+        xy = api.post(url + "convert/", {"lat": float(b0["lat"]), "lng": float(b0["lng"])}, format="json").json()
+        self.assertAlmostEqual(xy["x"], float(b0["x_lambert"]), places=1)
+        self.assertAlmostEqual(xy["y"], float(b0["y_lambert"]), places=1)
+        # moving keeps the turn; editing the lot keeps it too; reset clears everything
+        api.post(url + "reposition/", {"lat": 31.0, "lng": -8.0}, format="json")
+        self.assertEqual(api.get(url).json()["rotation_deg"], 90.0)
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id}
+        api.put(url, body, format="json")
+        self.assertEqual(api.get(url).json()["rotation_deg"], 90.0)
+        self.assertFalse(api.post(url + "reposition/", {"reset": True}, format="json").json()["position_approximative"])
+        self.assertEqual(api.get(url).json()["rotation_deg"], 0.0)
+
+
+class ChecksumTests(LotApiBase):
+    RING = [(0, 0), (100, 0), (100, 50), (0, 50)]  # 2S = 10000
+
+    def _post(self, bornes, **body):
+        api = self._as(self.bureau_user)
+        return api.post("/api/cadastre/lots/checksum/", {"bornes": [{"name": f"B{i}", "x": x, "y": y} for i, (x, y) in enumerate(bornes)], **body}, format="json")
+
+    def test_matching_bornes_are_ok(self):
+        r = self._post(self.RING, two_s=10000).json()
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["suggestions"], [])
+        self.assertTrue(self._post(self.RING, s=5000).json()["ok"])  # S is accepted too
+
+    def test_a_single_misread_digit_is_found(self):
+        misread = [(0, 0), (100, 0), (700, 50), (0, 50)]  # a 1 read as a 7 in the hundreds
+        r = self._post(misread, two_s=10000).json()
+        self.assertFalse(r["ok"])
+        best = r["suggestions"][0]
+        self.assertEqual((best["name"], best["axis"], best["from"], best["to"]), ("B2", "x", 700.0, 100.0))
+
+    def test_bad_input_is_refused(self):
+        self.assertEqual(self._post(self.RING).status_code, 400)
+        self.assertEqual(self._post(self.RING[:2], two_s=10).status_code, 400)
+
+
+class VerifiableSurfaceTests(LotApiBase):
+    def test_a_lot_without_document_surface_is_not_verifiable_rather_than_non_conforme(self):
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api, surface_document_m2=0)
+        d = api.get(f"/api/cadastre/lots/{lot_id}/").json()
+        self.assertFalse(d["surface_verifiable"])
+        self.assertIsNone(d["conforme"])
+        self.assertIsNone(api.get("/api/cadastre/lots/").json()["lots"][0]["conforme"])
+        lot_id2 = self._lot(api, titre_foncier="TF/9/V")  # the normal payload has a document surface
+        self.assertTrue(api.get(f"/api/cadastre/lots/{lot_id2}/").json()["surface_verifiable"])
