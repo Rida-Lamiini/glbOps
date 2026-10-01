@@ -1,0 +1,212 @@
+from rest_framework import serializers
+
+from projets.models import Prestation, Projet
+
+from .geo.build_lot import is_surface_conforme
+from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
+
+
+class BorneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Borne
+        fields = ["id", "name", "sequence", "x_lambert", "y_lambert", "lat", "lng"]
+
+
+class AjustementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Ajustement
+        fields = ["id", "libelle", "type", "m2"]
+
+
+class DistanceCheckSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DistanceCheck
+        fields = ["id", "segment_label", "croquis_m", "calcule_m", "ecart_m"]
+
+
+class ReferencePointSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReferencePoint
+        fields = ["id", "label", "lat", "lng", "distance_m", "bearing_deg"]
+
+
+def _person_name(user):
+    if user is None:
+        return ""
+    employee = getattr(user, "employee", None)
+    return employee.nom if employee else (user.first_name or user.username)
+
+
+class LotListSerializer(serializers.ModelSerializer):
+    conforme = serializers.SerializerMethodField()
+    position_approximative = serializers.BooleanField(read_only=True)
+    surface_verifiable = serializers.BooleanField(read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    statut_par_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lot
+        fields = [
+            "id",
+            "projet",
+            "prestation",
+            "derive_de",
+            "statut",
+            "statut_at",
+            "created_by_name",
+            "statut_par_name",
+            "titre_foncier",
+            "propriete_dite",
+            "zone",
+            "surface_document_m2",
+            "surface_calculee_m2",
+            "correction_lambert_m2",
+            "ajustements_m2",
+            "position_approximative",
+            "surface_verifiable",
+            "rotation_deg",
+            "updated_at",
+            "version",
+            "conforme",
+        ]
+
+    def get_created_by_name(self, lot: Lot) -> str:
+        return _person_name(lot.created_by)
+
+    def get_statut_par_name(self, lot: Lot) -> str:
+        return _person_name(lot.statut_par)
+
+    def get_conforme(self, lot: Lot) -> bool | None:
+        # None = not verifiable (no surface on the document), which is neither conforme nor an écart
+        if not lot.surface_verifiable:
+            return None
+        return is_surface_conforme(
+            float(lot.surface_calculee_m2),
+            float(lot.correction_lambert_m2),
+            float(lot.surface_document_m2),
+            float(lot.ajustements_m2),
+        )
+
+
+class LotDetailSerializer(LotListSerializer):
+    bornes = BorneSerializer(many=True, read_only=True)
+    distance_checks = DistanceCheckSerializer(many=True, read_only=True)
+    reference_points = ReferencePointSerializer(many=True, read_only=True)
+    ajustements = AjustementSerializer(many=True, read_only=True)
+
+    class Meta(LotListSerializer.Meta):
+        fields = LotListSerializer.Meta.fields + [
+            "lot_number",
+            "affaire_ref",
+            "geometre",
+            "date_leve",
+            "service_cadastre",
+            "source_pdf_url",
+            "created_at",
+            "bornes",
+            "distance_checks",
+            "reference_points",
+            "ajustements",
+            "annotations",
+        ]
+
+
+# --- Write payloads -------------------------------------------------------
+
+
+class BorneInputSerializer(serializers.Serializer):
+    name = serializers.CharField(min_length=1, max_length=50)
+    sequence = serializers.IntegerField(min_value=0)
+    x_lambert = serializers.FloatField()
+    y_lambert = serializers.FloatField()
+
+
+class DistanceCheckInputSerializer(serializers.Serializer):
+    segment_label = serializers.CharField(min_length=1, max_length=100)
+    croquis_m = serializers.FloatField(min_value=0)
+
+
+class AjustementInputSerializer(serializers.Serializer):
+    libelle = serializers.CharField(min_length=1, max_length=200)
+    type = serializers.ChoiceField(choices=["appoint", "deduction"])
+    m2 = serializers.FloatField()
+
+
+class ReferencePointInputSerializer(serializers.Serializer):
+    label = serializers.CharField(min_length=1, max_length=200)
+    lat = serializers.FloatField(min_value=-90, max_value=90)
+    lng = serializers.FloatField(min_value=-180, max_value=180)
+
+
+class CreateLotSerializer(serializers.Serializer):
+    projet = serializers.PrimaryKeyRelatedField(
+        queryset=Projet.objects.all(), required=False, allow_null=True,
+    )
+    prestation = serializers.PrimaryKeyRelatedField(
+        queryset=Prestation.objects.all(), required=False, allow_null=True,
+    )
+    titre_foncier = serializers.CharField(min_length=1, max_length=100)
+    propriete_dite = serializers.CharField(min_length=1, max_length=300)
+    lot_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    affaire_ref = serializers.CharField(max_length=300, required=False, allow_blank=True)
+    geometre = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    date_leve = serializers.DateField(required=False, allow_null=True)
+    service_cadastre = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    zone = serializers.ChoiceField(choices=["nord", "sud"], required=False, default="nord")
+    surface_document_m2 = serializers.FloatField(min_value=0)
+    correction_lambert_m2 = serializers.FloatField()
+    source_pdf_url = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    bornes = BorneInputSerializer(many=True)
+    distance_checks = DistanceCheckInputSerializer(many=True, required=False, default=list)
+    reference_points = ReferencePointInputSerializer(many=True, required=False, default=list)
+    # None = leave the lot's existing adjustments untouched (the review UI doesn't edit them).
+    ajustements = AjustementInputSerializer(many=True, required=False, allow_null=True, default=None)
+
+    def _check_prestation_belongs_to_projet(self, attrs):
+        prestation, projet = attrs.get("prestation"), attrs.get("projet")
+        if prestation is not None and (projet is None or prestation.projet_id != projet.pk):
+            raise serializers.ValidationError({"prestation": "Cette prestation n'appartient pas au projet choisi."})
+
+    def _check_titre_unique_per_projet(self, attrs):
+        # A titre foncier may appear on several projets (a reused survey), but
+        # only once per projet.
+        projet = attrs.get("projet")
+        if projet is not None:
+            queryset = Lot.objects.filter(titre_foncier=attrs["titre_foncier"], projet=projet)
+            lot_id = self.context.get("lot_id")
+            if lot_id is not None:
+                queryset = queryset.exclude(pk=lot_id)
+            if queryset.exists():
+                raise serializers.ValidationError(
+                    {"titre_foncier": "Ce projet a déjà un lot avec ce titre foncier."}
+                )
+
+    def validate_bornes(self, value):
+        if len(value) < 3:
+            raise serializers.ValidationError("Un polygone nécessite au moins 3 bornes.")
+        sequences = [b["sequence"] for b in value]
+        if len(set(sequences)) != len(sequences):
+            raise serializers.ValidationError("Deux bornes ne peuvent pas avoir le même rang.")
+        return value
+
+    def validate(self, attrs):
+        self._check_titre_unique_per_projet(attrs)
+        self._check_prestation_belongs_to_projet(attrs)
+        # A distance check names its two endpoints by borne name. If either name
+        # isn't in the submitted table the distance is unmeasurable, so reject it
+        # here rather than storing an unusable row that would silently read as a
+        # 0 m deviation.
+        borne_names = {b["name"].strip().lower() for b in attrs["bornes"]}
+        for dc in attrs.get("distance_checks") or []:
+            parts = [p.strip() for p in dc["segment_label"].split("-")]
+            unknown = [p for p in parts if p.lower() not in borne_names]
+            if len(parts) != 2 or unknown:
+                raise serializers.ValidationError(
+                    {
+                        "distance_checks": (
+                            f"Le segment « {dc['segment_label']} » doit référencer deux bornes "
+                            "du tableau, sous la forme « B3452-B3453 »."
+                        )
+                    }
+                )
+        return attrs

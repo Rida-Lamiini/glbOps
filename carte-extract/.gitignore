@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# DB + media backups (scripts/backup.ps1)
+backups/
+dist-exe/
+launcher/seed_bundle.zip
+backend/media/
+*.sqlite3
+node_modules
+dist
+.env
+api.log
+ui.log
+.env.neon
+carte.env
+dist-build/
+dist-installer/
+launcher/version_info.txt

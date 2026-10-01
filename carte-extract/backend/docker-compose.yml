@@ -1,0 +1,31 @@
+name: carte-extract
+
+services:
+  db:
+    # postgis/postgis, not plain postgres: the cadastre app's Lot polygon/
+    # centroid columns need the postgis extension (see
+    # cadastre/migrations/0002_postgis_geometry.py). Compatible with an
+    # existing postgres:16 data volume — it's the same Postgres major version
+    # underneath, just with the extension binaries available.
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-carte_extract}
+      POSTGRES_USER: ${POSTGRES_USER:-glbops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glbops}
+    ports:
+      - "${POSTGRES_PORT:-5435}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  ocr:
+    build: ./ocr-service
+    restart: unless-stopped
+    ports:
+      - "${OCR_PORT:-8501}:8000"
+    volumes:
+      - ocr_models:/root/.paddlex
+
+volumes:
+  db_data:
+  ocr_models:

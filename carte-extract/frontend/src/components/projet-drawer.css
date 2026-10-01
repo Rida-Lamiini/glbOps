@@ -1,0 +1,83 @@
+/* Project detail drawer — sticky header + KPI strip + tabs, so nothing is one endless scroll. */
+.gt-drawer { width: 560px; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+
+.pd-head { padding: 18px 20px 12px; border-bottom: 0; }
+.pd-head-main { min-width: 0; flex: 1; }
+.pd-head-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.pd-client { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; overflow-wrap: anywhere; }
+.pd-client-link { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: inherit; text-decoration: underline; text-decoration-color: var(--border-subtle); text-underline-offset: 4px; }
+.pd-client-link:hover { text-decoration-color: var(--accent); }
+
+.pd-kpis { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-bottom: 1px solid var(--border-subtle); }
+.pd-kpi { padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid var(--border-subtle); }
+.pd-kpi:first-child { border-left: 0; }
+.pd-kpi strong { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1; }
+.pd-kpi span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+
+.pd-tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 2px; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--border-subtle); overflow-x: auto; scrollbar-width: none; }
+.pd-tabs::-webkit-scrollbar { display: none; }
+.pd-tab { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 12px 12px 11px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; min-height: 44px; }
+.pd-tab:hover { color: var(--ink); }
+.pd-tab:focus-visible { outline: 3px solid rgba(179, 38, 30, .3); outline-offset: -3px; border-radius: 6px; }
+.pd-tab.is-active { color: var(--ink); border-bottom-color: var(--accent); }
+.pd-tab-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; display: grid; place-items: center; font-size: 10.5px; background: var(--surface-muted); color: var(--ink); }
+.pd-tab.is-active .pd-tab-count { background: var(--accent); color: #fff; }
+
+.pd-empty { border: 1.5px dashed #cdbfa3; border-radius: 12px; padding: 18px; text-align: center; color: var(--muted); }
+.pd-empty strong { display: block; color: var(--ink); font-family: var(--font-display); font-size: 16px; margin-bottom: 4px; }
+.pd-empty p { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.pd-lots { display: flex; flex-direction: column; gap: 10px; }
+.pd-lot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-left: 4px solid var(--accent); border-radius: 10px; background: var(--surface); }
+.pd-lot-name { font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+.pd-lot-ref { font-size: 11.5px; color: var(--muted); }
+.pd-lot-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+@media (max-width: 700px) {
+  .gt-drawer { width: 100%; max-width: 100vw; }
+  .pd-client { font-size: 20px; }
+  .pd-kpi { padding: 8px 10px 10px; }
+  .pd-kpi strong { font-size: 20px; }
+
+}
+
+/* ---- Fixes: tabs fit, pill chips, roomy prestation rows ---- */
+.pd-tabs { padding: 0 8px; gap: 0; }
+.pd-tab { padding: 12px 10px 11px; gap: 5px; font-size: 12.5px; flex: 1 1 auto; justify-content: center; }
+.pd-tab svg { flex: none; }
+
+.gt-drawer-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 20px 14px; }
+.gt-drawer-meta .gt-chip { border: 0; background: var(--surface-muted); color: var(--ink); border-radius: 999px; padding: 5px 11px; font-size: 12px; line-height: 1.2; max-width: 100%; overflow-wrap: anywhere; }
+.gt-drawer-meta .gt-rename-btn { margin-left: auto; width: 32px; height: 32px; border-radius: 50%; background: var(--surface-muted); display: grid; place-items: center; }
+.gt-drawer-meta .gt-rename-btn:hover { background: var(--border-subtle); color: var(--ink); }
+
+.gt-projet-prestations { display: flex; flex-direction: column; gap: 10px; }
+.gt-projet-prestations .gt-listrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto auto; gap: 8px 12px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface); transition: border-color .15s, box-shadow .15s; }
+.gt-projet-prestations .gt-listrow:hover { border-color: #c9bda2; box-shadow: var(--shadow-card); background: var(--surface); }
+.gt-projet-prestations .gt-listrow:focus-visible { outline: 3px solid rgba(179, 38, 30, .3); outline-offset: 2px; }
+.gt-projet-prestations .gt-listrow-info { grid-area: 1 / 1; }
+.gt-projet-prestations .gt-listrow-id { font-size: 11px; }
+.gt-projet-prestations .gt-listrow-client { font-family: var(--font-display); font-size: 16px; line-height: 1.25; }
+.gt-projet-prestations .gt-listrow-stage { grid-area: 1 / 2; width: auto; align-self: start; font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface-muted); white-space: nowrap; }
+.gt-projet-prestations .gt-listrow-progress { grid-area: 2 / 1 / 3 / 3; width: 100%; }
+.gt-projet-prestations .gt-listrow-seg { flex: 1; width: auto; height: 6px; border-radius: 3px; }
+.gt-projet-prestations .gt-pill { grid-area: 3 / 1 / 4 / 3; border-radius: 999px; padding: 3px 9px; }
+
+@media (max-width: 700px) {
+  .gt-drawer-meta { padding: 12px 14px; }
+  .pd-tab span:not(.pd-tab-count) { font-size: 12px; }
+  .pd-tab { padding-inline: 8px; }
+}
+@media (max-width: 700px) {
+  .pd-tab:not(.is-active) > span:not(.pd-tab-count) { display: none; }
+  .pd-tab:not(.is-active) { flex: 0 0 auto; padding-inline: 14px; }
+  .pd-tab.is-active { flex: 1 1 auto; }
+}
+
+/* Flex children with overflow can shrink to 0 in a column container (the tab bar vanished on
+   short windows in the long Résumé tab). Nothing in the drawer may compress: the drawer scrolls. */
+.gt-drawer > * { flex-shrink: 0; }
+.pd-tabs { min-height: 44px; }
+
+/* Client / Ressource / Employé drawers share the same header language */
+.gt-drawer-head .gt-drawer-client { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; overflow-wrap: anywhere; }
+.gt-drawer-head .gt-drawer-id { margin-bottom: 2px; }
