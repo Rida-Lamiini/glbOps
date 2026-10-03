@@ -9,7 +9,7 @@ const Html = ({ html, as: Tag = "span" }) => <Tag dangerouslySetInnerHTML={{ __h
 const has = (text, q) => String(text || "").toLowerCase().includes(q);
 
 // The panel on the right of the Carte, in three views of the same data:
-//   Dossiers — one card per projet with all its prestations and its lots
+//   Projets — one card per projet with all its prestations and its lots
 //   Prestations — every prestation, grouped by kind
 //   Lots — the cadastral lots
 export default function MapPanel({ projets, lots, getClient, activeId, tab, onTab, onFocusProject, onFocusLot, onClose }) {
@@ -43,10 +43,10 @@ export default function MapPanel({ projets, lots, getClient, activeId, tab, onTa
   const shownLots = useMemo(() => lots.filter((l) => !q || has(l.titre, q) || has(l.propriete, q) || has(l.operation, q) || has(l.projetId, q)), [lots, q]);
 
   return (
-    <aside className="gt-map-panel mp-panel" aria-label="Dossiers, prestations et lots">
+    <aside className="gt-map-panel mp-panel" aria-label="Projets, prestations et lots">
       <div className="mp-panel-head">
         <div className="mp-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "projets"} className={tab === "projets" ? "is-on" : ""} onClick={() => onTab("projets")}>Dossiers <em>{dossiers.length}</em></button>
+          <button type="button" role="tab" aria-selected={tab === "projets"} className={tab === "projets" ? "is-on" : ""} onClick={() => onTab("projets")}>Projets <em>{dossiers.length}</em></button>
           <button type="button" role="tab" aria-selected={tab === "prestations"} className={tab === "prestations" ? "is-on" : ""} onClick={() => onTab("prestations")}>Prestations <em>{prestationTotal}</em></button>
           <button type="button" role="tab" aria-selected={tab === "lots"} className={tab === "lots" ? "is-on" : ""} onClick={() => onTab("lots")}>Lots <em>{shownLots.length}</em></button>
         </div>
@@ -96,7 +96,7 @@ export default function MapPanel({ projets, lots, getClient, activeId, tab, onTa
             </button>
           );
         })}
-        {tab === "projets" && dossiers.length === 0 && <div className="gt-list-empty">Aucun dossier avec ces filtres.</div>}
+        {tab === "projets" && dossiers.length === 0 && <div className="gt-list-empty">Aucun projet avec ces filtres.</div>}
 
         {tab === "prestations" && prestationGroups.map((g) => (
           <section key={g.kind} className="mp-group">

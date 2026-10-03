@@ -117,7 +117,7 @@ const PIN_GLYPH = {
   mt: '<g stroke="#14181F" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 10.5h10M17 8l2.5 2.5L17 13"/><path d="M20.5 15.5h-10M13 13l-2.5 2.5L13 18"/></g>',
 };
 
-// A small dark disc with the number of prestations when a dossier has more than one.
+// A small dark disc with the number of prestations when a projet has more than one.
 const pinCount = (n) =>
   n > 1 ? `<circle cx="24.5" cy="5.5" r="6" fill="#1d1b18" stroke="#fff" stroke-width="1.6"/><text x="24.5" y="8.6" text-anchor="middle" font-family="Hanken Grotesk, sans-serif" font-size="8.5" font-weight="700" fill="#fff">${n}</text>` : "";
 
@@ -245,7 +245,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const [activeId, setActiveId] = useState(null);
 
   const geolocated = projects.filter((p) => p.lat != null && p.lng != null);
-  // A dossier shows when its status is on and at least one of its prestations is of a kind that is on.
+  // A projet shows when its status is on and at least one of its prestations is of a kind that is on.
   const visibleProjects = geolocated.filter((pr) => activeStatuses.has(projetStatus(pr)) && projetNatures(pr).some((k) => activeNatures.has(k)));
   const natureCounts = Object.fromEntries(NATURE_ORDER.map((k) => [k, 0]));
   projects.filter((pr) => activeStatuses.has(projetStatus(pr))).forEach((pr) => pr.prestations.forEach((p) => { natureCounts[prestationKind(p)] += 1; }));
@@ -1431,7 +1431,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           {legendOpen && (
             <>
               <div className="mp-key-row"><span className="mp-key-pin" dangerouslySetInnerHTML={{ __html: pinSVG("#7a7266", "plan") }} /> Plan côté <small>contour plein</small></div>
-              <div className="mp-key-row"><span className="mp-key-pin" dangerouslySetInnerHTML={{ __html: pinSVG("#7a7266", "mec", 2) }} /> Autres prestations <small>contour pointillé · nombre = prestations du dossier</small></div>
+              <div className="mp-key-row"><span className="mp-key-pin" dangerouslySetInnerHTML={{ __html: pinSVG("#7a7266", "mec", 2) }} /> Autres prestations <small>contour pointillé · nombre = prestations du projet</small></div>
               <div className="mp-key-sep">Couleur du repère = statut du projet</div>
               {showCadastreLots && lots.length > 0 && (
                 <>
