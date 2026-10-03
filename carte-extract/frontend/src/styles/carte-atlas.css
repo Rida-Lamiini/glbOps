@@ -1,0 +1,150 @@
+/* ==========================================================================================================
+   Carte — "atlas des dossiers"
+   Every prestation is drawn the same way wherever it appears (ribbon, popup, panel): a nature STAMP
+   (monogram + glyph in the nature's ink) and a 7-notch stage GAUGE in the stage's colour.
+   Same paper / ink / brick palette and Fraunces + Hanken Grotesk pairing as the rest of the app.
+   ========================================================================================================== */
+
+/* ---- stamp: the nature of a prestation ---- */
+.mp-stamp {
+  --nc: var(--ink);
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px;
+  border-radius: 6px; border: 1.5px solid var(--nc); color: var(--nc);
+  background: color-mix(in srgb, var(--nc) 8%, var(--surface));
+  font-size: 10px; letter-spacing: .09em; white-space: nowrap; line-height: 1;
+}
+.mp-stamp b { font-weight: 800; }
+.mp-stamp svg { flex: none; }
+
+/* ---- gauge: where a prestation stands in the 7 stages ---- */
+.mp-gauge { --c: var(--muted); display: inline-flex; align-items: flex-end; gap: 2px; height: 8px; }
+.mp-gauge i { width: 11px; height: 4px; border-radius: 2px; background: var(--border-subtle); transition: background .2s, height .2s; }
+.mp-gauge i.on { background: var(--c); }
+.mp-gauge i.cur { height: 8px; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--c) 22%, transparent); }
+
+/* ---- status pill, lot chips, operation tags, non-conformity flag ---- */
+.mp-pill {
+  --pc: var(--muted);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
+  padding: 2px 9px; border-radius: 999px; color: var(--pc);
+  background: color-mix(in srgb, var(--pc) 11%, var(--surface)); border: 1px solid color-mix(in srgb, var(--pc) 30%, var(--surface));
+}
+.mp-lotchip { --lc: var(--muted); display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--ink); padding: 2px 9px 2px 7px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--surface); white-space: nowrap; }
+.mp-lotchip i { width: 8px; height: 8px; border-radius: 2px; background: var(--lc); }
+.mp-lotchip.is-gap { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--surface)); }
+.mp-lotchip.is-gap i { background: transparent; border: 1.5px dashed var(--accent); }
+.mp-op { font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: .08em; padding: 2px 7px; border-radius: 5px; background: var(--ink); color: var(--canvas); }
+.mp-nc { font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: var(--status-danger); background: var(--status-danger-bg); border-radius: 5px; padding: 2px 6px; white-space: nowrap; }
+
+/* ---- a prestation as a row (popup + dossier cards) ---- */
+.mp-pr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.mp-pr { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 10px; }
+.mp-pr:has(.mp-nc) { grid-template-columns: auto 1fr auto auto; }
+.mp-pr-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mp-pr-stage { font-size: 11.5px; font-weight: 700; line-height: 1.1; }
+.mp-pr-date { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---- ribbon above the map ---- */
+.mp-ribbon { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 4px 14px 12px; }
+.mp-ribbon-figures { display: flex; gap: 20px; align-items: baseline; }
+.mp-ribbon-figures > div { display: inline-flex; align-items: baseline; gap: 7px; }
+.mp-ribbon-figures b { font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.mp-ribbon-figures span { font-size: 12px; color: var(--muted); }
+.mp-chipset { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.mp-chipset + .mp-chipset { padding-left: 20px; border-left: 1px solid var(--border-subtle); }
+.mp-chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 3px 10px 3px 3px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-subtle); background: var(--surface); font: inherit; color: var(--ink);
+  transition: opacity .15s, border-color .15s, transform .12s, box-shadow .15s;
+}
+.mp-chip:hover { border-color: var(--ink); transform: translateY(-1px); box-shadow: 0 3px 8px rgba(60, 45, 20, .1); }
+.mp-chip em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mp-chip:not(.is-on) { opacity: .42; border-style: dashed; }
+.mp-chip:not(.is-on) .mp-stamp { filter: grayscale(1); }
+.mp-chip.is-status { padding: 5px 11px; font-size: 12px; gap: 7px; }
+.mp-chip.is-status i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mp-chip.is-status span { font-weight: 600; }
+
+/* ---- the dossier sheet (popup on a pin or a surveyed outline) ---- */
+.mp-popup .maplibregl-popup-content { padding: 0 !important; overflow: hidden; border-radius: 14px !important; border: 1px solid var(--border-subtle); min-width: 300px; }
+.mp-popup .maplibregl-popup-close-button { top: 7px !important; right: 9px !important; z-index: 1; }
+.mp-sheet { display: flex; flex-direction: column; font-family: var(--font-body); color: var(--ink); }
+.mp-sheet > * { padding-left: 16px; padding-right: 16px; }
+.mp-sheet-eyebrow { display: flex; align-items: center; gap: 10px; padding-top: 10px; padding-bottom: 9px; padding-right: 34px; background: var(--surface-muted); border-bottom: 1px solid var(--border-subtle); font-size: 11px; color: var(--muted); }
+.mp-sheet-client { margin: 12px 0 0; font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.12; letter-spacing: -.005em; }
+.mp-sheet-where { margin-top: 3px; font-size: 12px; color: var(--muted); }
+.mp-sheet-section { display: flex; align-items: center; gap: 8px; margin-top: 14px; margin-bottom: 8px; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.mp-sheet-section::after { content: ""; flex: 1; height: 1px; background: var(--border-subtle); order: 1; }
+.mp-sheet-section em { order: 2; font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink); }
+.mp-sheet .mp-pr-list, .mp-sheet-empty { max-height: 220px; overflow-y: auto; padding-top: 1px; padding-bottom: 1px; }
+.mp-sheet-empty { font-size: 12px; color: var(--muted); font-style: italic; }
+.mp-sheet .mp-card-lots { margin-top: 0; }
+.mp-sheet-coords { margin-top: 12px; font-size: 10.5px; color: var(--muted); }
+.mp-sheet-actions { display: flex; gap: 8px; padding-top: 12px; padding-bottom: 14px; }
+.mp-btn { flex: 1; min-height: 34px; border-radius: 9px; border: 1px solid var(--ink); background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
+.mp-btn:hover { background: var(--surface-muted); }
+.mp-btn.is-primary { background: var(--ink); color: var(--canvas); }
+.mp-btn.is-primary:hover { background: var(--accent); border-color: var(--accent); }
+/* the lot popup uses the same section + rows */
+.gt-lot-popup .mp-sheet-section { margin-top: 6px; margin-bottom: 2px; }
+.gt-lot-popup .mp-pr-list { max-height: 170px; overflow-y: auto; }
+
+/* ---- side panel: dossiers · prestations · lots ---- */
+.gt-map-panel.mp-panel { width: 352px; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-card-hover); background: var(--surface); animation: mp-slide .28s cubic-bezier(.2, .8, .2, 1) both; }
+.mp-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 10px 8px 12px; }
+.mp-tabs { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-muted); border-radius: 999px; }
+.mp-tabs button { border: 0; background: none; padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, color .15s; }
+.mp-tabs button em { font-style: normal; font-size: 10.5px; opacity: .7; font-variant-numeric: tabular-nums; }
+.mp-tabs button.is-on { background: var(--ink); color: var(--canvas); }
+.mp-panel-search { display: flex; align-items: center; gap: 8px; margin: 0 12px 10px; padding: 7px 11px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--canvas); color: var(--muted); }
+.mp-panel-search:focus-within { border-color: var(--ink); }
+.mp-panel-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 12.5px; color: var(--ink); }
+.mp-panel-search button { border: 0; background: none; padding: 0; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.mp-panel-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+.mp-card { position: relative; display: flex; flex-direction: column; gap: 8px; text-align: left; width: 100%; padding: 11px 12px 11px 14px; border-radius: 12px; border: 1px solid var(--border-subtle); background: var(--surface); font: inherit; color: var(--ink); cursor: pointer; animation: mp-rise .38s cubic-bezier(.2, .8, .2, 1) both; transition: transform .15s, box-shadow .15s, border-color .15s; }
+.mp-card:nth-child(2) { animation-delay: .04s; } .mp-card:nth-child(3) { animation-delay: .08s; } .mp-card:nth-child(4) { animation-delay: .12s; } .mp-card:nth-child(5) { animation-delay: .16s; } .mp-card:nth-child(n+6) { animation-delay: .2s; }
+.mp-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--border-subtle); transition: background .15s; }
+.mp-card:hover { transform: translateY(-1px); border-color: var(--ink); box-shadow: 0 6px 16px rgba(60, 45, 20, .1); }
+.mp-card:hover::before, .mp-card.is-active::before { background: var(--accent); }
+.mp-card.is-active { border-color: var(--ink); box-shadow: 0 6px 16px rgba(60, 45, 20, .12); }
+.mp-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.mp-card-client { font-family: var(--font-display); font-size: 16.5px; font-weight: 600; line-height: 1.15; min-width: 0; overflow-wrap: anywhere; }
+.mp-card-sub { font-size: 11.5px; color: var(--muted); margin-top: -4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-card .mp-pr-list { padding-top: 2px; border-top: 1px dashed var(--border-subtle); padding-top: 9px; }
+.mp-card-lots { display: flex; flex-wrap: wrap; gap: 5px; }
+.mp-card-go { position: absolute; right: 10px; bottom: 10px; color: var(--muted); opacity: 0; transition: opacity .15s; }
+.mp-card:hover .mp-card-go, .mp-card.is-active .mp-card-go { opacity: 1; }
+
+.mp-group { display: flex; flex-direction: column; gap: 2px; }
+.mp-group h4 { position: sticky; top: -2px; z-index: 1; margin: 0; padding: 8px 2px 6px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(var(--surface) 78%, transparent); }
+.mp-group h4 em { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.mp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 9px 10px; border-radius: 10px; border: 1px solid transparent; background: none; font: inherit; color: var(--ink); cursor: pointer; transition: background .12s, border-color .12s; }
+.mp-row:hover { background: var(--surface-muted); }
+.mp-row.is-active { background: var(--surface-muted); border-color: var(--border-subtle); box-shadow: inset 3px 0 0 var(--accent); }
+.mp-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.mp-row-client { font-weight: 650; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-row-meta { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-row-stage { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 11px; font-weight: 700; flex: none; }
+.mp-row-lot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 150px; flex: none; }
+
+/* ---- key (legend): symbols only, the filters live in the ribbon ---- */
+.mp-key { gap: 7px; min-width: 232px; }
+.mp-key-row { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--ink); }
+.mp-key-row small { margin-left: auto; padding-left: 10px; font-size: 10.5px; color: var(--muted); text-align: right; }
+.mp-key-pin { display: inline-flex; width: 18px; flex: none; }
+.mp-key-pin svg { width: 18px; height: auto; }
+.mp-key-sep { margin-top: 3px; padding-top: 7px; border-top: 1px solid var(--border-subtle); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+@keyframes mp-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes mp-slide { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mp-card, .gt-map-panel.mp-panel { animation: none; } }
+
+@media (max-width: 720px) {
+  .mp-ribbon { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 14px; padding-bottom: 10px; }
+  .mp-ribbon::-webkit-scrollbar { display: none; }
+  .mp-ribbon > * { flex: none; }
+  .mp-chipset { flex-wrap: nowrap; }
+  .gt-map-panel.mp-panel { width: auto; }
+  .mp-popup .maplibregl-popup-content { min-width: 0; }
+}

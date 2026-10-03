@@ -574,12 +574,14 @@ def lots_geojson(request):
             "titreFoncier": row["titre_foncier"],
             "proprieteDite": row["propriete_dite"],
             "projetId": row["projet_id"],
+            "prestationId": None,
         }
         if lot is not None:
             props.update(
                 {
                     "statut": lot.statut,
                     "operation": lot.operation,
+                    "prestationId": lot.prestation_id,
                     "conforme": LotListSerializer().get_conforme(lot),
                     "surfaceCalculeeM2": float(lot.surface_calculee_m2),
                     "surfaceDocumentM2": float(lot.surface_document_m2),

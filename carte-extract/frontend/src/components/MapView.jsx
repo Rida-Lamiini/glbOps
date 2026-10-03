@@ -33,7 +33,11 @@ import {
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import { projetStatus } from "../utils/stats";
-import { NATURES, natureKind } from "../utils/nature";
+import { NATURES, NATURE_ORDER, natureKind, projetNatures, prestationKind } from "../utils/nature";
+import { esc, prestationRowHTML, LOT_COLORS, LOT_STATUT_LABEL } from "../utils/mapCards";
+import MapRibbon from "./map/MapRibbon";
+import MapPanel from "./map/MapPanel";
+import "../styles/carte-atlas.css";
 import { VECTOR_STYLE, RASTER_FALLBACK_STYLE, SATELLITE_STYLE, TOPO_STYLE } from "../utils/mapStyle";
 import { forwardGeocode } from "../utils/geocode";
 import { formatLambert } from "../utils/lambert";
@@ -75,8 +79,6 @@ const ADMIN_LEVELS = [
   },
 ];
 
-const LOT_COLORS = { valide: "#1f7a55", verifie: "#2f6690", brouillon: "#b7791f" };
-const LOT_STATUT_LABEL = { valide: "Validé", verifie: "Vérifié", brouillon: "Brouillon" };
 const LOT_LABEL_ZOOM = 13;
 // Plan côté lots get a dimension-line glyph in a round pill; other lots keep the document glyph in a squared tag.
 const LOT_GLYPH_PLAN = '<svg width="15" height="13" viewBox="0 0 24 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18"/><path d="M3 4v12M21 4v12"/><path d="M7 6.5 3 10l4 3.5M17 6.5l4 3.5-4 3.5"/></svg>';
@@ -110,15 +112,23 @@ const PIN_GLYPH = {
   bornage: '<rect x="11" y="9.5" width="8" height="8" transform="rotate(45 15 13.5)" fill="#14181F"/>',
   lidar: '<g fill="none" stroke="#14181F" stroke-width="1.6" stroke-linecap="round"><circle cx="15" cy="13" r="1.6" fill="#14181F" stroke="none"/><path d="M10.5 17a6.4 6.4 0 0 1 0-8.8M19.5 17a6.4 6.4 0 0 0 0-8.8"/></g>',
   autre: '<circle cx="15" cy="13" r="3.4" fill="#14181F"/>',
+  mec: '<g fill="#14181F"><rect x="9.5" y="8" width="11" height="2.4" rx="1.2"/><rect x="9.5" y="12" width="11" height="2.4" rx="1.2"/><rect x="9.5" y="16" width="7" height="2.4" rx="1.2"/></g>',
+  copro: '<g fill="#14181F"><rect x="9" y="8" width="7" height="7" rx="1.2"/><rect x="14" y="12.5" width="7" height="7" rx="1.2" opacity=".55"/></g>',
+  mt: '<g stroke="#14181F" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 10.5h10M17 8l2.5 2.5L17 13"/><path d="M20.5 15.5h-10M13 13l-2.5 2.5L13 18"/></g>',
 };
 
-function pinSVG(color, kind = "autre") {
+// A small dark disc with the number of prestations when a dossier has more than one.
+const pinCount = (n) =>
+  n > 1 ? `<circle cx="24.5" cy="5.5" r="6" fill="#1d1b18" stroke="#fff" stroke-width="1.6"/><text x="24.5" y="8.6" text-anchor="middle" font-family="Hanken Grotesk, sans-serif" font-size="8.5" font-weight="700" fill="#fff">${n}</text>` : "";
+
+function pinSVG(color, kind = "autre", count = 1) {
   if (kind === "plan") {
     return `
     <svg width="30" height="38" viewBox="0 0 30 38" xmlns="http://www.w3.org/2000/svg">
       <path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 15 23 15 23s15-12.5 15-23C30 6.7 23.3 0 15 0z" fill="${color}" stroke="#fff" stroke-width="2"/>
       <circle cx="15" cy="15" r="9" fill="#fff"/>
       <g transform="translate(0 2)">${PIN_GLYPH.plan}</g>
+      ${pinCount(count)}
     </svg>`;
   }
   return `
@@ -126,6 +136,7 @@ function pinSVG(color, kind = "autre") {
       <path d="M7 1h16a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5h-4.6L15 37l-3.4-12H7a5 5 0 0 1-5-5V6a5 5 0 0 1 5-5z" fill="${color}" stroke="#fff" stroke-width="2"/>
       <rect x="7.5" y="5.5" width="15" height="15" rx="3.5" fill="#fff"/>
       ${PIN_GLYPH[kind] || PIN_GLYPH.autre}
+      ${pinCount(count)}
     </svg>`;
 }
 
@@ -207,12 +218,13 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const lotsWithKind = useMemo(() => {
     if (!cadastreRaw) return cadastreRaw;
     const kindOf = Object.fromEntries(projects.map((p) => [p.id, natureKind(p)]));
+    const prestationKindOf = Object.fromEntries(projects.flatMap((p) => p.prestations.map((x) => [x.id, prestationKind(x)])));
     const office = !currentUser || currentUser.role === "Dispatcher" || currentUser.role === "Directrice";
     return {
       ...cadastreRaw,
       features: cadastreRaw.features
         .filter((f) => office || kindOf[f.properties.projetId])
-        .map((f) => ({ ...f, properties: { ...f.properties, kind: kindOf[f.properties.projetId] || "autre" } })),
+        .map((f) => ({ ...f, properties: { ...f.properties, kind: prestationKindOf[f.properties.prestationId] || kindOf[f.properties.projetId] || "autre" } })),
     };
   }, [cadastreRaw, projects, currentUser]);
   const cadastreGeojson = useMemo(
@@ -228,14 +240,16 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const communes = showCommunes ? adminData[adminLevel] || null : null;
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState("projets");
-  const [legendOpen, setLegendOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth > 700));
+  // The key is tall now: open by default only where there is room (wide and tall screens).
+  const [legendOpen, setLegendOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth > 700 && window.innerHeight >= 900));
   const [activeId, setActiveId] = useState(null);
 
   const geolocated = projects.filter((p) => p.lat != null && p.lng != null);
-  const visibleProjects = geolocated.filter((pr) => activeStatuses.has(projetStatus(pr)) && activeNatures.has(natureKind(pr)));
-  const natureCounts = { plan: 0, bornage: 0, lidar: 0, autre: 0 };
-  geolocated.filter((pr) => activeStatuses.has(projetStatus(pr))).forEach((pr) => { natureCounts[natureKind(pr)] += 1; });
-  (lotsWithKind?.features || []).forEach((f) => { natureCounts[f.properties.kind] += 1; });
+  // A dossier shows when its status is on and at least one of its prestations is of a kind that is on.
+  const visibleProjects = geolocated.filter((pr) => activeStatuses.has(projetStatus(pr)) && projetNatures(pr).some((k) => activeNatures.has(k)));
+  const natureCounts = Object.fromEntries(NATURE_ORDER.map((k) => [k, 0]));
+  projects.filter((pr) => activeStatuses.has(projetStatus(pr))).forEach((pr) => pr.prestations.forEach((p) => { natureCounts[prestationKind(p)] += 1; }));
+  const shownPrestations = visibleProjects.reduce((n, pr) => n + pr.prestations.filter((p) => activeNatures.has(prestationKind(p))).length, 0);
 
   const counts = { vide: 0, encours: 0, nonconforme: 0, livre: 0 };
   geolocated.forEach((pr) => { counts[projetStatus(pr)] += 1; });
@@ -342,28 +356,38 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     const openPopupFor = (pr, offset = [0, -34]) => {
       const client = getClient(pr.clientId);
       const status = projetStatus(pr);
-      const kind = STATUS_PILL_KIND[status];
+      const pLots = lotsRef.current.filter((l) => l.projetId === pr.id);
       const popupNode = document.createElement("div");
-      popupNode.className = "gt-map-popup";
+      popupNode.className = "mp-sheet";
       popupNode.innerHTML = `
-        <div class="gt-map-popup-top">
-          <span class="gt-map-popup-id">${pr.id}</span>
-          <span class="gt-map-popup-nature is-${natureKind(pr)}">${NATURES[natureKind(pr)].short}</span>
-          <span class="gt-map-popup-badge" style="color:var(--status-${kind});background:var(--status-${kind}-bg)">${STATUS_LABELS[status]}</span>
+        <div class="mp-sheet-eyebrow">
+          <span class="gt-mono">${esc(pr.id)}</span>
+          <span class="mp-pill" style="--pc:${STATUS_COLORS[status]}">${esc(STATUS_LABELS[status])}</span>
         </div>
-        <div class="gt-map-popup-client">${client?.nom || "—"}</div>
-        <div class="gt-map-popup-meta">${pr.situation}</div>
-        <div class="gt-map-popup-meta">${pr.naturePrestationProjet || "—"} · Réf. ${pr.referenceFonciere || "—"}</div>
-        <div class="gt-map-popup-meta">${pr.prestations.length} prestation${pr.prestations.length > 1 ? "s" : ""}</div>
-        <div class="gt-map-popup-meta gt-mono">Lambert : ${formatLambert(pr.lat, pr.lng)}</div>
-        ${exactGeometry(pr) ? "" : '<div class="gt-map-popup-meta"><em>Emprise indicative — géométrie exacte non renseignée</em></div>'}
+        <h3 class="mp-sheet-client">${esc(client?.nom || "—")}</h3>
+        <div class="mp-sheet-where">${esc(pr.situation || "—")}${pr.referenceFonciere ? ` · Réf. ${esc(pr.referenceFonciere)}` : ""}</div>
+        <div class="mp-sheet-section"><span>Prestations</span><em>${pr.prestations.length}</em></div>
+        ${pr.prestations.length ? `<ul class="mp-pr-list">${pr.prestations.map(prestationRowHTML).join("")}</ul>` : '<div class="mp-sheet-empty">Aucune prestation pour le moment.</div>'}
+        ${pLots.length ? `<div class="mp-sheet-section"><span>Lots cadastraux</span><em>${pLots.length}</em></div>
+          <div class="mp-card-lots">${pLots.map((l) => `<span class="mp-lotchip" style="--lc:${LOT_COLORS[l.statut]}"><i></i> Titre ${esc(l.titre)} · ${esc(LOT_STATUT_LABEL[l.statut])}${l.conforme ? "" : " · écart"}</span>`).join("")}</div>` : ""}
+        <div class="mp-sheet-coords gt-mono">Lambert : ${esc(formatLambert(pr.lat, pr.lng))}${exactGeometry(pr) ? "" : " · emprise indicative"}</div>
       `;
-      const btn = document.createElement("button");
-      btn.className = "gt-map-popup-btn";
-      btn.textContent = "Voir le projet →";
-      btn.onclick = () => onOpenProjet(pr.id);
-      popupNode.appendChild(btn);
-      return new MaplibrePopup({ offset, maxWidth: "260px" }).setDOMContent(popupNode);
+      const actions = document.createElement("div");
+      actions.className = "mp-sheet-actions";
+      const open = document.createElement("button");
+      open.className = "mp-btn is-primary";
+      open.textContent = "Ouvrir le projet";
+      open.onclick = () => onOpenProjet(pr.id);
+      actions.appendChild(open);
+      if (pLots.length && onOpenLot) {
+        const lotBtn = document.createElement("button");
+        lotBtn.className = "mp-btn";
+        lotBtn.textContent = pLots.length > 1 ? "Voir les lots" : "Voir le lot";
+        lotBtn.onclick = () => onOpenLot(pLots[0].id);
+        actions.appendChild(lotBtn);
+      }
+      popupNode.appendChild(actions);
+      return new MaplibrePopup({ offset, maxWidth: "330px", className: "mp-popup" }).setDOMContent(popupNode);
     };
 
     const syncMarkers = () => {
@@ -390,7 +414,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         const status = projetStatus(pr);
         const el = document.createElement("div");
         el.className = "gt-map-marker";
-        el.innerHTML = pinSVG(STATUS_COLORS[status], natureKind(pr));
+        el.innerHTML = pinSVG(STATUS_COLORS[status], natureKind(pr), pr.prestations.length);
         el.classList.add(`is-${natureKind(pr)}`);
         el.title = `${pr.id} — ${getClient(pr.clientId)?.nom || "—"}`;
 
@@ -670,6 +694,15 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     badges.appendChild(el("span", `gt-lot-chip ${lot.conforme ? "is-ok" : "is-bad"}`, lot.conforme ? "Surface conforme" : "Écart de surface"));
     if (lot.approx) badges.appendChild(el("span", "gt-lot-chip is-bad", "Position approximative"));
     box.appendChild(badges);
+    const dossier = projects.find((x) => x.id === lot.projetId);
+    if (dossier && dossier.prestations.length) {
+      const section = el("div", "mp-sheet-section");
+      section.innerHTML = `<span>Prestations du projet</span><em>${dossier.prestations.length}</em>`;
+      box.appendChild(section);
+      const list = el("ul", "mp-pr-list");
+      list.innerHTML = dossier.prestations.map(prestationRowHTML).join("");
+      box.appendChild(list);
+    }
     if (lot.surfaceCalculee != null) {
       box.appendChild(el("div", "gt-lot-popup-meta", `Calculée ${fmtM2(lot.surfaceCalculee)} · document ${fmtM2(lot.surfaceDocument)}`));
     }
@@ -1215,12 +1248,18 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
 
   return (
     <>
-      <div className="gt-map-kpis" role="list">
-        <div className="gt-map-kpi" role="listitem"><b>{geolocated.length}</b><span>projets géolocalisés</span></div>
-        <div className="gt-map-kpi" role="listitem"><i style={{ background: STATUS_COLORS.encours }} /><b>{counts.encours}</b><span>en cours</span></div>
-        <div className="gt-map-kpi" role="listitem"><i style={{ background: STATUS_COLORS.nonconforme }} /><b>{counts.nonconforme}</b><span>non-conformité{counts.nonconforme > 0 ? " · à traiter" : ""}</span></div>
-        <div className="gt-map-kpi" role="listitem"><i style={{ background: STATUS_COLORS.livre }} /><b>{counts.livre}</b><span>livrés</span></div>
-      </div>
+      <MapRibbon
+        dossiers={projects.length}
+        onMap={geolocated.length}
+        prestations={shownPrestations}
+        lots={lots.length}
+        natureCounts={natureCounts}
+        activeNatures={activeNatures}
+        onToggleNature={toggleNature}
+        statusCounts={counts}
+        activeStatuses={activeStatuses}
+        onToggleStatus={toggleStatus}
+      />
       <div className="gt-map-wrap">
         <div ref={containerRef} className="gt-map" />
         {showCommunes && (
@@ -1385,89 +1424,40 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           </div>
         )}
 
-        <div className={`gt-map-legend ${legendOpen ? "" : "is-collapsed"}`}>
+        <div className={`gt-map-legend mp-key ${legendOpen ? "" : "is-collapsed"}`}>
           <button type="button" className="gt-map-legend-title" onClick={() => setLegendOpen((v) => !v)} aria-expanded={legendOpen}>
-            Statut du projet <ChevronDown size={12} className="gt-map-legend-chev" />
+            Clé de la carte <ChevronDown size={12} className="gt-map-legend-chev" />
           </button>
-          {legendOpen && Object.keys(STATUS_LABELS).map((k) => (
-            <button
-              key={k}
-              className={`gt-map-legend-row ${activeStatuses.has(k) ? "" : "inactive"}`}
-              onClick={() => toggleStatus(k)}
-            >
-              <span className="gt-map-legend-dot" style={{ background: STATUS_COLORS[k] }} />
-              {STATUS_LABELS[k]} <span className="gt-map-legend-n">{counts[k]}</span>
-            </button>
-          ))}
           {legendOpen && (
-            <div className="gt-map-legend-section" aria-label="Nature de la prestation">
-              <div className="gt-map-legend-subtitle" title="Projets et lots cadastraux">Nature de la prestation</div>
-              {Object.keys(NATURES).map((k) => (
-                <button
-                  key={k}
-                  className={`gt-map-legend-row ${activeNatures.has(k) ? "" : "inactive"}`}
-                  onClick={() => toggleNature(k)}
-                >
-                  <span className={`gt-nature-swatch is-${k}`} dangerouslySetInnerHTML={{ __html: pinSVG("#7a7266", k) }} />
-                  {NATURES[k].label} <span className="gt-map-legend-n">{natureCounts[k]}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {legendOpen && showCadastreLots && lots.length > 0 && (
-            <div className="gt-map-legend-section" aria-label="Légende des lots cadastraux">
-              <div className="gt-map-legend-subtitle">Lots cadastraux</div>
-              {Object.keys(LOT_COLORS).map((k) => (
-                <div key={k} className="gt-map-legend-row" style={{ cursor: "default" }}>
-                  <span className="gt-lot-swatch" style={{ background: LOT_COLORS[k] }} />
-                  {LOT_STATUT_LABEL[k]} <span className="gt-map-legend-n">{lots.filter((l) => l.statut === k).length}</span>
-                </div>
-              ))}
-              <div className="gt-map-legend-row" style={{ cursor: "default" }}>
-                <span className="gt-lot-swatch is-gap" />
-                Écart de surface <span className="gt-map-legend-n">{lots.filter((l) => !l.conforme).length}</span>
-              </div>
-            </div>
+            <>
+              <div className="mp-key-row"><span className="mp-key-pin" dangerouslySetInnerHTML={{ __html: pinSVG("#7a7266", "plan") }} /> Plan côté <small>contour plein</small></div>
+              <div className="mp-key-row"><span className="mp-key-pin" dangerouslySetInnerHTML={{ __html: pinSVG("#7a7266", "mec", 2) }} /> Autres prestations <small>contour pointillé · nombre = prestations du dossier</small></div>
+              <div className="mp-key-sep">Couleur du repère = statut du projet</div>
+              {showCadastreLots && lots.length > 0 && (
+                <>
+                  <div className="mp-key-sep">Lots cadastraux</div>
+                  {Object.keys(LOT_COLORS).map((k) => (
+                    <div key={k} className="mp-key-row"><span className="gt-lot-swatch" style={{ background: LOT_COLORS[k] }} /> {LOT_STATUT_LABEL[k]} <small>{lots.filter((l) => l.statut === k).length}</small></div>
+                  ))}
+                  <div className="mp-key-row"><span className="gt-lot-swatch is-gap" /> Écart de surface <small>{lots.filter((l) => !l.conforme).length}</small></div>
+                </>
+              )}
+            </>
           )}
         </div>
 
         {panelOpen && (
-          <aside className="gt-map-panel" aria-label="Projets affichés sur la carte">
-            <div className="gt-map-panel-head">
-              <div className="gt-map-panel-tabs" role="tablist">
-                <button type="button" role="tab" aria-selected={panelTab === "projets"} className={panelTab === "projets" ? "is-on" : ""} onClick={() => setPanelTab("projets")}>Projets ({visibleProjects.length})</button>
-                <button type="button" role="tab" aria-selected={panelTab === "lots"} className={panelTab === "lots" ? "is-on" : ""} onClick={() => setPanelTab("lots")}>Lots ({lots.length})</button>
-              </div>
-              <button className="gt-iconbtn" onClick={() => setPanelOpen(false)} aria-label="Fermer la liste"><X size={15} /></button>
-            </div>
-            <div className="gt-map-panel-list">
-              {panelTab === "lots" && lots.map((l) => (
-                <button key={l.id} type="button" className="gt-map-panel-item" onClick={() => focusLot(l)}>
-                  <span className="gt-lot-dot" style={{ background: LOT_COLORS[l.statut] }} />
-                  <span className="gt-map-panel-item-body">
-                    <span className="gt-map-panel-item-title">{l.propriete}</span>
-                    <span className="gt-map-panel-item-meta">Titre {l.titre} · {LOT_STATUT_LABEL[l.statut]}{l.conforme ? "" : " · écart de surface"}</span>
-                  </span>
-                  <Crosshair size={14} className="gt-map-panel-item-go" />
-                </button>
-              ))}
-              {panelTab === "lots" && lots.length === 0 && <div className="gt-list-empty">Aucun lot enregistré.</div>}
-              {panelTab === "projets" && visibleProjects.map((pr) => {
-                const st = projetStatus(pr);
-                return (
-                  <button key={pr.id} type="button" className={`gt-map-panel-item ${activeId === pr.id ? "is-active" : ""}`} onClick={() => focusProject(pr)}>
-                    <span className="gt-map-legend-dot" style={{ background: STATUS_COLORS[st] }} />
-                    <span className="gt-map-panel-item-body">
-                      <span className="gt-map-panel-item-title">{getClient(pr.clientId)?.nom || "—"}</span>
-                      <span className="gt-map-panel-item-meta">{pr.id} · {pr.situation}</span>
-                    </span>
-                    <Crosshair size={14} className="gt-map-panel-item-go" />
-                  </button>
-                );
-              })}
-              {panelTab === "projets" && visibleProjects.length === 0 && <div className="gt-list-empty">Aucun projet avec ce filtre de statut.</div>}
-            </div>
-          </aside>
+          <MapPanel
+            projets={visibleProjects}
+            lots={lots}
+            getClient={getClient}
+            activeId={activeId}
+            tab={panelTab}
+            onTab={setPanelTab}
+            onFocusProject={focusProject}
+            onFocusLot={focusLot}
+            onClose={() => setPanelOpen(false)}
+          />
         )}
         {geolocated.length < projects.length && (
           <div className="gt-map-note">
