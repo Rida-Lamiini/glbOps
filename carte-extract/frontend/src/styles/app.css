@@ -2007,3 +2007,4 @@ button.gt-dash-funnel-row.is-empty .gt-dash-funnel-fill { display: none; }
 .gt-sidebar-version { background: none; border: 0; padding: 2px 8px 6px; font: inherit; font-size: 10.5px; color: var(--status-neutral); text-align: left; cursor: pointer; letter-spacing: .02em; }
 .gt-sidebar-version:hover { color: var(--ink); }
 [data-collapsible="icon"] .gt-sidebar-version { display: none; }
+.gt-sidebar-version.has-update { color: var(--accent); font-weight: 600; }

@@ -91,6 +91,7 @@ export default function ExcelImportScreen({ onBack, onDone }) {
           geometre: lot.geometre,
           dateLeve: lot.dateLeve,
           serviceCadastre: lot.serviceCadastre,
+          operation: lot.operation,
           surfaceDocumentM2: lot.surfaceDocumentM2,
           correctionLambertM2: lot.correctionLambertM2,
           bornes: lot.bornes,

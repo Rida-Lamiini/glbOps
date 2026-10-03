@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { X, DatabaseBackup, RotateCcw, Info } from "lucide-react";
+import { X, DatabaseBackup, RotateCcw, Info, Download, RefreshCw } from "lucide-react";
 import { backdropVariants, modalVariants } from "../lib/motionVariants";
 import { apiGet, apiPost } from "../lib/api";
 import { notifyError, notifySuccess } from "../utils/notify";
@@ -10,11 +10,36 @@ const fmtDate = (iso) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "med
 const serverMessage = (err, fallback) => /"detail":"([^"]+)"/.exec(err?.message || "")?.[1] || fallback;
 
 // Version + mode of the app, and (office, standalone mode) the local backups with a restore.
-export default function DataDialog({ office, onClose }) {
+export default function DataDialog({ office, update, onUpdateRefresh, onClose }) {
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(null); // backup name awaiting confirmation
   const [restarting, setRestarting] = useState(false);
+  const [install, setInstall] = useState(update?.install || { state: "idle", percent: 0, error: "" });
+  const [checking, setChecking] = useState(false);
+
+  // While an update downloads, follow its progress (the app closes by itself once the installer takes over).
+  useEffect(() => {
+    if (install.state !== "downloading" && install.state !== "installing") return undefined;
+    const t = setInterval(() => apiGet("/update/status/").then(setInstall).catch(() => setInstall((s) => ({ ...s, state: "installing" }))), 1200);
+    return () => clearInterval(t);
+  }, [install.state]);
+
+  const startUpdate = async () => {
+    try {
+      setInstall(await apiPost("/update/install/", {}));
+    } catch (err) {
+      notifyError(serverMessage(err, "La mise à jour n'a pas pu démarrer."));
+    }
+  };
+  const recheck = async () => {
+    setChecking(true);
+    try {
+      await onUpdateRefresh?.(true);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const load = () => apiGet("/backups/").then(setInfo).catch(() => setInfo({ mode: "unknown", version: "", backups: [] }));
   useEffect(() => { load(); }, []);
@@ -62,6 +87,43 @@ export default function DataDialog({ office, onClose }) {
               {info == null ? "…" : local ? "mode local (données sur ce poste)" : info.mode === "online" ? "mode en ligne (base partagée)" : "mode inconnu"}
             </span>
           </div>
+
+          {update?.configured && (
+            <div className={update.available ? "gt-dup-warn" : "gt-attach-note"} role="status" style={{ marginTop: 12 }}>
+              {update.available ? (
+                <div style={{ width: "100%" }}>
+                  <strong>Mise à jour disponible : version {update.latest}</strong> <span style={{ opacity: 0.7 }}>(vous avez la {update.current})</span>
+                  {update.notes && <div style={{ marginTop: 4 }}>{update.notes}</div>}
+                  {install.state === "idle" || install.state === "error" ? (
+                    <>
+                      {install.state === "error" && install.error && <div style={{ marginTop: 6, color: "var(--status-danger)" }}>{install.error}</div>}
+                      {office ? (
+                        <button className="gt-btn gt-btn-primary" style={{ marginTop: 8 }} onClick={startUpdate}>
+                          <Download size={14} /> Télécharger et installer
+                        </button>
+                      ) : (
+                        <div style={{ marginTop: 6 }}>Demandez au Dispatcher ou à la Directrice de l'installer.</div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      {install.state === "downloading" ? `Téléchargement… ${install.percent}%` : "Installation en cours : l'application va se fermer puis se rouvrir…"}
+                      <div style={{ height: 6, borderRadius: 3, background: "var(--border-subtle)", marginTop: 6, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${install.percent}%`, background: "var(--accent)", transition: "width .3s" }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  Votre version est à jour.
+                  <button className="gt-btn" style={{ marginLeft: "auto" }} onClick={recheck} disabled={checking}>
+                    <RefreshCw size={13} /> Vérifier
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
 
           {office && info && !local && info.mode === "online" && (
             <div className="gt-attach-note" style={{ marginTop: 12 }}>

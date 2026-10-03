@@ -27,6 +27,9 @@ MAX_LOTS = 500
 MAX_BORNES = 20000
 
 # Canonical field -> accepted header spellings (after normalisation, see `_norm`).
+from .operations import display as operation_display, normalize as normalize_operation
+
+
 LOT_HEADERS = {
     "titre_foncier": {"titre foncier", "titre", "tf", "n titre", "numero titre", "numero de titre"},
     "propriete_dite": {"propriete dite", "propriete", "nom", "nom propriete", "designation"},
@@ -35,6 +38,7 @@ LOT_HEADERS = {
     "geometre": {"geometre", "geometre expert", "topographe"},
     "date_leve": {"date du leve", "date leve", "date levee", "date"},
     "service_cadastre": {"service du cadastre", "service cadastre", "cadastre", "conservation"},
+    "operation": {"operation", "operations", "op", "type d operation", "type operation"},
     "projet": {"projet", "code projet", "id projet", "projet id"},
     "prestation": {"prestation", "code prestation", "id prestation", "prestation id"},
     "surface_document": {
@@ -253,6 +257,7 @@ def parse_lots_workbook(file_bytes: bytes) -> dict:
             "geometre": _text(r.get("geometre")),
             "date_leve": date_leve.isoformat() if date_leve else None,
             "service_cadastre": _text(r.get("service_cadastre")),
+            "operation": normalize_operation(_text(r.get("operation"))),
             "projet": projet_id,
             "prestation": prestation_id,
             "surface_document_m2": surface_doc,
@@ -299,10 +304,10 @@ def build_template() -> bytes:
     ws.title = "Lots"
     _header(ws, [
         "Titre foncier *", "Propriété dite *", "Lot n°", "Référence d'affaire", "Géomètre", "Date du levé",
-        "Service du cadastre", "Projet", "Prestation", "Surface du document (m²) *", "Correction Lambert (m²)",
-    ], [16, 28, 8, 20, 22, 13, 22, 15, 15, 18, 16])
-    ws.append(["TF/12345/R", "Résidence Les Oliviers", "12", "AFF-2026-041", "Cabinet Exemple", date(2026, 9, 1), "Rabat", "", "", 5000, 0])
-    ws.append(["TF/67890/C", "Lotissement Al Massira", "3", "", "", None, "", "", "", 4800, 0])
+        "Service du cadastre", "Projet", "Prestation", "Surface du document (m²) *", "Correction Lambert (m²)", "Opération",
+    ], [16, 28, 8, 20, 22, 13, 22, 15, 15, 18, 16, 16])
+    ws.append(["TF/12345/R", "Résidence Les Oliviers", "12", "AFF-2026-041", "Cabinet Exemple", date(2026, 9, 1), "Rabat", "", "", 5000, 0, "MEC + COPRO"])
+    ws.append(["TF/67890/C", "Lotissement Al Massira", "3", "", "", None, "", "", "", 4800, 0, "MT"])
     for row in ws.iter_rows(min_row=2, max_row=3):
         for cell in row:
             cell.border = Border(bottom=Side(style="thin", color=_LINE))
@@ -363,8 +368,8 @@ def build_lots_export(lots) -> bytes:
     _header(ws, [
         "Titre foncier", "Propriété dite", "Lot n°", "Référence d'affaire", "Géomètre", "Date du levé",
         "Service du cadastre", "Projet", "Prestation", "Surface du document (m²)", "Correction Lambert (m²)",
-        "Surface calculée (m²)", "Statut",
-    ], [16, 28, 8, 20, 22, 13, 22, 15, 15, 18, 16, 18, 12])
+        "Surface calculée (m²)", "Statut", "Opération",
+    ], [16, 28, 8, 20, 22, 13, 22, 15, 15, 18, 16, 18, 12, 16])
     for lot in lots:
         row = ws.max_row + 1
         ws.append([
@@ -372,6 +377,7 @@ def build_lots_export(lots) -> bytes:
             lot.date_leve, lot.service_cadastre, lot.projet_id or "", lot.prestation_id or "",
             float(lot.surface_document_m2), float(lot.correction_lambert_m2),
             float(lot.surface_calculee_m2), dict(STATUT_CHOICES).get(lot.statut, lot.statut),
+            operation_display(lot.operation),
         ])
         for cell in ws[row]:
             cell.border = Border(bottom=Side(style="thin", color=_LINE))

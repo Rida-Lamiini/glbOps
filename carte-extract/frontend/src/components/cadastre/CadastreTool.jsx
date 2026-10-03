@@ -6,7 +6,7 @@ import {
 import {
   parseCadastrePdf, listCadastreLots, getCadastreLot, getCadastreLotGeoJSON,
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
-  downloadLotsExcel, downloadLotReport, repositionCadastreLot,
+  downloadLotsExcel, downloadLotReport, repositionCadastreLot, OPERATIONS, operationLabel,
 } from "./api";
 import LotMap from "./LotMap";
 import LotWorkspace from "./LotWorkspace";
@@ -22,6 +22,7 @@ const EMPTY_INITIAL = {
   correctionLambertM2: 0,
   projetId: "",
   prestationId: "",
+  operation: "",
   distanceChecks: [],
   referencePoints: [],
   ajustements: [],
@@ -138,6 +139,7 @@ function ImportZone({ onReview, onExcel }) {
         correctionLambertM2: parsed.header.correctionLambertM2 ?? 0,
         projetId: "",
         prestationId: "",
+        operation: parsed.suggestedOperation || "",
         distanceChecks: [],
         referencePoints: [],
         lotId: null,
@@ -185,17 +187,18 @@ function ImportZone({ onReview, onExcel }) {
 function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
   const [lots, setLots] = useState(null);
   const [query, setQuery] = useState("");
+  const [operation, setOperation] = useState("");
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(() => {
-      listCadastreLots(query)
+      listCadastreLots(query, operation)
         .then((data) => !cancelled && (setLots(allowedProjetIds ? data.filter((l) => allowedProjetIds.has(l.projet)) : data), setError(null)))
         .catch((e) => !cancelled && setError(readApiError(e, "Impossible de charger les lots.")));
     }, query ? 250 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, reloadKey, allowedProjetIds]);
+  }, [query, operation, reloadKey, allowedProjetIds]);
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -204,6 +207,12 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
         <label className="cad-search">
           <Search size={16} color="var(--muted)" />
           <input placeholder="Titre foncier, propriété…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Rechercher un lot" />
+        </label>
+        <label className="cad-search" style={{ maxWidth: 190 }}>
+          <select value={operation} onChange={(e) => setOperation(e.target.value)} aria-label="Filtrer par opération" style={{ border: 0, background: "transparent", width: "100%", font: "inherit" }}>
+            <option value="">Toutes les opérations</option>
+            {OPERATIONS.map((op) => <option key={op} value={op}>{op}</option>)}
+          </select>
         </label>
         {lots && lots.length > 0 && (
           <button
@@ -220,8 +229,8 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
         <div className="cad-note">Chargement…</div>
       ) : lots.length === 0 ? (
         <div className="cad-empty">
-          <strong>{query ? "Aucun résultat" : "Aucun lot pour l'instant"}</strong>
-          {query ? "Essayez un autre titre foncier." : "Importez un PDF ci-dessus : le lot apparaîtra ici et sur la carte."}
+          <strong>{query || operation ? "Aucun résultat" : "Aucun lot pour l'instant"}</strong>
+          {query || operation ? "Essayez un autre titre foncier ou une autre opération." : "Importez un PDF ci-dessus : le lot apparaîtra ici et sur la carte."}
         </div>
       ) : (
         <div className="cad-grid">
@@ -231,6 +240,7 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
                 <div>
                   <h3>{l.proprieteDite}</h3>
                   <span className="cad-ref">Titre {l.titreFoncier}</span>
+                  {l.operation && <span className="cad-ops-tags">{l.operation.split(",").map((op) => <em key={op} className="cad-op-tag">{op}</em>)}</span>}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                   <ConformiteBadge conforme={l.conforme} verifiable={l.surfaceVerifiable} />
@@ -275,6 +285,26 @@ function Field({ label, required, hint, value, onChange, type = "text", missing 
   );
 }
 
+// Toggle buttons for the operation shortcuts (MT / MEC / COPRO): a lot may carry several, e.g. "MEC + COPRO".
+function OperationField({ value, onChange, hint }) {
+  const chosen = (value || "").split(",").filter(Boolean);
+  const toggle = (op) => onChange((chosen.includes(op) ? chosen.filter((o) => o !== op) : [...chosen, op]).join(","));
+  const extras = chosen.filter((o) => !OPERATIONS.includes(o)); // shortcuts typed elsewhere (Excel…) stay visible
+  return (
+    <div className="cad-field">
+      <span>Opération</span>
+      <div className="cad-ops" role="group" aria-label="Opération">
+        {[...OPERATIONS, ...extras].map((op) => (
+          <button key={op} type="button" className={`cad-op${chosen.includes(op) ? " is-on" : ""}`} aria-pressed={chosen.includes(op)} onClick={() => toggle(op)}>
+            {op}
+          </button>
+        ))}
+      </div>
+      {hint && <small>{hint}</small>}
+    </div>
+  );
+}
+
 function SelectField({ label, hint, value, onChange, children }) {
   return (
     <label className="cad-field">
@@ -288,6 +318,7 @@ function SelectField({ label, hint, value, onChange, children }) {
 function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser }) {
   const [header, setHeader] = useState(initial.header);
   const [projetId, setProjetId] = useState(initial.projetId || "");
+  const [operation, setOperation] = useState(initial.operation || "");
   const [prestationId, setPrestationId] = useState(initial.prestationId || "");
   const [zone, setZone] = useState(initial.zone || "nord");
   const [ajustements, setAjustements] = useState(initial.ajustements || []);
@@ -328,6 +359,7 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
     setError(null);
     const payload = {
       version: isEditing ? initial.version : undefined,
+      operation,
       projet: projetId.trim() || null,
       prestation: projetId && prestationId ? prestationId : null,
       titreFoncier: header.titreFoncier,
@@ -373,6 +405,7 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
                 <option value="nord">Nord (Casablanca, Rabat, Tanger…)</option>
                 <option value="sud">Sud (Marrakech, Agadir…)</option>
               </SelectField>
+              <OperationField value={operation} onChange={setOperation} hint={initial.extractionMethod === "edit" ? undefined : "Pré-rempli d'après le nom du fichier"} />
               <SelectField label="Projet lié" hint="Optionnel" value={projetId} onChange={changeProjet}>
                 <option value="">— aucun —</option>
                 {projets.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.situation}</option>)}
@@ -507,6 +540,7 @@ function lotToReviewInitial(lot) {
     projetId: lot.projet || "",
     prestationId: lot.prestation || "",
     zone: lot.zone,
+    operation: lot.operation || "",
     ajustements: lot.ajustements.map((a) => ({ libelle: a.libelle, type: a.type, m2: a.m2 })),
     distanceChecks: lot.distanceChecks.map((d) => ({ segmentLabel: d.segmentLabel, croquisM: d.croquisM })),
     referencePoints: lot.referencePoints.map((r) => ({ label: r.label, lat: r.lat, lng: r.lng })),
@@ -634,7 +668,7 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
       {justSaved && <div className="cad-check ok" role="status"><i>✓</i>Lot enregistré. Il est désormais visible sur la carte générale (couche « Lots cadastraux »).</div>}
 
       <Hero eyebrow={`Titre foncier ${lot.titreFoncier}`} title={lot.proprieteDite}>
-        {[lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`, lot.prestation && `Prestation ${lot.prestation}`, lot.createdByName && `Saisi par ${lot.createdByName}`].filter(Boolean).join(" · ")}
+        {[lot.operation && `Opération ${operationLabel(lot.operation)}`, lot.lotNumber && `Lot ${lot.lotNumber}`, lot.geometre, lot.projet && `Projet ${lot.projet}`, lot.prestation && `Prestation ${lot.prestation}`, lot.createdByName && `Saisi par ${lot.createdByName}`].filter(Boolean).join(" · ")}
       </Hero>
 
       {workspace && <LotWorkspace lotId={lotId} onClose={() => setWorkspace(false)} onChanged={() => setRefreshKey((k) => k + 1)} />}

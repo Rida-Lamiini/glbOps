@@ -133,6 +133,7 @@ def start_server(port, status):
     from core.version import app_version
 
     runtime.restart_callback = restart_app
+    runtime.exit_callback = lambda: os._exit(0)
     say(f"Carte {app_version()} — {'mode en ligne' if online else 'mode local'}")
     if not online:
         from core.backups import run_scheduler

@@ -60,6 +60,8 @@ class Lot(models.Model):
     geometre = models.CharField(max_length=200, blank=True)
     date_leve = models.DateField(null=True, blank=True)
     service_cadastre = models.CharField(max_length=200, blank=True)
+    # What the survey is for, as shortcuts: "MT", "MEC", "MEC,COPRO"… (see cadastre/operations.py).
+    operation = models.CharField(max_length=60, blank=True, default="")
     # Lambert zone of the bornes' X/Y: Nord (EPSG:26191) or Sud (EPSG:26192).
     zone = models.CharField(max_length=4, choices=[("nord", "Nord"), ("sud", "Sud")], default="nord")
 

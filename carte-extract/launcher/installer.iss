@@ -44,8 +44,15 @@ Name: "{autodesktop}\Carte Globétudes"; Filename: "{app}\CarteExtract.exe"; Tas
 
 [Run]
 Filename: "{app}\CarteExtract.exe"; Description: "Lancer Carte"; Flags: nowait postinstall skipifsilent
+; After an in-app update (silent, started with /RELAUNCH=1) the new version opens by itself.
+Filename: "{app}\CarteExtract.exe"; Flags: nowait; Check: RelaunchAfterUpdate
 
 [Code]
+function RelaunchAfterUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;
+
 // The data (database, plans, backups) lives in %LOCALAPPDATA%\CarteExtract, outside the program folder:
 // updating or reinstalling never touches it. On uninstall the user chooses whether to delete it too.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

@@ -4,6 +4,7 @@ from projets.models import Prestation, Projet
 
 from .geo.build_lot import is_surface_conforme
 from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
+from .operations import normalize as normalize_operation
 
 
 class BorneSerializer(serializers.ModelSerializer):
@@ -58,6 +59,7 @@ class LotListSerializer(serializers.ModelSerializer):
             "titre_foncier",
             "propriete_dite",
             "zone",
+            "operation",
             "surface_document_m2",
             "surface_calculee_m2",
             "correction_lambert_m2",
@@ -152,6 +154,7 @@ class CreateLotSerializer(serializers.Serializer):
     geometre = serializers.CharField(max_length=200, required=False, allow_blank=True)
     date_leve = serializers.DateField(required=False, allow_null=True)
     service_cadastre = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    operation = serializers.CharField(max_length=60, required=False, allow_blank=True)  # "MEC et COPRO" -> "MEC,COPRO"
     zone = serializers.ChoiceField(choices=["nord", "sud"], required=False, default="nord")
     surface_document_m2 = serializers.FloatField(min_value=0)
     correction_lambert_m2 = serializers.FloatField()
@@ -180,6 +183,9 @@ class CreateLotSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"titre_foncier": "Ce projet a déjà un lot avec ce titre foncier."}
                 )
+
+    def validate_operation(self, value):
+        return normalize_operation(value)
 
     def validate_bornes(self, value):
         if len(value) < 3:

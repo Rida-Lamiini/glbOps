@@ -635,6 +635,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
             id: p.id,
             titre: p.titreFoncier || "—",
             propriete: p.proprieteDite || "Lot cadastral",
+            operation: p.operation || "",
             projetId: p.projetId || "",
             kind: p.kind || "autre",
             statut: p.statut || "brouillon",
@@ -665,6 +666,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     box.appendChild(el("strong", "gt-lot-popup-title", lot.propriete));
     const badges = el("div", "gt-lot-popup-badges");
     badges.appendChild(el("span", `gt-lot-chip is-${lot.statut}`, LOT_STATUT_LABEL[lot.statut] || lot.statut));
+    lot.operation.split(",").filter(Boolean).forEach((op) => badges.appendChild(el("span", "gt-lot-chip is-op", op)));
     badges.appendChild(el("span", `gt-lot-chip ${lot.conforme ? "is-ok" : "is-bad"}`, lot.conforme ? "Surface conforme" : "Écart de surface"));
     if (lot.approx) badges.appendChild(el("span", "gt-lot-chip is-bad", "Position approximative"));
     box.appendChild(badges);
@@ -919,7 +921,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
     const pins = lots.map((lot) => {
       const pin = el("button", `gt-lot-pin is-${lot.statut} is-kind-${lot.kind === "plan" ? "plan" : "other"}${lot.conforme ? "" : " is-gap"}`);
       pin.type = "button";
-      pin.title = `${lot.propriete} — Titre ${lot.titre}`;
+      pin.title = `${lot.propriete} — Titre ${lot.titre}${lot.operation ? ` — ${lot.operation.split(",").join(" + ")}` : ""}`;
       pin.innerHTML = lot.kind === "plan" ? LOT_GLYPH_PLAN : LOT_GLYPH_OTHER;
       pin.appendChild(el("span", "gt-lot-pin-label", lot.titre));
       pin.onclick = (e) => { e.stopPropagation(); focusLot(lot); };
@@ -1174,7 +1176,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const lotMatches = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q.length < 2) return [];
-    return lots.filter((l) => l.titre.toLowerCase().includes(q) || l.propriete.toLowerCase().includes(q) || l.projetId.toLowerCase().includes(q)).slice(0, 5);
+    return lots.filter((l) => l.titre.toLowerCase().includes(q) || l.propriete.toLowerCase().includes(q) || l.projetId.toLowerCase().includes(q) || l.operation.toLowerCase().includes(q)).slice(0, 5);
   }, [lots, searchQuery]);
 
   const selectSearchResult = (r) => {

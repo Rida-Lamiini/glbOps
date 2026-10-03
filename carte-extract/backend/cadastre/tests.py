@@ -649,3 +649,62 @@ class VerifiableSurfaceTests(LotApiBase):
         self.assertIsNone(api.get("/api/cadastre/lots/").json()["lots"][0]["conforme"])
         lot_id2 = self._lot(api, titre_foncier="TF/9/V")  # the normal payload has a document surface
         self.assertTrue(api.get(f"/api/cadastre/lots/{lot_id2}/").json()["surface_verifiable"])
+
+
+class OperationTests(LotApiBase):
+    """The lot's "opération" shortcuts (MT / MEC / COPRO): reading, saving, filtering, file names, Excel."""
+
+    def test_normalize_and_display(self):
+        from .operations import display, normalize
+
+        self.assertEqual(normalize("mec et copro"), "MEC,COPRO")
+        self.assertEqual(normalize("MEC + COPRO"), "MEC,COPRO")
+        self.assertEqual(normalize(" mt ;mt, MT "), "MT")
+        self.assertEqual(normalize(""), "")
+        self.assertEqual(normalize("é% !!"), "")  # nothing usable
+        self.assertEqual(display("MEC,COPRO"), "MEC + COPRO")
+
+    def test_shortcuts_are_read_from_the_pdf_file_name(self):
+        from .operations import from_filename
+
+        self.assertEqual(from_filename("127_TF5608_64 MEC _COPRO.pdf"), "MEC,COPRO")
+        self.assertEqual(from_filename("299_TF7511_58 MEC (1).pdf"), "MEC")
+        self.assertEqual(from_filename("C:\\Users\\HP\\Downloads\\234_TF84838_25 MT.pdf"), "MT")
+        self.assertEqual(from_filename("132_PC37_TF74489_63.pdf"), "")
+        self.assertEqual(from_filename("MECANO_TF1.pdf"), "")  # whole tokens only
+
+    def test_operation_is_saved_normalised_kept_on_edit_and_filterable(self):
+        api = self._as(self.bureau_user)
+        lot_id = self._lot(api, operation="mec et copro")
+        url = f"/api/cadastre/lots/{lot_id}/"
+        self.assertEqual(api.get(url).json()["operation"], "MEC,COPRO")
+
+        # an edit that does not mention the operation keeps it; one that does replaces it
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id}
+        self.assertEqual(api.put(url, body, format="json").status_code, 200)
+        self.assertEqual(api.get(url).json()["operation"], "MEC,COPRO")
+        self.assertEqual(api.put(url, {**body, "operation": "MT"}, format="json").status_code, 200)
+        self.assertEqual(api.get(url).json()["operation"], "MT")
+        self.assertEqual(api.put(url, {**body, "operation": ""}, format="json").status_code, 200)
+        self.assertEqual(api.get(url).json()["operation"], "")
+
+        self._lot(api, operation="MEC,COPRO", titre_foncier="TF/10/R", prestation=None)
+        self._lot(api, operation="MT", titre_foncier="TF/11/R", prestation=None)
+        ids = lambda q: sorted(l["titre_foncier"] for l in api.get(f"/api/cadastre/lots/{q}").json()["lots"])
+        self.assertEqual(ids("?operation=COPRO"), ["TF/10/R"])
+        self.assertEqual(ids("?operation=mec"), ["TF/10/R"])
+        self.assertEqual(ids("?operation=MT"), ["TF/11/R"])
+        self.assertEqual(ids("?q=copro"), ["TF/10/R"])  # the search box finds them too
+        feats = api.get("/api/cadastre/lots/geojson/").json()["features"]
+        self.assertIn("MEC,COPRO", [f["properties"].get("operation") for f in feats])
+
+    def test_excel_template_and_export_carry_the_operation(self):
+        from .excel_import import build_lots_export, build_template, parse_lots_workbook
+
+        parsed = parse_lots_workbook(build_template())
+        self.assertEqual([l["operation"] for l in parsed["lots"]], ["MEC,COPRO", "MT"])
+        self.assertEqual([l["errors"] for l in parsed["lots"]], [[], []])
+        api = self._as(self.bureau_user)
+        self._lot(api, operation="COPRO")
+        again = parse_lots_workbook(build_lots_export(Lot.objects.all()))
+        self.assertEqual([l["operation"] for l in again["lots"]], ["COPRO"])

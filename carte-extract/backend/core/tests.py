@@ -423,3 +423,83 @@ class BackupTests(SimpleTestCase):
         for name in ("../x.zip", "a/b.zip", "nope.txt", ""):
             with self.assertRaises(backups.BackupError):
                 backups.stage_restore(self.dir, name)
+
+
+class UpdateCheckTests(SimpleTestCase):
+    """The in-app update check: version comparison, manifest validation, integrity check."""
+
+    def test_version_comparison(self):
+        from .updates import is_newer, parse_version
+
+        self.assertEqual(parse_version("v1.2.3"), (1, 2, 3, 0))
+        self.assertTrue(is_newer("1.10.0", "1.9.9"))
+        self.assertTrue(is_newer("2.0", "1.99.99"))
+        self.assertFalse(is_newer("1.0.0", "1.0.0"))
+        self.assertFalse(is_newer("0.9.0", "1.0.0"))
+
+    def _check(self, manifest, url="https://example.org/latest.json", current="1.0.0"):
+        from unittest import mock
+
+        from . import updates
+
+        updates._cache.update(at=0.0, value=None)
+
+        class Resp:
+            def json(self_inner):
+                return manifest
+
+        with mock.patch.dict("os.environ", {"CARTE_UPDATE_URL": url}), \
+                mock.patch("core.updates.requests.get", return_value=Resp()), \
+                mock.patch("core.updates.app_version", return_value=current):
+            return updates.check(force=True)
+
+    def test_newer_version_is_offered(self):
+        r = self._check({"version": "1.1.0", "url": "https://example.org/Setup.exe", "sha256": "ab", "notes": "Nouveautés"})
+        self.assertTrue(r["available"])
+        self.assertEqual((r["latest"], r["notes"]), ("1.1.0", "Nouveautés"))
+
+    def test_same_or_older_version_is_not_offered(self):
+        self.assertFalse(self._check({"version": "1.0.0", "url": "https://example.org/S.exe", "sha256": "ab"})["available"])
+
+    def test_insecure_or_incomplete_manifests_are_refused(self):
+        # plain http installer, missing checksum, plain http manifest address
+        self.assertFalse(self._check({"version": "9.0.0", "url": "http://evil.example/S.exe", "sha256": "ab"})["available"])
+        self.assertFalse(self._check({"version": "9.0.0", "url": "https://example.org/S.exe"})["available"])
+        r = self._check({"version": "9.0.0", "url": "https://example.org/S.exe", "sha256": "ab"}, url="http://example.org/latest.json")
+        self.assertFalse(r["available"])
+        self.assertTrue(r["error"])
+
+    def test_no_address_means_no_check(self):
+        from unittest import mock
+
+        from . import updates
+
+        with mock.patch.dict("os.environ", {"CARTE_UPDATE_URL": ""}), mock.patch("core.updates.update_url", return_value=""):
+            r = updates.check(force=True)
+        self.assertEqual((r["configured"], r["available"]), (False, False))
+
+    def test_a_tampered_download_is_refused(self):
+        from unittest import mock
+
+        from . import updates
+
+        class Resp:
+            headers = {"Content-Length": "5"}
+
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *a):
+                return False
+
+            def raise_for_status(self_inner):
+                pass
+
+            def iter_content(self_inner, n):
+                return iter([b"hello"])
+
+        with mock.patch("core.updates.requests.get", return_value=Resp()), mock.patch("core.updates.subprocess.Popen") as popen:
+            updates._run_install({"url": "https://example.org/S.exe", "sha256": "0" * 64, "size": 5})
+        self.assertEqual(updates.status()["state"], "error")
+        self.assertIn("corrompu", updates.status()["error"])
+        popen.assert_not_called()  # nothing is ever run when the checksum differs

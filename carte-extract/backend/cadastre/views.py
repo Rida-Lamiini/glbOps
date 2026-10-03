@@ -26,6 +26,7 @@ from .geo.checksum import find_single_digit_fixes, twice_area
 from .geo.placement import place, unplace
 from .geo.proj import lambert_to_wgs84, wgs84_to_lambert
 from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
+from .operations import from_filename as operation_from_filename
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
 from core.concurrency import check_version
 from core.storage import read_file
@@ -82,6 +83,7 @@ def _save_lot(data, existing_lot=None, user=None):
         geometre=data.get("geometre", ""),
         date_leve=data.get("date_leve"),
         service_cadastre=data.get("service_cadastre", ""),
+        operation=data["operation"] if "operation" in data else (existing_lot.operation if existing_lot else ""),
         zone=data.get("zone", "nord"),
         surface_document_m2=data["surface_document_m2"],
         surface_calculee_m2=built.surface_calculee_m2,
@@ -183,7 +185,12 @@ def lots(request):
         search = request.query_params.get("q")
         if search:
             queryset = queryset.filter(
-                Q(titre_foncier__icontains=search) | Q(propriete_dite__icontains=search)
+                Q(titre_foncier__icontains=search) | Q(propriete_dite__icontains=search) | Q(operation__icontains=search)
+            )
+        op = (request.query_params.get("operation") or "").strip().upper()
+        if op:  # one shortcut among the lot's (comma-separated) ones
+            queryset = queryset.filter(
+                Q(operation=op) | Q(operation__startswith=op + ",") | Q(operation__endswith="," + op) | Q(operation__contains="," + op + ",")
             )
         return Response({"lots": LotListSerializer(queryset, many=True).data})
 
@@ -272,6 +279,7 @@ def lot_reuse(request, pk):
             geometre=source.geometre,
             date_leve=source.date_leve,
             service_cadastre=source.service_cadastre,
+            operation=source.operation,
             zone=source.zone,
             decalage_x=source.decalage_x,
             decalage_y=source.decalage_y,
@@ -571,6 +579,7 @@ def lots_geojson(request):
             props.update(
                 {
                     "statut": lot.statut,
+                    "operation": lot.operation,
                     "conforme": LotListSerializer().get_conforme(lot),
                     "surfaceCalculeeM2": float(lot.surface_calculee_m2),
                     "surfaceDocumentM2": float(lot.surface_document_m2),
@@ -664,6 +673,8 @@ def parse_pdf(request):
     return Response(
         {
             "extraction_method": result.extraction_method,
+            # The shortcut(s) read from the PDF's file name ("... MEC _COPRO.pdf"), to prefill the review form.
+            "suggested_operation": operation_from_filename(uploaded.name),
             "header": {
                 "propriete_dite": result.header.propriete_dite,
                 "nature_affaire": result.header.nature_affaire,

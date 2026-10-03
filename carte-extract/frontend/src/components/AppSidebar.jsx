@@ -28,8 +28,19 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
   const [importing, setImporting] = useState(false);
   const [showData, setShowData] = useState(false);
   const [version, setVersion] = useState("");
+  const [update, setUpdate] = useState(null); // answer of /update/ (a newer published version?)
+  const refreshUpdate = async (force = false) => {
+    try {
+      setUpdate(await apiGet(`/update/${force ? "?force=1" : ""}`));
+    } catch {
+      /* offline: no update information */
+    }
+  };
   React.useEffect(() => {
     apiGet("/health/").then((h) => setVersion(h.version || "")).catch(() => {});
+    refreshUpdate();
+    const t = setInterval(refreshUpdate, 3 * 60 * 60 * 1000); // and every 3 hours while the app stays open
+    return () => clearInterval(t);
   }, []);
   const office = currentUser.role === "Dispatcher" || currentUser.role === "Directrice";
 
@@ -120,7 +131,7 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
           </SidebarGroup>
         )}
       </SidebarContent>
-      <AnimatePresence>{showData && <DataDialog office={office} onClose={() => setShowData(false)} />}</AnimatePresence>
+      <AnimatePresence>{showData && <DataDialog office={office} update={update} onUpdateRefresh={refreshUpdate} onClose={() => setShowData(false)} />}</AnimatePresence>
       <SidebarFooter>
         <div className="gt-sidebar-footer">
           <button type="button" className="gt-sidebar-footer-avatar gt-sidebar-profilebtn" onClick={onOpenProfile} title="Mon profil" aria-label="Mon profil">
@@ -145,8 +156,13 @@ export default function AppSidebar({ visibleTabs, view, setView, currentUser, on
           )}
         </div>
         {version && (
-          <button type="button" className="gt-sidebar-version" onClick={() => setShowData(true)} title="Version et sauvegardes">
-            Version {version}
+          <button
+            type="button"
+            className={`gt-sidebar-version${update?.available ? " has-update" : ""}`}
+            onClick={() => setShowData(true)}
+            title={update?.available ? `Mise à jour disponible : version ${update.latest}` : "Version et sauvegardes"}
+          >
+            {update?.available ? `Mise à jour ${update.latest} disponible` : `Version ${version}`}
           </button>
         )}
       </SidebarFooter>

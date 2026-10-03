@@ -6,12 +6,17 @@ import { saveBlob } from "../../utils/saveBlob";
 // mapping happens here once rather than at every call site (same split as
 // lib/apiAdapters.js does for projets).
 
+// The shortcuts of what a lot's survey is for. A lot keeps them as "MEC,COPRO" (several allowed).
+export const OPERATIONS = ["MT", "MEC", "COPRO"];
+export const operationLabel = (op) => (op || "").split(",").filter(Boolean).join(" + ");
+
 export const parseCadastrePdf = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
   const data = await apiPost("/cadastre/lots/parse-pdf/", formData);
   return {
     extractionMethod: data.extraction_method,
+    suggestedOperation: data.suggested_operation || "", // read from the PDF's file name ("… MEC _COPRO.pdf")
     rawOcrText: data.raw_ocr_text || "",
     header: {
       proprieteDite: data.header.propriete_dite,
@@ -53,6 +58,7 @@ export const parseExcelLots = async (file) => {
       geometre: l.geometre,
       dateLeve: l.date_leve,
       serviceCadastre: l.service_cadastre,
+      operation: l.operation || "",
       projet: l.projet,
       prestation: l.prestation,
       surfaceDocumentM2: l.surface_document_m2,
@@ -88,6 +94,7 @@ const toLotSummary = (lot) => ({
   proprieteDite: lot.propriete_dite,
   sourcePdfUrl: lot.source_pdf_url || "",
   zone: lot.zone || "nord",
+  operation: lot.operation || "",
   surfaceDocumentM2: Number(lot.surface_document_m2),
   surfaceCalculeeM2: Number(lot.surface_calculee_m2),
   correctionLambertM2: Number(lot.correction_lambert_m2),
@@ -100,8 +107,11 @@ const toLotSummary = (lot) => ({
   conforme: lot.conforme,
 });
 
-export const listCadastreLots = async (query) => {
-  const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
+export const listCadastreLots = async (query, operation) => {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (operation) params.set("operation", operation);
+  const suffix = params.toString() ? `?${params}` : "";
   const data = await apiGet(`/cadastre/lots/${suffix}`);
   return (data.lots || []).map(toLotSummary);
 };
@@ -180,6 +190,7 @@ const buildLotBody = (payload) => ({
   geometre: payload.geometre || "",
   date_leve: payload.dateLeve || null,
   service_cadastre: payload.serviceCadastre || "",
+  operation: payload.operation, // undefined = the server keeps the lot's current one
   surface_document_m2: payload.surfaceDocumentM2,
   correction_lambert_m2: payload.correctionLambertM2,
   bornes: payload.bornes.map((b) => ({

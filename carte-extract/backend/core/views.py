@@ -10,7 +10,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from . import ocr
 from .models import Attachment, Comment
-from . import backups, runtime
+from . import backups, runtime, updates
 from .bundle import BundleError, import_bundle
 from .version import app_version
 from .permissions import AuthorOrOfficeCanChange, is_office
@@ -244,3 +244,25 @@ def backup_restore(request):
     if restarting:
         threading.Timer(1.5, runtime.restart_callback).start()
     return Response({"queued": True, "restarting": restarting})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def update_info(request):
+    """Is a newer version published? (``?force=1`` skips the one-hour cache.)"""
+    return Response({**updates.public(updates.check(force=request.GET.get("force") == "1")), "install": updates.status()})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_install(request):
+    """Office only: download, verify and install the published update; the app closes and the installer relaunches it."""
+    if not is_office(request.user):
+        return Response({"detail": "Réservé au Dispatcher et à la Directrice."}, status=status.HTTP_403_FORBIDDEN)
+    return Response(updates.start_install())
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def update_status(request):
+    return Response(updates.status())

@@ -19,6 +19,7 @@ done
   --add-data "$ROOT/frontend/dist;frontend_dist" \
   --add-data "$ROOT/launcher/seed_bundle.zip;." \
   --add-data "$ROOT/VERSION;." \
+  --add-data "$ROOT/launcher/update_url.txt;." \
   --collect-all rest_framework --collect-all rest_framework_simplejwt --collect-all corsheaders \
   --collect-submodules core --collect-submodules employees --collect-submodules clients \
   --collect-submodules resources --collect-submodules projets --collect-submodules cadastre \
