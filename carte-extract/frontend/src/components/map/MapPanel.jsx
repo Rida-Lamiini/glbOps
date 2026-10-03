@@ -4,6 +4,7 @@ import { STATUS_COLORS, STATUS_LABELS } from "../../constants";
 import { projetStatus } from "../../utils/stats";
 import { NATURES, NATURE_ORDER, prestationKind } from "../../utils/nature";
 import { LOT_COLORS, LOT_STATUT_LABEL, gaugeHTML, stageMeta, stampHTML } from "../../utils/mapCards";
+import LotRow from "../cadastre/LotRow";
 
 const Html = ({ html, as: Tag = "span" }) => <Tag dangerouslySetInnerHTML={{ __html: html }} />;
 const has = (text, q) => String(text || "").toLowerCase().includes(q);
@@ -118,17 +119,12 @@ export default function MapPanel({ projets, lots, getClient, activeId, tab, onTa
         {tab === "prestations" && prestationTotal === 0 && <div className="gt-list-empty">Aucune prestation avec ces filtres.</div>}
 
         {tab === "lots" && shownLots.map((l) => (
-          <button key={l.id} type="button" className="mp-row" onClick={() => onFocusLot(l)}>
-            <span className="mp-row-main">
-              <span className="mp-row-client">{l.propriete}</span>
-              <span className="mp-row-meta">Titre {l.titre}{l.projetId ? ` · ${l.projetId}` : ""}</span>
-            </span>
-            <span className="mp-row-lot">
-              {l.operation && l.operation.split(",").map((op) => <em key={op} className="mp-op">{op}</em>)}
-              <span className="mp-lotchip" style={{ "--lc": LOT_COLORS[l.statut] }}><i /> {LOT_STATUT_LABEL[l.statut]}</span>
-              {!l.conforme && <span className="mp-lotchip is-gap"><i /> écart</span>}
-            </span>
-          </button>
+          <LotRow
+            key={l.id}
+            lot={{ id: l.id, proprieteDite: l.propriete, titreFoncier: l.titre, operation: l.operation, surfaceCalculeeM2: l.surfaceCalculee, statut: l.statut, conforme: l.conforme }}
+            meta={`Titre ${l.titre}${l.projetId ? ` · ${l.projetId}` : ""}`}
+            onOpen={() => onFocusLot(l)}
+          />
         ))}
         {tab === "lots" && shownLots.length === 0 && <div className="gt-list-empty">Aucun lot.</div>}
       </div>

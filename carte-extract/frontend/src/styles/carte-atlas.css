@@ -148,3 +148,9 @@
   .gt-map-panel.mp-panel { width: auto; }
   .mp-popup .maplibregl-popup-content { min-width: 0; }
 }
+
+/* the shared lot row, a little tighter inside the Carte's panel */
+.mp-panel .pd-lot { padding: 10px 12px; gap: 10px; border-radius: 12px; }
+.mp-panel .pd-lot-name { font-size: 15px; line-height: 1.15; }
+.mp-panel .pd-lot-right { flex: none; }
+.mp-panel .pd-lot-right strong { font-size: 12px; }

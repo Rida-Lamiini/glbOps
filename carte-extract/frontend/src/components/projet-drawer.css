@@ -94,3 +94,4 @@
 .pd-lot.is-link { cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .12s; }
 .pd-lot.is-link:hover { border-color: var(--ink); box-shadow: 0 4px 12px rgba(60, 45, 20, .1); transform: translateY(-1px); }
 .pd-lot-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pd-lot { border-left-color: var(--lot-color, var(--accent)); }

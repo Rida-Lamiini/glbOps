@@ -1530,6 +1530,16 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
               setOpenPrestationId(null);
               setOpenVehiculeId(id);
             }}
+            onOpenLot={isOffice ? (lotId) => {
+              setOpenPrestationId(null);
+              setCadastreLotId(lotId);
+              setView("cadastre");
+            } : undefined}
+            onNewLot={isOffice ? (target) => {
+              setOpenPrestationId(null);
+              setCadastreNew(target);
+              setView("cadastre");
+            } : undefined}
             currentUser={currentUser}
           />
         )}

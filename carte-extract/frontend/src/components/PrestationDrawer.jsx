@@ -17,6 +17,7 @@ import {
   FileText,
   Plus,
   MessageSquare,
+  FileScan,
 } from "lucide-react";
 import { STAGES, NATURES, LIVRABLE_TYPES, RESOURCE_STATUSES, NON_CONFORMITY_SOURCES } from "../constants";
 import { today, activeCongeOn, nextBusinessDayFR, splitDateTimeFR, nowTime } from "../utils/dates";
@@ -31,14 +32,26 @@ import PipelineStepper from "./PipelineStepper";
 import HistoriqueTimeline from "./HistoriqueTimeline";
 import AttachmentsPanel from "./AttachmentsPanel";
 import CommentsPanel from "./CommentsPanel";
+import LotRow from "./cadastre/LotRow";
+import { listCadastreLots } from "./cadastre/api";
 import { backdropVariants, drawerVariants } from "../lib/motionVariants";
 import { DatePicker } from "@/components/ui/date-picker";
 import { DateTimeField } from "@/components/ui/datetime-field";
 
-export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache, onMarkCommentRead, onSyncHistory }) {
+export default function PrestationDrawer({ projet, client, prestation, materiels, vehicules, employees, allProjets, onClose, onUpdate, onOpenMateriel, onOpenVehicule, currentUser, focusTache, onMarkCommentRead, onSyncHistory, onOpenLot, onNewLot }) {
   const [natureDemandee, setNatureDemandee] = useState(prestation.natureDemandee);
   const [dateDebutDemande, setDateDebutDemande] = useState(prestation.dateDebutDemande);
   const [dateFinDemande, setDateFinDemande] = useState(prestation.dateFinDemande);
+
+  // The cadastral lots of this prestation (the survey the work produced).
+  const [lots, setLots] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    listCadastreLots()
+      .then((all) => !cancelled && setLots(all.filter((l) => l.prestation === prestation.id)))
+      .catch(() => !cancelled && setLots([]));
+    return () => { cancelled = true; };
+  }, [prestation.id]);
 
   const [agentChantierSel, setAgentChantierSel] = useState(prestation.agentChantier);
   const [materielSel, setMaterielSel] = useState(prestation.materielIds);
@@ -973,6 +986,25 @@ export default function PrestationDrawer({ projet, client, prestation, materiels
                   {prestation.cheminBureau && <div className="gt-mono">{prestation.cheminBureau}</div>}
                 </div>
               )
+            )}
+          </section>
+
+          <section className="gt-section">
+            <h4>
+              <FileScan size={13} strokeWidth={2.2} /> Lots cadastraux{lots ? ` (${lots.length})` : ""}
+            </h4>
+            {lots === null ? (
+              <div className="gt-attach-note">Chargement…</div>
+            ) : (
+              <div className="pd-lots">
+                {lots.length === 0 && <div className="gt-list-empty">Aucun lot pour cette prestation.</div>}
+                {lots.map((l) => <LotRow key={l.id} lot={l} onOpen={onOpenLot} />)}
+                {onNewLot && (
+                  <button type="button" className="pd-addlot" onClick={() => onNewLot({ projetId: projet.id, prestationId: prestation.id })}>
+                    <Plus size={13} /> {lots.length ? "Ajouter un autre lot" : "Ajouter un lot"}
+                  </button>
+                )}
+              </div>
             )}
           </section>
 
