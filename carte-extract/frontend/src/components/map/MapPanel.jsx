@@ -121,7 +121,7 @@ export default function MapPanel({ projets, lots, getClient, activeId, tab, onTa
         {tab === "lots" && shownLots.map((l) => (
           <LotRow
             key={l.id}
-            lot={{ id: l.id, proprieteDite: l.propriete, titreFoncier: l.titre, operation: l.operation, surfaceCalculeeM2: l.surfaceCalculee, statut: l.statut, conforme: l.conforme }}
+            lot={{ id: l.id, proprieteDite: l.propriete, titreFoncier: l.titre, operation: l.operation, livre: l.livre, surfaceCalculeeM2: l.surfaceCalculee, statut: l.statut, conforme: l.conforme }}
             meta={`Titre ${l.titre}${l.projetId ? ` · ${l.projetId}` : ""}`}
             onOpen={() => onFocusLot(l)}
           />

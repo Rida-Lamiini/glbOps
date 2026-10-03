@@ -182,21 +182,32 @@ def _save_lot(data, existing_lot=None, user=None):
     return lot
 
 
+def _filter_lots(queryset, params):
+    """The list's filters, shared with the Excel export: ``q`` (titre / propriété / opération), ``operation``
+    (one shortcut among the lot's) and ``livre`` (1 = delivered: its prestation reached the Livraison stage, 0 = not yet)."""
+    search = params.get("q")
+    if search:
+        queryset = queryset.filter(
+            Q(titre_foncier__icontains=search) | Q(propriete_dite__icontains=search) | Q(operation__icontains=search)
+        )
+    op = (params.get("operation") or "").strip().upper()
+    if op:
+        queryset = queryset.filter(
+            Q(operation=op) | Q(operation__startswith=op + ",") | Q(operation__endswith="," + op) | Q(operation__contains="," + op + ",")
+        )
+    livre = params.get("livre")
+    if livre == "1":
+        queryset = queryset.filter(prestation__stage="livraison")
+    elif livre == "0":
+        queryset = queryset.exclude(prestation__stage="livraison")
+    return queryset
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def lots(request):
     if request.method == "GET":
-        queryset = Lot.objects.select_related("created_by", "statut_par")
-        search = request.query_params.get("q")
-        if search:
-            queryset = queryset.filter(
-                Q(titre_foncier__icontains=search) | Q(propriete_dite__icontains=search) | Q(operation__icontains=search)
-            )
-        op = (request.query_params.get("operation") or "").strip().upper()
-        if op:  # one shortcut among the lot's (comma-separated) ones
-            queryset = queryset.filter(
-                Q(operation=op) | Q(operation__startswith=op + ",") | Q(operation__endswith="," + op) | Q(operation__contains="," + op + ",")
-            )
+        queryset = _filter_lots(Lot.objects.select_related("created_by", "statut_par", "prestation"), request.query_params)
         return Response({"lots": LotListSerializer(queryset, many=True).data})
 
     serializer = CreateLotSerializer(data=request.data)
@@ -572,7 +583,7 @@ def lot_geojson(request, pk):
 @permission_classes([IsAuthenticated])
 def lots_geojson(request):
     """Every lot's polygon, for the overview map, with what the map needs to colour and describe it."""
-    lots = {str(l.id): l for l in Lot.objects.all()}
+    lots = {str(l.id): l for l in Lot.objects.select_related("prestation")}
     features = []
     for row in list_all_lot_polygons_geojson():
         lot = lots.get(row["id"])
@@ -588,6 +599,7 @@ def lots_geojson(request):
                 {
                     "statut": lot.statut,
                     "operation": lot.operation,
+                    "livre": LotListSerializer().get_livre(lot),
                     "prestationId": lot.prestation_id,
                     "conforme": LotListSerializer().get_conforme(lot),
                     "surfaceCalculeeM2": float(lot.surface_calculee_m2),
@@ -637,10 +649,7 @@ def excel_template(request):
 def export_excel(request):
     """All current lots (optionally ?q= filtered, same search as the list) as a workbook — the
     reverse of parse_excel/excel_template, for an offline copy or handing lots to a client."""
-    queryset = Lot.objects.prefetch_related("bornes").order_by("titre_foncier")
-    search = request.query_params.get("q")
-    if search:
-        queryset = queryset.filter(Q(titre_foncier__icontains=search) | Q(propriete_dite__icontains=search))
+    queryset = _filter_lots(Lot.objects.prefetch_related("bornes").order_by("titre_foncier"), request.query_params)
     response = HttpResponse(build_lots_export(queryset), content_type=XLSX_CONTENT_TYPE)
     response["Content-Disposition"] = 'attachment; filename="lots-cadastraux.xlsx"'
     return response

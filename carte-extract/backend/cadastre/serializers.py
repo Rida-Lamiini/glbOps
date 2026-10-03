@@ -40,6 +40,7 @@ def _person_name(user):
 
 class LotListSerializer(serializers.ModelSerializer):
     conforme = serializers.SerializerMethodField()
+    livre = serializers.SerializerMethodField()
     position_approximative = serializers.BooleanField(read_only=True)
     surface_verifiable = serializers.BooleanField(read_only=True)
     created_by_name = serializers.SerializerMethodField()
@@ -60,6 +61,7 @@ class LotListSerializer(serializers.ModelSerializer):
             "propriete_dite",
             "zone",
             "operation",
+            "livre",
             "surface_document_m2",
             "surface_calculee_m2",
             "correction_lambert_m2",
@@ -77,6 +79,10 @@ class LotListSerializer(serializers.ModelSerializer):
 
     def get_statut_par_name(self, lot: Lot) -> str:
         return _person_name(lot.statut_par)
+
+    def get_livre(self, lot: Lot) -> bool:
+        """The lot's prestation has reached the Livraison stage (the work was delivered)."""
+        return lot.prestation_id is not None and lot.prestation.stage == "livraison"
 
     def get_conforme(self, lot: Lot) -> bool | None:
         # None = not verifiable (no surface on the document), which is neither conforme nor an écart

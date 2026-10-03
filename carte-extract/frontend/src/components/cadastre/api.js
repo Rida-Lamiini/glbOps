@@ -76,7 +76,12 @@ export const parseExcelLots = async (file) => {
 export const downloadExcelTemplate = async () => saveBlob(await apiBlob("/cadastre/lots/excel-template/"), "modele-import-lots.xlsx");
 
 // The reverse of the import: every current lot (with its bornes), same "Lots"/"Bornes" shape.
-export const downloadLotsExcel = async () => saveBlob(await apiBlob("/cadastre/lots/export-excel/"), "lots-cadastraux.xlsx");
+// Same filters as the list ({ q, operation, livre }): "Exporter en Excel" exports what is on screen.
+export const downloadLotsExcel = async (filters = {}) => {
+  const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v));
+  const delivered = filters.livre === "1" ? "-livres" : filters.livre === "0" ? "-non-livres" : "";
+  return saveBlob(await apiBlob(`/cadastre/lots/export-excel/${params.toString() ? `?${params}` : ""}`), `lots-cadastraux${delivered}.xlsx`);
+};
 
 // Cadastral report PDF, built server-side (cadastre/report.py).
 export const downloadLotReport = async (lot) =>
@@ -95,6 +100,7 @@ const toLotSummary = (lot) => ({
   sourcePdfUrl: lot.source_pdf_url || "",
   zone: lot.zone || "nord",
   operation: lot.operation || "",
+  livre: !!lot.livre, // its prestation reached the Livraison stage
   surfaceDocumentM2: Number(lot.surface_document_m2),
   surfaceCalculeeM2: Number(lot.surface_calculee_m2),
   correctionLambertM2: Number(lot.correction_lambert_m2),
@@ -107,10 +113,11 @@ const toLotSummary = (lot) => ({
   conforme: lot.conforme,
 });
 
-export const listCadastreLots = async (query, operation) => {
+export const listCadastreLots = async (query, operation, livre) => {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
   if (operation) params.set("operation", operation);
+  if (livre) params.set("livre", livre);
   const suffix = params.toString() ? `?${params}` : "";
   const data = await apiGet(`/cadastre/lots/${suffix}`);
   return (data.lots || []).map(toLotSummary);

@@ -660,6 +660,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
             titre: p.titreFoncier || "—",
             propriete: p.proprieteDite || "Lot cadastral",
             operation: p.operation || "",
+            livre: p.livre === true,
             projetId: p.projetId || "",
             kind: p.kind || "autre",
             statut: p.statut || "brouillon",

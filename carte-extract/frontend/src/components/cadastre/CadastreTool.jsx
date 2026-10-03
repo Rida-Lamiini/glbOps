@@ -189,17 +189,18 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
   const [lots, setLots] = useState(null);
   const [query, setQuery] = useState("");
   const [operation, setOperation] = useState("");
+  const [livre, setLivre] = useState(""); // "" all · "1" delivered · "0" not delivered yet
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     const t = setTimeout(() => {
-      listCadastreLots(query, operation)
+      listCadastreLots(query, operation, livre)
         .then((data) => !cancelled && (setLots(allowedProjetIds ? data.filter((l) => allowedProjetIds.has(l.projet)) : data), setError(null)))
         .catch((e) => !cancelled && setError(readApiError(e, "Impossible de charger les lots.")));
     }, query ? 250 : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [query, operation, reloadKey, allowedProjetIds]);
+  }, [query, operation, livre, reloadKey, allowedProjetIds]);
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -215,11 +216,18 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
             {OPERATIONS.map((op) => <option key={op} value={op}>{op}</option>)}
           </select>
         </label>
+        <label className="cad-search" style={{ maxWidth: 190 }}>
+          <select value={livre} onChange={(e) => setLivre(e.target.value)} aria-label="Filtrer par livraison" style={{ border: 0, background: "transparent", width: "100%", font: "inherit" }}>
+            <option value="">Livrés et en cours</option>
+            <option value="1">Livrés</option>
+            <option value="0">Pas encore livrés</option>
+          </select>
+        </label>
         {lots && lots.length > 0 && (
           <button
             type="button"
             className="cad-btn"
-            onClick={() => downloadLotsExcel().catch(() => notifyError("L'export n'a pas pu être téléchargé."))}
+            onClick={() => downloadLotsExcel({ q: query, operation, livre }).catch(() => notifyError("L'export n'a pas pu être téléchargé."))}
           >
             <FileDown size={16} /> Exporter en Excel
           </button>
@@ -230,8 +238,8 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
         <div className="cad-note">Chargement…</div>
       ) : lots.length === 0 ? (
         <div className="cad-empty">
-          <strong>{query || operation ? "Aucun résultat" : "Aucun lot pour l'instant"}</strong>
-          {query || operation ? "Essayez un autre titre foncier ou une autre opération." : "Importez un PDF ci-dessus : le lot apparaîtra ici et sur la carte."}
+          <strong>{query || operation || livre ? "Aucun résultat" : "Aucun lot pour l'instant"}</strong>
+          {query || operation || livre ? "Essayez un autre titre foncier, une autre opération ou une autre livraison." : "Importez un PDF ci-dessus : le lot apparaîtra ici et sur la carte."}
         </div>
       ) : (
         <div className="cad-grid">
@@ -246,6 +254,7 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                   <ConformiteBadge conforme={l.conforme} verifiable={l.surfaceVerifiable} />
                   <StatutBadge statut={l.statut} />
+                  {l.livre && <span className="cad-livre">Livré</span>}
                 </div>
               </div>
               <div className="cad-kpis">

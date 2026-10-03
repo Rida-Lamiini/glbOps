@@ -26,6 +26,7 @@ export default function LotRow({ lot, onOpen, meta }) {
       <span className="pd-lot-right">
         {Number.isFinite(surface) && lot.surfaceCalculeeM2 != null && <strong>{surface.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} m²</strong>}
         <span className={`gt-status-pill ${tone}`}><span className="gt-status-pill-dot" />{label}</span>
+        {lot.livre && <span className="cad-livre">Livré</span>}
         <span className={`gt-status-pill ${lot.conforme ? "success" : "danger"}`}><span className="gt-status-pill-dot" />{lot.conforme ? "Conforme" : "Écart"}</span>
       </span>
     </Tag>

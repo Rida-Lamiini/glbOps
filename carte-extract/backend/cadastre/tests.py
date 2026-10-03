@@ -741,3 +741,36 @@ class OperationTests(LotApiBase):
         self._free_lot(api, operation="COPRO")
         again = parse_lots_workbook(build_lots_export(Lot.objects.all()))
         self.assertEqual([l["operation"] for l in again["lots"]], ["COPRO"])
+
+
+class DeliveredLotsTests(LotApiBase):
+    """"Livré": the lot's prestation reached the Livraison stage — shown, filterable, exportable."""
+
+    def test_delivered_filter_flag_and_export(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        api = self._as(self.bureau_user)
+        delivered = self._lot(api, titre_foncier="TF/D/1")                      # on PRS-T-1
+        other_prestation = Prestation.objects.create(id="PRS-T-2", projet=self.projet)
+        pending = self._lot(api, titre_foncier="TF/D/2", prestation=other_prestation.id)
+        self._lot(api, titre_foncier="TF/D/3", projet=None, prestation=None)    # no prestation: never delivered
+        Prestation.objects.filter(pk=self.prestation.pk).update(stage="livraison")
+
+        titres = lambda q: sorted(l["titre_foncier"] for l in api.get(f"/api/cadastre/lots/{q}").json()["lots"])
+        self.assertEqual(titres("?livre=1"), ["TF/D/1"])
+        self.assertEqual(titres("?livre=0"), ["TF/D/2", "TF/D/3"])
+        self.assertEqual(len(titres("")), 3)
+        flags = {l["titre_foncier"]: l["livre"] for l in api.get("/api/cadastre/lots/").json()["lots"]}
+        self.assertEqual(flags, {"TF/D/1": True, "TF/D/2": False, "TF/D/3": False})
+        self.assertTrue(api.get(f"/api/cadastre/lots/{delivered}/").json()["livre"])
+        self.assertFalse(api.get(f"/api/cadastre/lots/{pending}/").json()["livre"])
+        feats = api.get("/api/cadastre/lots/geojson/").json()["features"]
+        self.assertEqual(sorted(f["properties"]["titreFoncier"] for f in feats if f["properties"].get("livre")), ["TF/D/1"])
+
+        # the Excel export follows the same filter
+        r = api.get("/api/cadastre/lots/export-excel/?livre=1")
+        self.assertEqual(r.status_code, 200)
+        ws = load_workbook(BytesIO(r.content))["Lots"]
+        self.assertEqual([row[0].value for row in ws.iter_rows(min_row=2)], ["TF/D/1"])
