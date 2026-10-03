@@ -41,3 +41,4 @@ dist-build/
 dist-installer/
 launcher/version_info.txt
 launcher/update_url.txt
+imports/
