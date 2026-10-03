@@ -81,3 +81,16 @@
 /* Client / Ressource / Employé drawers share the same header language */
 .gt-drawer-head .gt-drawer-client { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; overflow-wrap: anywhere; }
 .gt-drawer-head .gt-drawer-id { margin-bottom: 2px; }
+
+/* a prestation row with its lots underneath */
+.pd-prestation { display: flex; flex-direction: column; gap: 6px; }
+.pd-prestation + .pd-prestation { margin-top: 6px; }
+.pd-prestation-lots { display: flex; flex-direction: column; gap: 6px; margin-left: 14px; padding-left: 12px; border-left: 2px solid var(--border-subtle); }
+.pd-prestation-title { font-size: 10.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.pd-prestation.is-loose { margin-top: 12px; }
+.pd-addlot { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px dashed var(--muted); background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; transition: border-color .15s, background .15s; }
+.pd-addlot:hover { border-color: var(--ink); background: var(--surface-muted); }
+.pd-lot { text-align: left; font: inherit; color: inherit; width: 100%; }
+.pd-lot.is-link { cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .12s; }
+.pd-lot.is-link:hover { border-color: var(--ink); box-shadow: 0 4px 12px rgba(60, 45, 20, .1); transform: translateY(-1px); }
+.pd-lot-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

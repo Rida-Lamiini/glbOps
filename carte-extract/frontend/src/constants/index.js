@@ -18,9 +18,15 @@ export const STAGE_COLORS = {
   livraison: "var(--good)",
 };
 
+// The standard kinds of prestation, offered by every picker (new projet, add prestation, prestation drawer).
+// MEC, COPRO and MT are prestations like the others; spelling is fixed here so filters and stamps stay consistent.
 export const NATURES = [
-  "Levé topographique",
+  "Plan côté",
+  "MEC",
+  "COPRO",
+  "MT",
   "Bornage terrain",
+  "Levé topographique",
   "Relevé LiDAR",
   "Cartographie drone",
   "Implantation VRD",

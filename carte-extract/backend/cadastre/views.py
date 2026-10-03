@@ -26,7 +26,7 @@ from .geo.checksum import find_single_digit_fixes, twice_area
 from .geo.placement import place, unplace
 from .geo.proj import lambert_to_wgs84, wgs84_to_lambert
 from .models import Ajustement, Borne, DistanceCheck, Lot, ReferencePoint
-from .operations import from_filename as operation_from_filename
+from .operations import derived_for_projet, from_filename as operation_from_filename, sync_projet_lots
 from .pdf.extract import OcrServiceError, extract_calcul_de_contenances
 from core.concurrency import check_version
 from core.storage import read_file
@@ -83,7 +83,12 @@ def _save_lot(data, existing_lot=None, user=None):
         geometre=data.get("geometre", ""),
         date_leve=data.get("date_leve"),
         service_cadastre=data.get("service_cadastre", ""),
-        operation=data["operation"] if "operation" in data else (existing_lot.operation if existing_lot else ""),
+        # linked to a projet: the operation is that projet's prestations (MEC, COPRO, MT); otherwise it is what was typed
+        operation=(
+            derived_for_projet(data["projet"].pk) if data.get("projet")
+            else data["operation"] if "operation" in data
+            else (existing_lot.operation if existing_lot else "")
+        ),
         zone=data.get("zone", "nord"),
         surface_document_m2=data["surface_document_m2"],
         surface_calculee_m2=built.surface_calculee_m2,
@@ -265,6 +270,7 @@ def lot_reuse(request, pk):
     if source.projet_id is None:
         source.projet = projet
         source.save(update_fields=["projet", "updated_at"])
+        sync_projet_lots(projet.pk)
         return Response({"id": str(source.id), "mode": "attached"})
 
     with transaction.atomic():
@@ -303,6 +309,7 @@ def lot_reuse(request, pk):
         )
         Ajustement.objects.bulk_create([Ajustement(lot=copy, libelle=a.libelle, type=a.type, m2=a.m2) for a in source.ajustements.all()])
         copy_lot_geometry(source.id, copy.id)
+    sync_projet_lots(projet.pk)
     return Response({"id": str(copy.id), "mode": "copied"}, status=status.HTTP_201_CREATED)
 
 

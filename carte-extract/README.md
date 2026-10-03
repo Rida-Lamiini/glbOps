@@ -84,3 +84,15 @@ point-in-time restore in its console).
 Lots and projets carry a `version` that goes up on every edit. The app sends the version it loaded
 (`X-Expected-Version`); if someone else saved in between, the save is refused with a 409 and a clear message instead of
 overwriting their work (projets: the data is reloaded; lots: reload the lot). Requests without the header are not checked.
+
+## How the pieces fit
+
+**Client → Projet → Prestation → Lot.** A projet is a job at a place (titre foncier, location). A prestation is a piece of
+work within it — Plan côté, MEC, COPRO, MT, Bornage… — moving through the 7 stages. A lot is the cadastral survey (bornes +
+plan) attached to a prestation. The sidebar mirrors it: **Projets**, **Carte**, **Lots cadastraux**, **Clients**.
+
+- Prestation natures come from one standard list (`frontend/src/constants/index.js`), so the stamps and filters stay consistent.
+- A lot's **opération** (MT / MEC / COPRO) is not typed when the lot belongs to a projet: it follows that projet's prestations
+  and updates by itself when they change (`cadastre/operations.py`, `cadastre/signals.py`). Only a lot with no projet carries a typed one.
+- In a projet, each prestation shows its lots and an **Ajouter un lot** button that opens Lots cadastraux with the projet and
+  prestation already chosen.

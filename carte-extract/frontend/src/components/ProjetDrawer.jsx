@@ -37,6 +37,7 @@ import LocationPicker from "./LocationPicker";
 import HistoriqueTimeline from "./HistoriqueTimeline";
 import { listCadastreLots, reuseLot } from "./cadastre/api";
 import LotSuggestions from "./cadastre/LotSuggestions";
+import LotRow from "./cadastre/LotRow";
 import { projetStatus } from "../utils/stats";
 import { STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import "./projet-drawer.css";
@@ -51,6 +52,8 @@ export default function ProjetDrawer({
   onAddPrestation,
   onOpenClient,
   onGoCadastre,
+  onOpenLot,
+  onNewLot,
   onEditProjet,
   onUpdateNotes,
   onAddAttachments,
@@ -272,7 +275,7 @@ export default function ProjetDrawer({
           {[
             { key: "resume", label: "Résumé", icon: LayoutDashboard },
             { key: "prestations", label: "Prestations", icon: ListChecks, count: visiblePrestations.length },
-            { key: "cadastre", label: "Cadastre", icon: FileScan, count: lots ? lots.length : undefined },
+            { key: "cadastre", label: "Lots", icon: FileScan, count: lots ? lots.length : undefined },
             { key: "documents", label: "Documents", icon: Paperclip, count: attachments.length },
             { key: "historique", label: "Historique", icon: Clock },
           ].map((t) => (
@@ -348,8 +351,11 @@ export default function ProjetDrawer({
           <section className="gt-section">
             <h4>Prestations ({visiblePrestations.length})</h4>
             <div className="gt-projet-prestations">
-              {visiblePrestations.map((p) => (
-                <button className="gt-listrow" key={p.id} onClick={() => onOpenPrestation(p.id)}>
+              {visiblePrestations.map((p) => {
+                const pLots = (lots || []).filter((l) => l.prestation === p.id);
+                return (
+                <div className="pd-prestation" key={p.id}>
+                <button className="gt-listrow" onClick={() => onOpenPrestation(p.id)}>
                   <div className="gt-listrow-info">
                     <div className="gt-mono gt-listrow-id">{p.id}</div>
                     <div className="gt-listrow-client">{p.natureDemandee || "Non définie"}</div>
@@ -373,7 +379,29 @@ export default function ProjetDrawer({
                     </span>
                   )}
                 </button>
-              ))}
+                {(pLots.length > 0 || onNewLot) && (
+                  <div className="pd-prestation-lots">
+                    {pLots.map((l) => <LotRow key={l.id} lot={l} onOpen={onOpenLot} />)}
+                    {onNewLot && (
+                      <button type="button" className="pd-addlot" onClick={() => onNewLot({ projetId: projet.id, prestationId: p.id })}>
+                        <Plus size={13} /> {pLots.length ? "Ajouter un autre lot" : "Ajouter un lot"}
+                      </button>
+                    )}
+                  </div>
+                )}
+                </div>
+                );
+              })}
+              {(() => {
+                const known = new Set(visiblePrestations.map((p) => p.id));
+                const loose = (lots || []).filter((l) => !l.prestation || !known.has(l.prestation));
+                return loose.length > 0 ? (
+                  <div className="pd-prestation is-loose">
+                    <div className="pd-prestation-title">Lots du projet sans prestation</div>
+                    <div className="pd-prestation-lots">{loose.map((l) => <LotRow key={l.id} lot={l} onOpen={onOpenLot} />)}</div>
+                  </div>
+                ) : null;
+              })()}
               {visiblePrestations.length === 0 && <div className="gt-list-empty">Aucune prestation visible.</div>}
             </div>
 
@@ -414,27 +442,11 @@ export default function ProjetDrawer({
               ) : lots.length === 0 ? (
                 <div className="pd-empty">
                   <strong>Aucun lot lié à ce projet</strong>
-                  <p>Importez le plan de bornage dans Cadastre et renseignez « Projet lié » : {projet.id}. Le lot apparaîtra ici et sur la carte.</p>
+                  <p>Ajoutez un lot depuis l'onglet Prestations (bouton « Ajouter un lot » sous la prestation concernée) : il sera rattaché au projet {projet.id}, et apparaîtra ici et sur la carte.</p>
                 </div>
               ) : (
                 <div className="pd-lots">
-                  {lots.map((l) => (
-                    <div className="pd-lot" key={l.id}>
-                      <div>
-                        <div className="pd-lot-name">{l.proprieteDite}</div>
-                        <div className="gt-mono pd-lot-ref">Titre {l.titreFoncier}{l.prestation ? ` · ${l.prestation}` : ""}{l.createdByName ? ` · ${l.createdByName}` : ""}</div>
-                      </div>
-                      <div className="pd-lot-right">
-                        <strong>{l.surfaceCalculeeM2.toLocaleString("fr-FR", { maximumFractionDigits: 0 })} m²</strong>
-                        <span className={`gt-status-pill ${l.statut === "valide" ? "success" : l.statut === "verifie" ? "info" : "neutral"}`}>
-                          <span className="gt-status-pill-dot" />{l.statut === "valide" ? "Validé" : l.statut === "verifie" ? "Vérifié" : "Brouillon"}
-                        </span>
-                        <span className={`gt-status-pill ${l.conforme ? "success" : "danger"}`}>
-                          <span className="gt-status-pill-dot" />{l.conforme ? "Conforme" : "Écart"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                  {lots.map((l) => <LotRow key={l.id} lot={l} onOpen={onOpenLot} />)}
                 </div>
               )}
               <h4 style={{ marginTop: 18 }}><MapPin size={13} strokeWidth={2.2} /> Lots voisins ou historiques</h4>
@@ -451,7 +463,7 @@ export default function ProjetDrawer({
               <div className="gt-attach-note" style={{ marginTop: 6 }}>Même titre foncier ou moins de 200 m du repère du projet.</div>
               {onGoCadastre && (
                 <button className="gt-btn gt-btn-neutral" style={{ marginTop: 12 }} onClick={onGoCadastre}>
-                  <FileScan size={14} /> Ouvrir le module Cadastre
+                  <FileScan size={14} /> Ouvrir les lots cadastraux
                 </button>
               )}
             </section>

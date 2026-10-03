@@ -8,18 +8,13 @@ export const NAV_GROUPS = [
     items: [
       { key: "projets", label: "Projets", icon: List, color: "var(--accent)" },
       { key: "carte", label: "Carte", icon: MapIcon, color: "var(--status-success)" },
+      { key: "cadastre", label: "Lots cadastraux", icon: FileScan, color: "var(--status-info)" },
     ],
   },
   {
     label: "Ressources",
     items: [
       { key: "clients", label: "Clients", icon: Building2, color: "var(--status-info)" },
-    ],
-  },
-  {
-    label: "Outils",
-    items: [
-      { key: "cadastre", label: "Cadastre", icon: FileScan, color: "var(--status-info)" },
     ],
   },
 ];

@@ -79,6 +79,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   const [view, setView] = useState("projets");
   const [openProjetId, setOpenProjetId] = useState(null);
   const [cadastreLotId, setCadastreLotId] = useState(null); // lot to open in Cadastre (from the map)
+  const [cadastreNew, setCadastreNew] = useState(null); // { projetId, prestationId }: "Ajouter un lot" from a prestation
   const [mapFocusLotId, setMapFocusLotId] = useState(null); // lot to zoom on in Carte (from Cadastre)
   const [openPrestationId, setOpenPrestationId] = useState(null);
   const [openClientId, setOpenClientId] = useState(null);
@@ -183,7 +184,8 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
   // A lot asked from the map only applies to that one visit of the Cadastre page.
   useEffect(() => {
     if (view !== "cadastre" && cadastreLotId) setCadastreLotId(null);
-  }, [view, cadastreLotId]);
+    if (view !== "cadastre" && cadastreNew) setCadastreNew(null);
+  }, [view, cadastreLotId, cadastreNew]);
 
   const initialResourceDone = useRef(false);
   useEffect(() => {
@@ -1445,7 +1447,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
 
         {view === "cadastre" && (
           <motion.div key="cadastre" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
-            <CadastreTool projets={cadastreProjets} scopeToProjets={!isOfficeUser} currentUser={currentUser} getClient={getClient} initialLotId={cadastreLotId} onShowOnMap={(id) => { setMapFocusLotId(id); setView("carte"); }} />
+            <CadastreTool projets={cadastreProjets} scopeToProjets={!isOfficeUser} currentUser={currentUser} getClient={getClient} initialLotId={cadastreLotId} newFor={cadastreNew} onShowOnMap={(id) => { setMapFocusLotId(id); setView("carte"); }} />
           </motion.div>
         )}
 
@@ -1483,6 +1485,16 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
             } : undefined}
             onGoCadastre={isOffice ? () => {
               setOpenProjetId(null);
+              setView("cadastre");
+            } : undefined}
+            onOpenLot={isOffice ? (lotId) => {
+              setOpenProjetId(null);
+              setCadastreLotId(lotId);
+              setView("cadastre");
+            } : undefined}
+            onNewLot={isOffice ? (target) => {
+              setOpenProjetId(null);
+              setCadastreNew(target);
               setView("cadastre");
             } : undefined}
             onEditProjet={editProjet}

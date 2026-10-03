@@ -8,6 +8,7 @@ import {
   createCadastreLot, updateCadastreLot, deleteCadastreLot, readApiError, setLotStatut,
   downloadLotsExcel, downloadLotReport, repositionCadastreLot, OPERATIONS, operationLabel,
 } from "./api";
+import { natureOf } from "../../utils/nature";
 import LotMap from "./LotMap";
 import LotWorkspace from "./LotWorkspace";
 import ExcelImportScreen from "./ExcelImport";
@@ -53,7 +54,7 @@ function previewArea(bornes) {
 
 const nextSequence = (bornes) => (bornes.length === 0 ? 0 : Math.max(...bornes.map((b) => b.sequence)) + 1);
 
-function Hero({ eyebrow = "Outils", title, children }) {
+function Hero({ eyebrow = "Cadastre", title, children }) {
   return (
     <header className="cad-hero">
       <div className="cad-eyebrow">{eyebrow}</div>
@@ -259,14 +260,24 @@ function LotsList({ reloadKey, onOpenLot, allowedProjetIds = null }) {
   );
 }
 
-function HomeScreen({ reloadKey, onReview, onOpenLot, onExcel, allowedProjetIds }) {
+function HomeScreen({ reloadKey, onReview, onOpenLot, onExcel, allowedProjetIds, newFor, onClearNewFor }) {
   return (
     <div className="cad">
-      <Hero title="Cadastre">
+      <Hero title="Lots cadastraux">
         Transformez un plan de bornage en lot vérifié : import du PDF, contrôle des coordonnées, puis affichage sur la carte
         générale pour réutiliser l'existant sur vos nouveaux projets.
       </Hero>
       <Stepper step={0} />
+      {newFor && (
+        <div className="cad-check ok" role="status">
+          <i>+</i>
+          <span>
+            Nouveau lot pour le projet <b>{newFor.projetId}</b>{newFor.prestationId ? <> · prestation <b>{newFor.prestationId}</b></> : null} :
+            importez le PDF (ou saisissez-le), il sera rattaché automatiquement.{" "}
+            <button type="button" className="cad-linkbtn" onClick={onClearNewFor}>Annuler</button>
+          </span>
+        </div>
+      )}
       <ImportZone onReview={onReview} onExcel={onExcel} />
       <LotsList reloadKey={reloadKey} onOpenLot={onOpenLot} allowedProjetIds={allowedProjetIds} />
     </div>
@@ -319,6 +330,11 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
   const [header, setHeader] = useState(initial.header);
   const [projetId, setProjetId] = useState(initial.projetId || "");
   const [operation, setOperation] = useState(initial.operation || "");
+  const derivedOperation = useMemo(() => {
+    const projet = projets.find((p) => p.id === projetId);
+    const kinds = new Set((projet?.prestations || []).map((p) => natureOf(p.natureDemandee)));
+    return ["mt", "mec", "copro"].filter((k) => kinds.has(k)).map((k) => k.toUpperCase());
+  }, [projets, projetId]);
   const [prestationId, setPrestationId] = useState(initial.prestationId || "");
   const [zone, setZone] = useState(initial.zone || "nord");
   const [ajustements, setAjustements] = useState(initial.ajustements || []);
@@ -359,7 +375,7 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
     setError(null);
     const payload = {
       version: isEditing ? initial.version : undefined,
-      operation,
+      operation: projetId ? undefined : operation, // linked to a projet: the server derives it from the projet's prestations
       projet: projetId.trim() || null,
       prestation: projetId && prestationId ? prestationId : null,
       titreFoncier: header.titreFoncier,
@@ -405,7 +421,17 @@ function ReviewScreen({ initial, onCancel, onSaved, projets = [], currentUser })
                 <option value="nord">Nord (Casablanca, Rabat, Tanger…)</option>
                 <option value="sud">Sud (Marrakech, Agadir…)</option>
               </SelectField>
-              <OperationField value={operation} onChange={setOperation} hint={initial.extractionMethod === "edit" ? undefined : "Pré-rempli d'après le nom du fichier"} />
+              {projetId ? (
+                <div className="cad-field">
+                  <span>Opération</span>
+                  <div className="cad-ops-tags" style={{ marginTop: 0 }}>
+                    {derivedOperation.length ? derivedOperation.map((op) => <em key={op} className="cad-op-tag">{op}</em>) : <i style={{ color: "var(--muted)", fontSize: 13 }}>aucune</i>}
+                  </div>
+                  <small>Déduite des prestations du projet (MEC, COPRO, MT) — pour la changer, modifiez les prestations du projet.</small>
+                </div>
+              ) : (
+                <OperationField value={operation} onChange={setOperation} hint={initial.extractionMethod === "edit" ? "Sans projet : à saisir" : "Pré-rempli d'après le nom du fichier"} />
+              )}
               <SelectField label="Projet lié" hint="Optionnel" value={projetId} onChange={changeProjet}>
                 <option value="">— aucun —</option>
                 {projets.map((p) => <option key={p.id} value={p.id}>{p.id} · {p.situation}</option>)}
@@ -756,9 +782,12 @@ function LotDetail({ lotId, justSaved, onBack, onEdit, onDeleted, onShowOnMap, p
 // --- Entry point ---------------------------------------------------------------
 
 /** PDF → OCR → vérification → lot cadastral. Rendered by GlobetudesProjets for view === "cadastre". */
-export default function CadastreTool({ projets = [], scopeToProjets = false, currentUser, getClient, initialLotId = null, onShowOnMap }) {
+export default function CadastreTool({ projets = [], scopeToProjets = false, currentUser, getClient, initialLotId = null, newFor: newForProp = null, onShowOnMap }) {
   const [screen, setScreen] = useState(() => (initialLotId ? { name: "detail", id: initialLotId } : { name: "list" }));
   const [reloadKey, setReloadKey] = useState(0);
+  // Coming from a prestation ("Ajouter un lot"): whatever lot is created next is attached to that projet / prestation.
+  const [newFor, setNewFor] = useState(newForProp);
+  const withTarget = (initial) => (!initial.lotId && newFor ? { ...initial, projetId: newFor.projetId, prestationId: newFor.prestationId || "" } : initial);
   const allowedProjetIds = useMemo(() => (scopeToProjets ? new Set(projets.map((p) => p.id)) : null), [scopeToProjets, projets]);
 
   if (screen.name === "review") {
@@ -798,7 +827,9 @@ export default function CadastreTool({ projets = [], scopeToProjets = false, cur
     <HomeScreen
       allowedProjetIds={allowedProjetIds}
       reloadKey={reloadKey}
-      onReview={(initial) => setScreen({ name: "review", initial })}
+      newFor={newFor}
+      onClearNewFor={() => setNewFor(null)}
+      onReview={(initial) => setScreen({ name: "review", initial: withTarget(initial) })}
       onOpenLot={(id) => setScreen({ name: "detail", id })}
       onExcel={() => setScreen({ name: "excel" })}
     />

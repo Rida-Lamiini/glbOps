@@ -652,7 +652,14 @@ class VerifiableSurfaceTests(LotApiBase):
 
 
 class OperationTests(LotApiBase):
-    """The lot's "opération" shortcuts (MT / MEC / COPRO): reading, saving, filtering, file names, Excel."""
+    """The lot's "opération" shortcuts (MT / MEC / COPRO): reading, saving, filtering, file names, Excel.
+
+    MEC, COPRO and MT are prestations: a lot linked to a projet takes its operation from that projet's prestations;
+    only a lot with no projet carries a hand-entered one."""
+
+    def _free_lot(self, api, titre="TF/9/R", **extra):
+        """A lot with no projet (so a typed operation applies)."""
+        return self._lot(api, titre_foncier=titre, projet=None, prestation=None, **extra)
 
     def test_normalize_and_display(self):
         from .operations import display, normalize
@@ -669,18 +676,18 @@ class OperationTests(LotApiBase):
 
         self.assertEqual(from_filename("127_TF5608_64 MEC _COPRO.pdf"), "MEC,COPRO")
         self.assertEqual(from_filename("299_TF7511_58 MEC (1).pdf"), "MEC")
-        self.assertEqual(from_filename("C:\\Users\\HP\\Downloads\\234_TF84838_25 MT.pdf"), "MT")
+        self.assertEqual(from_filename(r"C:\Users\HP\Downloads\234_TF84838_25 MT.pdf"), "MT")
         self.assertEqual(from_filename("132_PC37_TF74489_63.pdf"), "")
         self.assertEqual(from_filename("MECANO_TF1.pdf"), "")  # whole tokens only
 
-    def test_operation_is_saved_normalised_kept_on_edit_and_filterable(self):
+    def test_a_lot_without_projet_keeps_the_operation_typed_and_is_filterable(self):
         api = self._as(self.bureau_user)
-        lot_id = self._lot(api, operation="mec et copro")
+        lot_id = self._free_lot(api, operation="mec et copro")
         url = f"/api/cadastre/lots/{lot_id}/"
         self.assertEqual(api.get(url).json()["operation"], "MEC,COPRO")
 
         # an edit that does not mention the operation keeps it; one that does replaces it
-        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": self.prestation.id}
+        body = {**_payload(self.projet.id, "TF/9/R"), "projet": None}
         self.assertEqual(api.put(url, body, format="json").status_code, 200)
         self.assertEqual(api.get(url).json()["operation"], "MEC,COPRO")
         self.assertEqual(api.put(url, {**body, "operation": "MT"}, format="json").status_code, 200)
@@ -688,8 +695,8 @@ class OperationTests(LotApiBase):
         self.assertEqual(api.put(url, {**body, "operation": ""}, format="json").status_code, 200)
         self.assertEqual(api.get(url).json()["operation"], "")
 
-        self._lot(api, operation="MEC,COPRO", titre_foncier="TF/10/R", prestation=None)
-        self._lot(api, operation="MT", titre_foncier="TF/11/R", prestation=None)
+        self._free_lot(api, "TF/10/R", operation="MEC,COPRO")
+        self._free_lot(api, "TF/11/R", operation="MT")
         ids = lambda q: sorted(l["titre_foncier"] for l in api.get(f"/api/cadastre/lots/{q}").json()["lots"])
         self.assertEqual(ids("?operation=COPRO"), ["TF/10/R"])
         self.assertEqual(ids("?operation=mec"), ["TF/10/R"])
@@ -697,6 +704,32 @@ class OperationTests(LotApiBase):
         self.assertEqual(ids("?q=copro"), ["TF/10/R"])  # the search box finds them too
         feats = api.get("/api/cadastre/lots/geojson/").json()["features"]
         self.assertIn("MEC,COPRO", [f["properties"].get("operation") for f in feats])
+        self.assertIn("prestationId", feats[0]["properties"])
+
+    def test_a_lot_linked_to_a_projet_takes_its_operation_from_the_prestations(self):
+        from projets.models import Prestation
+
+        Prestation.objects.create(id="PRS-T-M", projet=self.projet, nature_demandee="MEC")
+        Prestation.objects.create(id="PRS-T-C", projet=self.projet, nature_demandee="COPRO")
+        api = self._as(self.bureau_user)
+        # what the client typed is ignored: the projet's prestations decide
+        lot_id = self._lot(api, operation="MT")
+        url = f"/api/cadastre/lots/{lot_id}/"
+        self.assertEqual(api.get(url).json()["operation"], "MEC,COPRO")
+
+        # prestations change -> the lot follows, by itself
+        Prestation.objects.create(id="PRS-T-T", projet=self.projet, nature_demandee="MT")
+        self.assertEqual(api.get(url).json()["operation"], "MT,MEC,COPRO")
+        Prestation.objects.filter(pk="PRS-T-M").update(nature_demandee="Plan côté")
+        Prestation.objects.get(pk="PRS-T-M").save()  # a save (not a bulk update) is what the signal hears
+        self.assertEqual(api.get(url).json()["operation"], "MT,COPRO")
+        Prestation.objects.get(pk="PRS-T-C").delete()
+        self.assertEqual(api.get(url).json()["operation"], "MT")
+
+        # an edit through the API keeps following the prestations
+        body = {**_payload(self.projet.id, "TF/9/R"), "prestation": "PRS-T-T", "operation": "COPRO"}
+        self.assertEqual(api.put(url, body, format="json").status_code, 200)
+        self.assertEqual(api.get(url).json()["operation"], "MT")
 
     def test_excel_template_and_export_carry_the_operation(self):
         from .excel_import import build_lots_export, build_template, parse_lots_workbook
@@ -705,6 +738,6 @@ class OperationTests(LotApiBase):
         self.assertEqual([l["operation"] for l in parsed["lots"]], ["MEC,COPRO", "MT"])
         self.assertEqual([l["errors"] for l in parsed["lots"]], [[], []])
         api = self._as(self.bureau_user)
-        self._lot(api, operation="COPRO")
+        self._free_lot(api, operation="COPRO")
         again = parse_lots_workbook(build_lots_export(Lot.objects.all()))
         self.assertEqual([l["operation"] for l in again["lots"]], ["COPRO"])
