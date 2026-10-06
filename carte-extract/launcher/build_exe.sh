@@ -26,7 +26,6 @@ done
   --collect-submodules config \
   --hidden-import waitress --hidden-import django.contrib.admin --collect-all psycopg --collect-all psycopg_binary \
   --collect-all webview --collect-all pythonnet --collect-all clr_loader \
-  --collect-all webview --collect-all pythonnet --collect-all clr_loader \
   --hidden-import config.settings --hidden-import config.urls --hidden-import config.wsgi \
   --hidden-import core.urls --hidden-import employees.urls --hidden-import clients.urls \
   --hidden-import resources.urls --hidden-import projets.urls --hidden-import cadastre.urls \
