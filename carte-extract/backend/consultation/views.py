@@ -144,7 +144,13 @@ class ReportView(APIView):
                 png = base64.b64decode(raw.split(",", 1)[-1], validate=False)
             except Exception:
                 png = None
-        pdf = build_report(result, user_label=request.user.get_username(), map_png=png, title=request.data.get("label") or "")
+        bornes = [b for b in (request.data.get("bornes") or []) if isinstance(b, dict) and "lat" in b and "lng" in b][:200]
+        try:
+            declared = float(request.data.get("declared_surface_m2") or 0) or None
+        except (TypeError, ValueError):
+            declared = None
+        pdf = build_report(result, user_label=request.user.get_username(), map_png=png, title=request.data.get("label") or "",
+                           bornes=bornes, declared_surface_m2=declared)
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = 'attachment; filename="Consultation.pdf"'
         return response

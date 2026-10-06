@@ -188,7 +188,7 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
   const downloadReport = () => run(async () => {
     const q = result.query;
     const ring = parcel?.kind === "polygon" ? parcel.bornes.map((b) => [b.lat, b.lng]) : null;
-    const body = { ...(ring ? { ring } : { lat: q.lat, lng: q.lng }), titre: q.titre, radius: q.radius_m, label: parcel?.name || "", map_png: await snapshot() };
+    const body = { ...(ring ? { ring } : { lat: q.lat, lng: q.lng }), titre: q.titre, radius: q.radius_m, label: parcel?.name || "", bornes: parcel?.bornes, declared_surface_m2: parcel?.declared_surface_m2, map_png: await snapshot() };
     saveBlob(await consultReport(body), `Consultation-${(parcel?.name || "position").replace(/[^\w-]+/g, "_")}.pdf`);
   });
 
