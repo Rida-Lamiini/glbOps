@@ -22,12 +22,12 @@ done
   --add-data "$ROOT/launcher/update_url.txt;." \
   --collect-all rest_framework --collect-all rest_framework_simplejwt --collect-all corsheaders \
   --collect-submodules core --collect-submodules employees --collect-submodules clients \
-  --collect-submodules resources --collect-submodules projets --collect-submodules cadastre \
+  --collect-submodules resources --collect-submodules projets --collect-submodules cadastre --collect-submodules consultation \
   --collect-submodules config \
   --hidden-import waitress --hidden-import django.contrib.admin --collect-all psycopg --collect-all psycopg_binary \
   --collect-all webview --collect-all pythonnet --collect-all clr_loader \
   --hidden-import config.settings --hidden-import config.urls --hidden-import config.wsgi \
   --hidden-import core.urls --hidden-import employees.urls --hidden-import clients.urls \
-  --hidden-import resources.urls --hidden-import projets.urls --hidden-import cadastre.urls \
+  --hidden-import resources.urls --hidden-import projets.urls --hidden-import cadastre.urls --hidden-import consultation.urls \
   "${HIDDEN[@]}" \
   launcher/carte_launcher.py

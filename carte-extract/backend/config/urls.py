@@ -36,6 +36,7 @@ urlpatterns = [
     path('api/', include('resources.urls')),
     path('api/', include('projets.urls')),
     path('api/', include('cadastre.urls')),
+    path('api/consultation/', include('consultation.urls')),
 ]
 
 if settings.DEBUG or settings.SERVE_FRONTEND or settings.DATABASE_URL:

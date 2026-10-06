@@ -172,6 +172,10 @@ def _save_lot(data, existing_lot=None, user=None):
         # validate_bornes on the serializer requires at least 3, so this ring
         # always has >= 3 points — never a stale polygon to clear on update.
         set_lot_geometry(lot.id, built.polygon_ring_lat_lng, built.centroid)
+        if lot.projet_id:
+            from consultation.signals import notify_when_located
+
+            notify_when_located(lot.projet_id)
 
         if existing_lot is None:
             label = "Lot cadastral enregistré"
