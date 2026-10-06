@@ -24,6 +24,31 @@ function fitTo(map, geometry) {
   if (!b.isEmpty()) map.fitBounds(b, { padding: { top: 60, bottom: 60, left: 60, right: 420 }, maxZoom: 18, duration: 600 });
 }
 
+// Neighbours as dots around the consulted spot: distance from the centre, compass direction around it.
+function Radar({ result, onPick }) {
+  const R = 78, rad = result.query.radius_m;
+  const dots = result.neighbours.filter((n) => n.distance_m != null).map((n, i) => {
+    const a = ((n.bearing || 0) * Math.PI) / 180;
+    const r = Math.max(10, Math.min(1, n.distance_m / rad) * R);
+    return { n, i, x: 90 + Math.sin(a) * r, y: 90 - Math.cos(a) * r, hot: n.relation === "chevauche" || n.relation === "dans" };
+  });
+  return (
+    <svg className="cs-radar" viewBox="0 0 180 180" role="img" aria-label="Projets voisins autour de la position consultée">
+      {[1, 2 / 3, 1 / 3].map((f) => <circle key={f} cx="90" cy="90" r={R * f} />)}
+      <path d="M90 8v164M8 90h164" className="cs-radar-axis" />
+      {[["N", 90, 7], ["E", 175, 93], ["S", 90, 177], ["O", 5, 93]].map(([t, x, y]) => <text key={t} x={x} y={y} textAnchor="middle" className="cs-radar-cardinal">{t}</text>)}
+      <text x="90" y={90 - R / 3 + 3} textAnchor="middle" className="cs-radar-scale">{Math.round(rad / 3)} m</text>
+      <circle cx="90" cy="90" r="4.5" className="cs-radar-me" />
+      {dots.map((d) => (
+        <g key={d.i} className={`cs-radar-dot${d.hot ? " is-hot" : ""}`} style={{ animationDelay: `${d.i * 70}ms` }} onClick={() => onPick?.(d.n)} tabIndex={0} role="button" aria-label={`${d.n.client} à ${Math.round(d.n.distance_m)} m ${d.n.direction}`} onKeyDown={(e) => e.key === "Enter" && onPick?.(d.n)}>
+          <circle cx={d.x} cy={d.y} r="6.5" />
+          <title>{`${d.n.client} — ${Math.round(d.n.distance_m)} m ${d.n.direction}`}</title>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 // "Consulter" — the panel that answers "what do we already have around here?" for a position, a parcel
 // (ANCFCC bornes, KML, CSV…) or the agent's own phone position.
 export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet, onClose, canPickPosition = true }) {
@@ -42,14 +67,19 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
   const [single, setSingle] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
   const [picking, setPicking] = useState(false);
   const [near, setNear] = useState(null); // {origin, results}
   const [chosen, setChosen] = useState(new Set());
   const [route, setRoute] = useState(null);
   const fileRef = useRef(null);
+  const bodyRef = useRef(null);
 
   const result = tab === "position" ? single : parcels[sel]?.result || null;
   const parcel = tab === "position" ? null : parcels[sel]?.parcel;
+
+  // A new answer: show it from the top (the form has folded into the recap).
+  useEffect(() => { if (result) requestAnimationFrame(() => bodyRef.current?.scrollTo({ top: 0 })); }, [result]);
 
   // What is drawn on the map follows what the panel shows.
   useEffect(() => {
@@ -86,6 +116,7 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
   const consultPosition = () => run(async () => {
     const r = await consult(positionBody());
     setSingle(r);
+    setCollapsed(true);
     if (map) fitTo(map, r.query.circle);
   });
 
@@ -98,6 +129,7 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
     const r = await consultFile(form);
     setParcels(r.parcels);
     setSel(0);
+    setCollapsed(true);
     if (r.parcels[0] && map) fitTo(map, r.parcels[0].result.query.circle);
   });
 
@@ -159,22 +191,28 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
     <aside className="gt-map-panel mp-panel cs-panel" aria-label="Consulter une position">
       <div className="mp-panel-head">
         <div className="mp-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "position"} className={tab === "position" ? "is-on" : ""} onClick={() => setTab("position")}>Position</button>
-          <button type="button" role="tab" aria-selected={tab === "fichier"} className={tab === "fichier" ? "is-on" : ""} onClick={() => setTab("fichier")}>Mappe / fichier</button>
+          <button type="button" role="tab" aria-selected={tab === "position"} className={tab === "position" ? "is-on" : ""} onClick={() => { setTab("position"); setCollapsed(false); }}>Position</button>
+          <button type="button" role="tab" aria-selected={tab === "fichier"} className={tab === "fichier" ? "is-on" : ""} onClick={() => { setTab("fichier"); setCollapsed(false); }}>Mappe / fichier</button>
           <button type="button" role="tab" aria-selected={tab === "pres"} className={tab === "pres" ? "is-on" : ""} onClick={() => setTab("pres")}>Près de moi</button>
         </div>
         <button className="gt-iconbtn" onClick={onClose} aria-label="Fermer"><X size={15} /></button>
       </div>
 
-      <div className="mp-panel-list cs-body">
-        {tab !== "pres" && (
+      <div className="mp-panel-list cs-body" ref={bodyRef}>
+        {tab !== "pres" && collapsed && result && (
+          <button type="button" className="cs-recap" onClick={() => setCollapsed(false)}>
+            <span><b>{parcel?.name || (single?.query.titre ? `Titre ${single.query.titre}` : `${result.query.lat.toFixed(5)}, ${result.query.lng.toFixed(5)}`)}</b><small>rayon {fmtDistance(result.query.radius_m)}{parcels.length > 1 && tab === "fichier" ? ` · parcelle ${sel + 1}/${parcels.length}` : ""}</small></span>
+            <em>Modifier</em>
+          </button>
+        )}
+        {tab !== "pres" && !collapsed && (
           <div className="cs-radius" role="group" aria-label="Rayon de recherche">
             <span>Rayon</span>
             {RADII.map((r) => <button key={r} type="button" className={radius === r ? "is-on" : ""} onClick={() => setRadius(r)}>{r >= 1000 ? `${r / 1000} km` : `${r} m`}</button>)}
           </div>
         )}
 
-        {tab === "position" && (
+        {tab === "position" && !collapsed && (
           <div className="cs-form">
             <div className="cs-row">
               {canPickPosition && <button type="button" className={`cs-btn ${picking ? "is-on" : ""}`} onClick={() => setPicking((p) => !p)}><MapPin size={14} /> {picking ? "Cliquez sur la carte…" : "Choisir sur la carte"}</button>}
@@ -201,20 +239,20 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
           </div>
         )}
 
-        {tab === "fichier" && (
+        {tab === "fichier" && (!collapsed || parcels.length > 1) && (
           <div className="cs-form">
-            <p className="cs-hint">Collez le texte de la page « Consultation de la mappe cadastrale » (ANCFCC) ou joignez un fichier : CSV, Excel, KML, GeoJSON, GPX.</p>
-            <textarea value={text} onChange={(e) => { setText(e.target.value); setFile(null); }} placeholder={ANCFCC_EXAMPLE} rows={5} />
-            <div className="cs-row">
+            {!collapsed && <p className="cs-hint">Collez le texte de la page « Consultation de la mappe cadastrale » (ANCFCC) ou joignez un fichier : CSV, Excel, KML, GeoJSON, GPX.</p>}
+            {!collapsed && <textarea value={text} onChange={(e) => { setText(e.target.value); setFile(null); }} placeholder={ANCFCC_EXAMPLE} rows={5} />}
+            {!collapsed && <div className="cs-row">
               <button type="button" className="cs-btn" onClick={() => fileRef.current?.click()}><Upload size={14} /> {file ? file.name : "Joindre un fichier"}</button>
               {file && <button type="button" className="cs-btn" onClick={() => setFile(null)}><X size={13} /></button>}
               <input ref={fileRef} type="file" hidden accept=".csv,.txt,.tsv,.xlsx,.kml,.geojson,.json,.gpx" onChange={(e) => { setFile(e.target.files?.[0] || null); e.target.value = ""; }} />
-            </div>
-            <div className="cs-grid">
+            </div>}
+            {!collapsed && <div className="cs-grid">
               <label>Coordonnées Lambert<select value={zone} onChange={(e) => setZone(e.target.value)}><option value="nord">Zone Nord (Rabat, Casa…)</option><option value="sud">Zone Sud</option></select></label>
               <label>Le fichier contient<select value={mode} onChange={(e) => setMode(e.target.value)}><option value="auto">Contour(s) de parcelle</option><option value="points">Des points isolés</option></select></label>
-            </div>
-            <button type="button" className="cs-go" disabled={busy || (!file && !text.trim())} onClick={consultFromFile}>{busy ? <Loader2 size={14} className="cs-spin" /> : <Crosshair size={14} />} Consulter</button>
+            </div>}
+            {!collapsed && <button type="button" className="cs-go" disabled={busy || (!file && !text.trim())} onClick={consultFromFile}>{busy ? <Loader2 size={14} className="cs-spin" /> : <Crosshair size={14} />} Consulter</button>}
             {parcels.length > 1 && (
               <div className="cs-parcels" role="listbox" aria-label="Parcelles du fichier">
                 {parcels.map((p, i) => (
@@ -270,17 +308,21 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
             {result.alerts.map((a, i) => (
               <div key={i} className={`cs-alert is-${a.severity}`}><b>{a.title}</b><span>{a.message}</span></div>
             ))}
+            {result.neighbours.some((n) => n.distance_m != null) && <Radar result={result} onPick={(n) => onFocusProjet?.(n.projet_id, n)} />}
             <div className="cs-facts">
               <span><b>{result.summary.count}</b> projet{result.summary.count > 1 ? "s" : ""} dans {fmtDistance(result.query.radius_m)}</span>
               {result.summary.nearest_m != null && <span>le plus proche : <b>{fmtDistance(result.summary.nearest_m)}</b></span>}
               {result.query.area_m2 > 0 && <span>surface : <b>{Math.round(result.query.area_m2).toLocaleString("fr-FR")} m²</b></span>}
-              {parcel?.declared_surface_m2 && <span>déclarée : <b>{Math.round(parcel.declared_surface_m2).toLocaleString("fr-FR")} m²</b></span>}
+              {parcel?.declared_surface_m2 && (() => {
+                const gap = (result.query.area_m2 - parcel.declared_surface_m2) / parcel.declared_surface_m2;
+                return <span>déclarée : <b>{Math.round(parcel.declared_surface_m2).toLocaleString("fr-FR")} m²</b>{Math.abs(gap) > 0.02 && <b className={`cs-gap${Math.abs(gap) > 0.05 ? " is-big" : ""}`}>écart {gap > 0 ? "+" : ""}{Math.round(gap * 100)} %</b>}</span>;
+              })()}
             </div>
             <button type="button" className="cs-btn" disabled={busy} onClick={downloadReport}>{busy ? <Loader2 size={14} className="cs-spin" /> : <FileText size={14} />} Rapport PDF</button>
             <div className="cs-list">
               {result.neighbours.length === 0 && <div className="gt-list-empty">Aucun projet dans ce rayon.</div>}
               {result.neighbours.map((n, i) => (
-                <button key={`${n.projet_id}-${i}`} type="button" className={`cs-nb ${n.relation === "chevauche" || n.relation === "dans" ? "is-hot" : ""}`} onClick={() => onFocusProjet?.(n.projet_id, n)}>
+                <button key={`${n.projet_id}-${i}`} style={{ animationDelay: `${Math.min(i, 8) * 45}ms` }} type="button" className={`cs-nb ${n.relation === "chevauche" || n.relation === "dans" ? "is-hot" : ""}`} onClick={() => onFocusProjet?.(n.projet_id, n)}>
                   <span className="cs-nb-top"><b>{n.client || "Lot sans projet"}</b><em>{RELATION[n.relation]}</em></span>
                   <span className="cs-nb-sub">{n.label}{n.situation ? ` · ${n.situation}` : ""}</span>
                   <span className="cs-nb-meta">
