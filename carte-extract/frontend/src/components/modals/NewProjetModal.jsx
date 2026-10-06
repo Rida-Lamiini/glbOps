@@ -11,7 +11,7 @@ import { notifySuccess } from "../../utils/notify";
 export default function NewProjetModal({ onClose, onCreate, clients, presetClient, presetLocation }) {
   const [selectedClientId, setSelectedClientId] = useState(presetClient ? presetClient.id : "");
   const [newClientNom, setNewClientNom] = useState("");
-  const [refFonciere, setRefFonciere] = useState("");
+  const [refFonciere, setRefFonciere] = useState(presetLocation?.referenceFonciere || "");
   const [situation, setSituation] = useState(presetLocation?.situation || "");
   const [nature, setNature] = useState(NATURES[0]);
   const [lat, setLat] = useState(presetLocation ? String(presetLocation.lat.toFixed(5)) : "");

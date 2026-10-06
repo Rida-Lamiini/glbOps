@@ -1449,9 +1449,10 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
               onOpenLot={isOffice ? (id) => { setCadastreLotId(id); setView("cadastre"); } : undefined}
               focusLotId={mapFocusLotId}
               onFocusHandled={() => setMapFocusLotId(null)}
-              onCreateProjetAt={(lat, lng, situation) => {
+              onEditProjet={editProjet}
+              onCreateProjetAt={(lat, lng, situation, referenceFonciere) => {
                 setNewProjetPresetClient(null);
-                setNewProjetPresetLocation({ lat, lng, situation });
+                setNewProjetPresetLocation({ lat, lng, situation, referenceFonciere });
                 setShowNewProjet(true);
               }}
             />

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LngLatBounds } from "maplibre-gl";
-import { AlertTriangle, CheckCircle2, Crosshair, FileText, Loader2, LocateFixed, MapPin, Navigation, Route as RouteIcon, Search, Upload, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Crosshair, ExternalLink, FileText, Loader2, LocateFixed, MapPin, Navigation, Plus, Route as RouteIcon, Search, Upload, X } from "lucide-react";
 import { forwardGeocode } from "../../utils/geocode";
 import { saveBlob } from "../../utils/saveBlob";
 import { consult, consultFile, consultReport, errorText, fmtDistance, nearMe, planRoute } from "./consultApi";
@@ -51,8 +51,12 @@ function Radar({ result, onPick }) {
 
 // "Consulter" — the panel that answers "what do we already have around here?" for a position, a parcel
 // (ANCFCC bornes, KML, CSV…) or the agent's own phone position.
-export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet, onClose, canPickPosition = true }) {
-  const [tab, setTab] = useState("position");
+export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet, onClose, canPickPosition = true, canCreate = false, onCreateHere, unlocated = [], onPlace }) {
+  // field agents on a phone mostly want "what is around me"
+  const [tab, setTab] = useState(() => (!canCreate && typeof window !== "undefined" && window.matchMedia?.("(max-width: 700px)").matches ? "pres" : "position"));
+  const [placeId, setPlaceId] = useState(null); // projet being placed: the next map click is its location
+  const [sheetH, setSheetH] = useState(null);
+  const asideRef = useRef(null);
   const [radius, setRadius] = useState(200);
   const [pos, setPos] = useState({ lat: "", lng: "", x: "", y: "", zone: "nord" });
   const [titre, setTitre] = useState("");
@@ -78,6 +82,9 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
   const result = tab === "position" ? single : parcels[sel]?.result || null;
   const parcel = tab === "position" ? null : parcels[sel]?.parcel;
 
+  // the "À placer" tab goes away once everything is placed
+  useEffect(() => { if (tab === "placer" && unlocated.length === 0) setTab("position"); }, [tab, unlocated.length]);
+
   // A new answer: show it from the top (the form has folded into the recap).
   useEffect(() => { if (result) requestAnimationFrame(() => bodyRef.current?.scrollTo({ top: 0 })); }, [result]);
 
@@ -90,16 +97,17 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
 
   // Pick a position by clicking the map.
   useEffect(() => {
-    onPicking?.(picking);
-    if (!picking || !map) return undefined;
+    onPicking?.(picking || !!placeId);
+    if ((!picking && !placeId) || !map) return undefined;
     map.getCanvas().style.cursor = "crosshair";
     const onClick = (e) => {
+      if (placeId) { onPlace?.(placeId, e.lngLat.lat, e.lngLat.lng); setPlaceId(null); return; }
       setPos((p) => ({ ...p, lat: e.lngLat.lat.toFixed(6), lng: e.lngLat.lng.toFixed(6), x: "", y: "" }));
       setPicking(false);
     };
     map.once("click", onClick);
     return () => { map.off("click", onClick); map.getCanvas().style.cursor = ""; };
-  }, [picking, map]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [picking, placeId, map]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const positionBody = () => {
     const hasLambert = pos.x !== "" && pos.y !== "";
@@ -184,28 +192,63 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
     saveBlob(await consultReport(body), `Consultation-${(parcel?.name || "position").replace(/[^\w-]+/g, "_")}.pdf`);
   });
 
+  // Phone bottom sheet: drag the handle to give the map or the list more room.
+  const dragSheet = (e) => {
+    const el = asideRef.current;
+    if (!el) return;
+    const startY = e.clientY, startH = el.getBoundingClientRect().height;
+    const move = (ev) => setSheetH(Math.max(150, Math.min(window.innerHeight * 0.85, startH + (startY - ev.clientY))));
+    const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const startPlacing = async (u) => {
+    setPlaceId(u.id);
+    if (u.situation && map) {
+      try { const [g] = await forwardGeocode(`${u.situation}, Maroc`); if (g) map.flyTo({ center: [g.lng, g.lat], zoom: 15, duration: 700 }); } catch { /* the agent can pan by hand */ }
+    }
+  };
+
   const v = result ? VERDICT[result.summary.status] : null;
   const sortedNear = useMemo(() => near?.results || [], [near]);
 
   return (
-    <aside className="gt-map-panel mp-panel cs-panel" aria-label="Consulter une position">
+    <aside ref={asideRef} className="gt-map-panel mp-panel cs-panel" aria-label="Consulter une position" style={sheetH ? { height: sheetH, maxHeight: "85%" } : undefined}>
+      <div className="cs-handle" onPointerDown={dragSheet} role="separator" aria-label="Redimensionner le panneau"><i /></div>
       <div className="mp-panel-head">
         <div className="mp-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "position"} className={tab === "position" ? "is-on" : ""} onClick={() => { setTab("position"); setCollapsed(false); }}>Position</button>
-          <button type="button" role="tab" aria-selected={tab === "fichier"} className={tab === "fichier" ? "is-on" : ""} onClick={() => { setTab("fichier"); setCollapsed(false); }}>Mappe / fichier</button>
+          <button type="button" role="tab" aria-selected={tab === "fichier"} className={tab === "fichier" ? "is-on" : ""} onClick={() => { setTab("fichier"); setCollapsed(false); }}>Mappe/fichier</button>
           <button type="button" role="tab" aria-selected={tab === "pres"} className={tab === "pres" ? "is-on" : ""} onClick={() => setTab("pres")}>Près de moi</button>
+          {canCreate && unlocated.length > 0 && <button type="button" role="tab" aria-selected={tab === "placer"} className={tab === "placer" ? "is-on" : ""} onClick={() => setTab("placer")}>À placer <em>{unlocated.length}</em></button>}
         </div>
         <button className="gt-iconbtn" onClick={onClose} aria-label="Fermer"><X size={15} /></button>
       </div>
 
       <div className="mp-panel-list cs-body" ref={bodyRef}>
-        {tab !== "pres" && collapsed && result && (
+        {tab === "placer" && (
+          <div className="cs-form">
+            <p className="cs-hint">Ces projets n'ont pas de position : ils restent invisibles pour les consultations. Choisissez un projet puis cliquez son emplacement sur la carte.</p>
+            {placeId && <div className="cs-verdict is-warn"><MapPin size={18} /><div><b>Cliquez sur la carte</b><span>pour placer {unlocated.find((u) => u.id === placeId)?.client}.</span></div><button type="button" className="cs-link" onClick={() => setPlaceId(null)} aria-label="Annuler"><X size={14} /></button></div>}
+            <div className="cs-near">
+              {unlocated.map((u) => (
+                <div key={u.id} className={`cs-nearrow${placeId === u.id ? " is-on" : ""}`}>
+                  <span className="cs-nearmain"><b>{u.client}</b><small>{u.id}{u.titre ? ` · ${u.titre}` : ""}{u.situation ? ` · ${u.situation}` : ""}</small></span>
+                  <button type="button" className="cs-btn" onClick={() => startPlacing(u)}><MapPin size={13} /> Placer</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab !== "pres" && tab !== "placer" && collapsed && result && (
           <button type="button" className="cs-recap" onClick={() => setCollapsed(false)}>
             <span><b>{parcel?.name || (single?.query.titre ? `Titre ${single.query.titre}` : `${result.query.lat.toFixed(5)}, ${result.query.lng.toFixed(5)}`)}</b><small>rayon {fmtDistance(result.query.radius_m)}{parcels.length > 1 && tab === "fichier" ? ` · parcelle ${sel + 1}/${parcels.length}` : ""}</small></span>
             <em>Modifier</em>
           </button>
         )}
-        {tab !== "pres" && !collapsed && (
+        {tab !== "pres" && tab !== "placer" && !collapsed && (
           <div className="cs-radius" role="group" aria-label="Rayon de recherche">
             <span>Rayon</span>
             {RADII.map((r) => <button key={r} type="button" className={radius === r ? "is-on" : ""} onClick={() => setRadius(r)}>{r >= 1000 ? `${r / 1000} km` : `${r} m`}</button>)}
@@ -292,9 +335,16 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
                 <div className="cs-route-total"><b>{route.road_km.toString().replace(".", ",")} km</b><span>~ {Math.floor(route.total_minutes / 60)} h {String(route.total_minutes % 60).padStart(2, "0")} avec 20 min par visite</span></div>
                 <ol>
                   {route.stops.map((s, i) => (
-                    <li key={s.projet_id}><b>{s.client}</b><small>{s.label}</small><em>{route.legs[i] ? `${fmtDistance(route.legs[i].road_m)} · ${route.legs[i].minutes} min` : ""}</em></li>
+                    <li key={s.projet_id}>
+                      <b>{s.client}</b><small>{s.label}</small><em>{route.legs[i] ? `${fmtDistance(route.legs[i].road_m)} · ${route.legs[i].minutes} min` : ""}</em>
+                      <span className="cs-go-links">
+                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving`} target="_blank" rel="noreferrer">Google Maps <ExternalLink size={11} /></a>
+                        <a href={`https://waze.com/ul?ll=${s.lat},${s.lng}&navigate=yes`} target="_blank" rel="noreferrer">Waze <ExternalLink size={11} /></a>
+                      </span>
+                    </li>
                   ))}
                 </ol>
+                <a className="cs-btn" href={`https://www.google.com/maps/dir/${[near.origin, ...route.stops].map((p) => `${p.lat},${p.lng}`).join("/")}`} target="_blank" rel="noreferrer"><Navigation size={14} /> Ouvrir toute la tournée dans Google Maps</a>
               </div>
             )}
           </div>
@@ -302,7 +352,7 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
 
         {error && <div className="cs-error" role="alert">{error}</div>}
 
-        {tab !== "pres" && result && (
+        {tab !== "pres" && tab !== "placer" && result && (
           <div className="cs-result">
             <div className={`cs-verdict is-${v.tone}`}><v.icon size={18} /><div><b>{v.title}</b><span>{v.text}</span></div></div>
             {result.alerts.map((a, i) => (
@@ -318,6 +368,9 @@ export default function ConsultPanel({ map, onFeatures, onPicking, onFocusProjet
                 return <span>déclarée : <b>{Math.round(parcel.declared_surface_m2).toLocaleString("fr-FR")} m²</b>{Math.abs(gap) > 0.02 && <b className={`cs-gap${Math.abs(gap) > 0.05 ? " is-big" : ""}`}>écart {gap > 0 ? "+" : ""}{Math.round(gap * 100)} %</b>}</span>;
               })()}
             </div>
+            {canCreate && result.summary.status !== "danger" && (
+              <button type="button" className="cs-btn is-create" onClick={() => onCreateHere?.(result.query.lat, result.query.lng, parcel?.titre || result.query.titre || "")}><Plus size={14} /> Créer un projet ici</button>
+            )}
             <button type="button" className="cs-btn" disabled={busy} onClick={downloadReport}>{busy ? <Loader2 size={14} className="cs-spin" /> : <FileText size={14} />} Rapport PDF</button>
             <div className="cs-list">
               {result.neighbours.length === 0 && <div className="gt-list-empty">Aucun projet dans ce rayon.</div>}

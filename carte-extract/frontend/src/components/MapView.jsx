@@ -181,7 +181,7 @@ function formatArea(m2) {
 // already has its own dedicated Cadastre tool for that data; it just doesn't belong on their map.
 const CADASTRE_MAP_ROLES = new Set(["Dispatcher", "Directrice", "Agent Contrôle"]);
 
-export default function MapView({ projects, getClient, onOpenProjet, onCreateProjetAt, onOpenLot, focusLotId, onFocusHandled, currentUser, minimal = false }) {
+export default function MapView({ projects, getClient, onOpenProjet, onCreateProjetAt, onEditProjet, onOpenLot, focusLotId, onFocusHandled, currentUser, minimal = false }) {
   const canSeeCadastre = !currentUser || CADASTRE_MAP_ROLES.has(currentUser.role);
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -1466,6 +1466,10 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           <ConsultPanel
             map={mapRef.current}
             onFeatures={setConsultFeatures}
+            canCreate={currentUser?.role === "Dispatcher" || currentUser?.role === "Directrice"}
+            onCreateHere={(lat, lng, titre) => { setConsultOpen(false); onCreateProjetAt?.(lat, lng, "", titre); }}
+            unlocated={projects.filter((p) => p.lat == null || p.lng == null).map((p) => ({ id: p.id, client: getClient(p.clientId)?.nom || "—", situation: p.situation || "", titre: p.referenceFonciere || "" }))}
+            onPlace={(id, lat, lng) => onEditProjet?.(id, { lat, lng })}
             onPicking={(v) => { consultPickRef.current = v; }}
             onFocusProjet={(id, n) => {
               const pr = projects.find((p) => p.id === id);

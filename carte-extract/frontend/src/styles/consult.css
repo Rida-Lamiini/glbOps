@@ -133,3 +133,21 @@
 .cs-gap { margin-left: 6px; color: var(--amber, #b7791f) !important; }
 .cs-gap.is-big { color: var(--bad) !important; }
 @media (prefers-reduced-motion: reduce) { .cs-radar-dot, .cs-nb { animation: none; } }
+
+/* panel tabs wrap rather than overflow when "À placer" shows */
+.cs-panel .mp-tabs { flex-wrap: wrap; border-radius: 16px; }
+.cs-btn.is-create { border-color: var(--status-success, #1f7a55); color: var(--status-success, #1f7a55); }
+.cs-btn.is-create:hover { background: color-mix(in srgb, var(--status-success, #1f7a55) 10%, var(--surface)); }
+a.cs-btn { text-decoration: none; }
+.cs-go-links { display: flex; gap: 12px; margin-top: 2px; }
+.cs-go-links a { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; color: var(--status-info, #2f6690); text-decoration: none; }
+.cs-go-links a:hover { text-decoration: underline; }
+.cs-nearrow .cs-btn { min-height: 30px; padding: 0 10px; flex: none; }
+
+/* phone: a bottom sheet with a drag handle */
+.cs-handle { display: none; }
+@media (max-width: 700px) {
+  .cs-handle { display: grid; place-items: center; height: 22px; cursor: ns-resize; touch-action: none; flex: none; }
+  .cs-handle i { width: 38px; height: 4px; border-radius: 4px; background: var(--border-subtle); }
+  .cs-panel { max-height: 46%; }
+}
