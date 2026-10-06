@@ -30,6 +30,7 @@ import {
   ChevronDown,
   Crosshair,
   Landmark,
+  ScanSearch,
 } from "lucide-react";
 import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_KIND } from "../constants";
 import { projetStatus } from "../utils/stats";
@@ -37,6 +38,9 @@ import { NATURES, NATURE_ORDER, natureKind, projetNatures, prestationKind } from
 import { esc, prestationRowHTML, LOT_COLORS, LOT_STATUT_LABEL } from "../utils/mapCards";
 import MapRibbon from "./map/MapRibbon";
 import MapPanel from "./map/MapPanel";
+import ConsultPanel from "./consult/ConsultPanel";
+import ConsultLayers from "./consult/ConsultLayers";
+import "../styles/consult.css";
 import "../styles/carte-atlas.css";
 import { VECTOR_STYLE, RASTER_FALLBACK_STYLE, SATELLITE_STYLE, TOPO_STYLE } from "../utils/mapStyle";
 import { forwardGeocode } from "../utils/geocode";
@@ -185,6 +189,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const boundaryPopupRef = useRef(null);
   const measureModeRef = useRef(null);
   const boundaryClickRef = useRef(null);
+  const consultPickRef = useRef(false); // true while the Consulter panel waits for a click on the map
   const measurePointsRef = useRef([]);
   const searchAbortRef = useRef(null);
   const searchMarkerRef = useRef(null);
@@ -239,6 +244,9 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
   const level = ADMIN_LEVELS.find((l) => l.key === adminLevel);
   const communes = showCommunes ? adminData[adminLevel] || null : null;
   const [panelOpen, setPanelOpen] = useState(false);
+  const [consultOpen, setConsultOpen] = useState(false);
+  const [consultFeatures, setConsultFeatures] = useState([]);
+  const consultData = useMemo(() => ({ type: "FeatureCollection", features: consultFeatures }), [consultFeatures]);
   const [panelTab, setPanelTab] = useState("projets");
   // The key is tall now: open by default only where there is room (wide and tall screens).
   const [legendOpen, setLegendOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth > 700 && window.innerHeight >= 900));
@@ -485,7 +493,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
       // Re-bound on every run so the handler always sees the current projects (no stale closure).
       if (boundaryClickRef.current) map.off("click", "gt-boundary-fill", boundaryClickRef.current);
       boundaryClickRef.current = (e) => {
-        if (measureModeRef.current) return;
+        if (measureModeRef.current || consultPickRef.current) return;
         const id = e.features[0]?.properties.projetId;
         const pr = visibleProjects.find((p) => p.id === id);
         if (!pr) return;
@@ -763,7 +771,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         map.addLayer({ id: "gt-cadastre-ecart", type: "line", source: CADASTRE_SOURCE_ID, filter: ["==", ["get", "conforme"], false], paint: { "line-color": "#b3261e", "line-width": 2.6, "line-dasharray": [2, 1.5] } });
         map.addLayer({ id: "gt-cadastre-focus", type: "line", source: CADASTRE_SOURCE_ID, filter: ["==", ["get", "id"], ""], paint: { "line-color": "#1d1b18", "line-width": 5 } });
         map.on("click", "gt-cadastre-fill", (e) => {
-          if (measureModeRef.current) return;
+          if (measureModeRef.current || consultPickRef.current) return;
           openLotFromMap(e.features[0].properties.id, e.lngLat);
         });
         map.on("mouseenter", "gt-cadastre-fill", () => { map.getCanvas().style.cursor = "pointer"; });
@@ -1034,7 +1042,7 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
         map.addLayer({ id: "gt-import-fill", type: "fill", source: IMPORT_SHAPES_ID, filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#2F4858", "fill-opacity": 0.22 } });
         map.addLayer({ id: "gt-import-line", type: "line", source: IMPORT_SHAPES_ID, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#2F4858", "line-width": 2.6 } });
         const onClick = (e) => {
-          if (measureModeRef.current) return;
+          if (measureModeRef.current || consultPickRef.current) return;
           const f = e.features?.[0];
           if (!f) return;
           const box = document.createElement("div");
@@ -1346,7 +1354,13 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
               <div className="gt-rail-group" style={{ "--g": 3 }}>
                 <span className="gt-rail-cap">Données</span>
                 <div className="gt-rail-item">
-                  <button type="button" className={`gt-rail-btn ${panelOpen ? "active" : ""}`} onClick={() => setPanelOpen((v) => !v)} aria-expanded={panelOpen} aria-label="Liste des projets affichés">
+                  <button type="button" className={`gt-rail-btn ${consultOpen ? "active" : ""}`} onClick={() => { setConsultOpen((v) => !v); setPanelOpen(false); }} aria-expanded={consultOpen} aria-label="Consulter une position">
+                    <ScanSearch size={17} />
+                  </button>
+                  <span className="gt-tip"><b>Consulter</b><em>Projets proches d'une position, d'une parcelle ou de vous</em></span>
+                </div>
+                <div className="gt-rail-item">
+                  <button type="button" className={`gt-rail-btn ${panelOpen ? "active" : ""}`} onClick={() => { setPanelOpen((v) => !v); setConsultOpen(false); }} aria-expanded={panelOpen} aria-label="Liste des projets affichés">
                     <ListIcon size={17} />
                     <i className="gt-rail-badge">{visibleProjects.length}</i>
                   </button>
@@ -1447,6 +1461,23 @@ export default function MapView({ projects, getClient, onOpenProjet, onCreatePro
           )}
         </div>
 
+        <ConsultLayers map={mapRef.current} loaded={loaded} data={consultData} styleKey={`${style === VECTOR_STYLE ? "v" : basemap}${attempt}`} />
+        {consultOpen && (
+          <ConsultPanel
+            map={mapRef.current}
+            onFeatures={setConsultFeatures}
+            onPicking={(v) => { consultPickRef.current = v; }}
+            onFocusProjet={(id, n) => {
+              const pr = projects.find((p) => p.id === id);
+              if (pr && pr.lat != null) focusProject(pr);
+              else if (n?.geometry && mapRef.current) {
+                const c = n.geometry.type === "Point" ? n.geometry.coordinates : (n.geometry.type === "Polygon" ? n.geometry.coordinates[0][0] : null);
+                if (c) mapRef.current.flyTo({ center: c, zoom: 17, duration: 700 });
+              } else if (n?.lat != null) mapRef.current?.flyTo({ center: [n.lng, n.lat], zoom: 17, duration: 700 });
+            }}
+            onClose={() => { setConsultOpen(false); consultPickRef.current = false; }}
+          />
+        )}
         {panelOpen && (
           <MapPanel
             projets={visibleProjects}

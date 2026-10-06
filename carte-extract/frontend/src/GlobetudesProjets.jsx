@@ -56,6 +56,8 @@ import FieldTopstrip from "./components/FieldTopstrip";
 import ProfileView from "./components/ProfileView";
 import NotificationBell from "./components/NotificationBell";
 import CadastreTool from "./components/cadastre/CadastreTool";
+import ConsultationsPage from "./components/consult/ConsultationsPage";
+import { getNotifications, markNotificationsRead } from "./components/consult/consultApi";
 import AnalyticsView from "./components/AnalyticsView";
 import AppSidebar from "./components/AppSidebar";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
@@ -1007,13 +1009,30 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
     return allPrestationsFlat.filter((p) => p.stage === "affectation" && (parseDateFR(p.dateDebutExec) ?? Infinity) < now).length;
   }, [allPrestationsFlat]);
 
+  // "A projet already exists 80 m away": proximity notices raised by the server when a projet is located.
+  const [proximityNotes, setProximityNotes] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    const load = () => getNotifications().then((r) => { if (alive) setProximityNotes(r.results.filter((n) => !n.read)); }).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   const officeNotifications = useMemo(
-    () => buildNotifications(currentUser, { tasks: allPrestationsFlat, employees, materiels, vehicules, getClient }),
-    [currentUser, allPrestationsFlat, employees, materiels, vehicules, clients]
+    () => [
+      ...proximityNotes.map((n) => ({ id: `prox-${n.id}`, kind: n.severity === "danger" ? "bad" : n.severity === "warning" ? "warn" : "info", label: n.title, detail: n.message, proximityId: n.id })),
+      ...buildNotifications(currentUser, { tasks: allPrestationsFlat, employees, materiels, vehicules, getClient }),
+    ],
+    [currentUser, allPrestationsFlat, employees, materiels, vehicules, clients, proximityNotes]
   );
 
   const handleOpenNotification = (n) => {
-    if (n.prestationId) setOpenPrestationId(n.prestationId);
+    if (n.proximityId) {
+      markNotificationsRead([n.proximityId]).catch(() => {});
+      setProximityNotes((list) => list.filter((x) => x.id !== n.proximityId));
+      setView("consultations");
+    } else if (n.prestationId) setOpenPrestationId(n.prestationId);
     else if (n.employeeId) setOpenEmployeeId(n.employeeId);
     else if (n.materielId) setOpenMaterielId(n.materielId);
     else if (n.vehiculeId) setOpenVehiculeId(n.vehiculeId);
@@ -1172,7 +1191,7 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
 
         <div className="gt-topbar-right">
           <NotificationBell notifications={officeNotifications} onOpen={handleOpenNotification} />
-          {view !== "overview" && view !== "cadastre" && view !== "analytics" && (
+          {view !== "overview" && view !== "cadastre" && view !== "consultations" && view !== "analytics" && (
             <div className="gt-search">
               <Search size={14} color="#9A9C92" />
               <input placeholder={searchPlaceholder} value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -1442,6 +1461,12 @@ export default function GlobetudesProjets({ authUser, onLogout, initialResource 
         {view === "analytics" && (
           <motion.div key="analytics" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
             <AnalyticsView projets={projets} employees={employees} getClient={getClient} />
+          </motion.div>
+        )}
+
+        {view === "consultations" && (
+          <motion.div key="consultations" variants={fadeUpVariants} initial="hidden" animate="visible" exit={{ opacity: 0 }}>
+            <ConsultationsPage isOffice={isOfficeUser} />
           </motion.div>
         )}
 

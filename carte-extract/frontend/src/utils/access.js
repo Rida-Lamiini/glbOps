@@ -1,5 +1,5 @@
 // Extract: only Carte, Clients and Cadastre (lots) are exposed.
-export const ALL_TABS = ["projets", "carte", "clients", "cadastre"];
+export const ALL_TABS = ["projets", "carte", "clients", "cadastre", "consultations"];
 
 // Dispatcher/Directrice run the business and see every tab. Field and support roles (Agent
 // Chantier/Bureau/Contrôle) only need their own work (Projets, already scoped by
@@ -11,7 +11,7 @@ export const ALL_TABS = ["projets", "carte", "clients", "cadastre"];
 export function visibleTabsForRole(role) {
   const office = role === "Dispatcher" || role === "Directrice";
   if (office) return ALL_TABS;
-  const base = ["projets", "carte"];
+  const base = ["projets", "carte", "consultations"];
   if (role === "Agent Bureau" || role === "Agent Contrôle") return [...base, "cadastre"];
   return base;
 }

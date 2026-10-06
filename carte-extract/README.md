@@ -96,3 +96,26 @@ plan) attached to a prestation. The sidebar mirrors it: **Projets**, **Carte**, 
   and updates by itself when they change (`cadastre/operations.py`, `cadastre/signals.py`). Only a lot with no projet carries a typed one.
 - In a projet, each prestation shows its lots and an **Ajouter un lot** button that opens Lots cadastraux with the projet and
   prestation already chosen.
+
+## Consultation: "what do we already have around here?"
+
+Carte → **Consulter** (and the **Consultations** page) answer it for a position, a parcel or the agent's own phone.
+
+- **Position**: click the map, latitude/longitude, Lambert X/Y (zone Nord/Sud) or an address; optional titre foncier. The
+  panel lists every projet within 100 m – 1 km with distance, direction, relation (dans / chevauche / mitoyen / proche)
+  and shared m². The verdict turns red when a **delivered or validated** survey already covers the ground, or when the
+  same titre foncier was already treated (reuse the existing survey instead of redoing it).
+- **Mappe / fichier**: paste the text of the ANCFCC « Consultation de la mappe cadastrale » page (`B14 X : … Y : …`) or
+  drop a CSV, Excel, KML, GeoJSON or GPX file. Samples: `samples/`.
+- **Près de moi**: open projets around the phone's GPS position; tick several to get the shortest trip (nearest-neighbour
+  + 2-opt, ~30 km/h town speed, 20 min per visit).
+- **Rapport PDF** of any consultation (map snapshot + neighbours table).
+- **Consultations page**: history (who searched what, CSV export — the office sees everyone, agents only their own),
+  **batch** (a list of parcels in → an Excel with the nearest projets of each), **reference layers** (neighbouring
+  parcels such as T96988/03 imported from cadastre extracts, shown in purple) and **proximity alerts**.
+- **Proximity alerts**: the first time a projet gets a location (pin, boundary or a lot polygon) the server compares it
+  with the others and posts a notice (« un projet existe déjà à 80 m ») in the bell. Projets that existed before the
+  feature are marked as already seen.
+
+Backend: `backend/consultation/` (`/api/consultation/…`, needs `shapely`). Non-office users only see projets they are
+assigned to. A projet's footprint is its drawn boundary, else the union of its lots, else its pin.
